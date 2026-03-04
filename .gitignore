@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+
+# Session data (audio files + transcripts — keep local)
+sessions/
+
+# Whisper model cache
+~/.cache/whisper/

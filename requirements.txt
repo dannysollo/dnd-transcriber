@@ -1,0 +1,4 @@
+openai-whisper
+anthropic
+pyyaml
+# torch is installed separately (see README — CUDA version matters)

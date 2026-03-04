@@ -1,0 +1,37 @@
+## DnD Transcriber Config
+
+vault_path: "../campaign-vault"
+sessions_dir: "sessions"
+whisper_model: "large-v3"  # large-v3 recommended for 4060 Ti; "turbo" is faster but less accurate
+
+## Discord username → character/player info
+## Keys must match a fragment of the Craig audio filename (Craig uses Discord usernames)
+players:
+  dannysollo:
+    name: "Danny"
+    character: null
+    role: dm
+  thatscinerd:
+    name: "Juno"
+    character: null
+    role: dm
+  masteriouss:
+    name: "Kali"
+    character: "Kali"
+    role: player
+  noxnyx:
+    name: "Aella"
+    character: "Aella"
+    role: player
+  milksteaki:
+    name: "Vixeena"
+    character: "Vixeena"
+    role: player
+  shiny_milotic:
+    name: "Belle"
+    character: "Belle"
+    role: player
+
+## Anthropic API key — leave as-is to read from environment variable ANTHROPIC_API_KEY
+## Or paste directly: anthropic_api_key: "sk-ant-..."
+anthropic_api_key: "${ANTHROPIC_API_KEY}"
