@@ -16,19 +16,19 @@ players:
     character: null
     role: dm
   masteriouss:
-    name: "Kali"
+    name: "Marko"
     character: "Kali"
     role: player
   noxnyx:
-    name: "Aella"
+    name: "Christina"
     character: "Aella"
     role: player
   milksteaki:
-    name: "Vixeena"
+    name: "Sue"
     character: "Vixeena"
     role: player
   shiny_milotic:
-    name: "Belle"
+    name: "Mihir"
     character: "Belle"
     role: player
 

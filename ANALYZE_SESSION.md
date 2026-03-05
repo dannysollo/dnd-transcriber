@@ -14,10 +14,12 @@ The campaign has a detailed Obsidian wiki at `../campaign-vault/`.
 - **Juno** (thatscinerd) — DM
 
 **Players & Characters:**
-- **Kali** (masteriouss) — Paladin-Bard, Half-Elf, ex-Nephilim cult member, deep faith in Keter
-- **Aella** (noxnyx) — PC, see vault for details
-- **Vixeena** (milksteaki) — PC, noble background (House Duskryn), see vault
-- **Belle** (shiny_milotic) — PC, see vault
+- **Kali** — played by Marko (masteriouss) — Paladin-Bard, Half-Elf, ex-Nephilim cult member, deep faith in Keter
+- **Aella** — played by Christina (noxnyx) — PC, see vault for details
+- **Vixeena** — played by Sue (milksteaki) — PC, noble background (House Duskryn), see vault
+- **Belle** — played by Mihir (shiny_milotic) — PC, see vault
+
+Players may be referred to by either their character name or real name mid-session. Both refer to the same person.
 
 Transcript format: `**[MM:SS] Speaker:** text`
 DMs appear as `DM (Danny):` or `DM (Juno):`, players as `CharacterName [PlayerName]:`
