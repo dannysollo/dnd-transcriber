@@ -35,3 +35,21 @@ players:
 ## Anthropic API key — leave as-is to read from environment variable ANTHROPIC_API_KEY
 ## Or paste directly: anthropic_api_key: "sk-ant-..."
 anthropic_api_key: "${ANTHROPIC_API_KEY}"
+
+## Post-processing corrections: applied to transcript after Whisper transcription.
+## Whole-word matching (won't replace partial words). Add more as you discover errors.
+corrections:
+  "Ayla": "Aella"
+  "Vixena": "Vixeena"
+  "Hakma": "Hokma"
+  "Piferet": "Tiferet"
+  "Kesed": "Chesed"
+  "Dot": "Da'at"
+  "Murr": "Mer"
+  "Aya": "Aja"
+  "Neftalia": "Naphtaalia"
+  "Kulth": "Kolth"
+  "Kanaan": "Canaan"
+  "Azaya": "Aziah"
+  "Sephiroth": "Sephirot"
+  "Bina": "Binah"

@@ -9,11 +9,11 @@ from pathlib import Path
 
 def extract_from_vault(vault_path: str, max_chars: int = 800) -> str:
     """
-    Scan all markdown files in vault, extract:
-      - Page filenames (e.g. "Kali", "Aziah")
-      - [[wikilinks]]
-      - **Bold Capitalized Terms**
-    Returns a string suitable for Whisper's initial_prompt parameter.
+    Scan all markdown files in vault, extract proper nouns, and return a
+    Whisper initial_prompt formatted as a fake transcript opening line.
+
+    Whisper treats initial_prompt as *preceding audio context*, not a vocabulary
+    list — so framing it as transcript text gives much better recognition.
     """
     vault = Path(vault_path)
     proper_nouns: set[str] = set()
@@ -47,21 +47,22 @@ def extract_from_vault(vault_path: str, max_chars: int = 800) -> str:
         # **Bold Terms** that start with a capital (likely proper nouns)
         for match in re.findall(r"\*\*([A-Z][^*\n]{1,40}?)\*\*", text):
             term = match.strip()
-            # Skip field labels (end with colon), all-caps abbreviations, and obvious non-names
             if 2 < len(term) < 50 and "|" not in term and not term.endswith(":"):
                 proper_nouns.add(term)
 
-    # Sort shorter names first (more likely to be recognized correctly)
+    # Sort shorter names first
     sorted_nouns = sorted(proper_nouns, key=lambda x: (len(x), x))
 
-    # Build prompt within character budget
-    intro = "Dungeons & Dragons campaign. Proper nouns: "
-    budget = max_chars - len(intro)
+    # Format as a fake transcript line — Whisper uses initial_prompt as preceding
+    # context, so it responds much better to natural sentence structure than a
+    # raw word list.
+    intro = "[00:00] DM: This session of our D&D campaign features characters Kali, Aella, Vixeena, and Belle, with DMs Danny and Juno. Campaign proper nouns include: "
+    budget = max_chars - len(intro) - 1
     noun_str = ", ".join(sorted_nouns)
     if len(noun_str) > budget:
         noun_str = noun_str[:budget].rsplit(", ", 1)[0]
 
-    prompt = intro + noun_str
+    prompt = intro + noun_str + "."
     return prompt
 
 

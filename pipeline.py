@@ -79,7 +79,7 @@ def run(session_name: str, config_path: str = "config.yaml",
         # Step 3: Merge
         print("\n[3/4] Merging transcripts...")
         from merge import save_transcript
-        save_transcript(str(session_dir))
+        save_transcript(str(session_dir), corrections=config.get("corrections"))
 
     if transcribe_only:
         banner("Transcription complete")

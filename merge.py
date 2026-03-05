@@ -4,6 +4,7 @@ Merges per-speaker Whisper JSON transcripts into a single timestamped
 markdown transcript, sorted by time across all speakers.
 """
 import json
+import re
 from pathlib import Path
 
 
@@ -88,8 +89,18 @@ def merge_transcripts(session_dir: str, min_gap: float = 1.5) -> str:
     return "\n".join(lines)
 
 
-def save_transcript(session_dir: str) -> str:
+def apply_corrections(text: str, corrections: dict) -> str:
+    """Apply whole-word find/replace corrections to transcript text."""
+    for wrong, right in corrections.items():
+        text = re.sub(r"\b" + re.escape(wrong) + r"\b", right, text)
+    return text
+
+
+def save_transcript(session_dir: str, corrections: dict | None = None) -> str:
     transcript = merge_transcripts(session_dir)
+    if corrections:
+        transcript = apply_corrections(transcript, corrections)
+        print(f"  Applied {len(corrections)} correction rules")
     out_file = Path(session_dir) / "transcript.md"
     out_file.write_text(transcript, encoding="utf-8")
     line_count = transcript.count("\n")
@@ -100,9 +111,14 @@ def save_transcript(session_dir: str) -> str:
 
 if __name__ == "__main__":
     import sys
+    import yaml
 
     if len(sys.argv) < 2:
-        print("Usage: python merge.py <session_dir>")
+        print("Usage: python merge.py <session_dir> [config.yaml]")
         sys.exit(1)
 
-    save_transcript(sys.argv[1])
+    config_path = sys.argv[2] if len(sys.argv) > 2 else "config.yaml"
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+
+    save_transcript(sys.argv[1], corrections=config.get("corrections"))
