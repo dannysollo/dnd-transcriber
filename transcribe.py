@@ -7,10 +7,37 @@ Craig outputs time-aligned tracks — each file starts at t=0 (recording start),
 so timestamps are directly comparable across files.
 """
 import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
+
+
+def convert_to_wav(input_path: Path) -> str:
+    """
+    Convert Craig's audio (often OGG-encapsulated FLAC/Opus) to a standard WAV
+    that Whisper can reliably read. Returns path to temp WAV file.
+    """
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp.close()
+
+    # Try standard conversion first, then fall back to forcing OGG demuxer
+    for extra_args in [[], ["-f", "ogg"]]:
+        cmd = (
+            ["ffmpeg", "-y"]
+            + extra_args
+            + ["-i", str(input_path), "-ar", "16000", "-ac", "1", "-f", "wav", tmp.name]
+        )
+        result = subprocess.run(cmd, capture_output=True)
+        if result.returncode == 0:
+            return tmp.name
+
+    raise RuntimeError(
+        f"ffmpeg could not convert {input_path.name}. "
+        f"stderr: {result.stderr.decode()}"
+    )
 
 
 def get_speaker_label(filename: str, players: dict) -> str:
@@ -69,8 +96,12 @@ def transcribe_tracks(session_dir: str, config: dict, vocab_prompt: str):
         print(f"Transcribing: {audio_file.name}")
         print(f"  Speaker:    {speaker}")
 
+        # Pre-convert to WAV — handles Craig's OGG-encapsulated FLAC/Opus format
+        print(f"  Converting to WAV...")
+        wav_path = convert_to_wav(audio_file)
+
         result = model.transcribe(
-            str(audio_file),
+            wav_path,
             language="en",
             initial_prompt=vocab_prompt,
             word_timestamps=True,
@@ -89,6 +120,9 @@ def transcribe_tracks(session_dir: str, config: dict, vocab_prompt: str):
                 indent=2,
                 ensure_ascii=False,
             )
+
+        # Clean up temp WAV
+        Path(wav_path).unlink(missing_ok=True)
 
         seg_count = len(result["segments"])
         duration = result["segments"][-1]["end"] if result["segments"] else 0
