@@ -43,17 +43,29 @@ notify_claude: true
 ## Post-processing corrections: applied to transcript after Whisper transcription.
 ## Whole-word matching (won't replace partial words). Add more as you discover errors.
 corrections:
-  "Ayla": "Aella"
-  "Vixena": "Vixeena"
+  # Sephirot names
+  "Sephiroth": "Sephirot"
+  "Netsak": "Netzach"
+  "Netzak": "Netzach"
   "Hakma": "Hokma"
   "Piferet": "Tiferet"
   "Kesed": "Chesed"
-  "Dot": "Da'at"
+  "Bina": "Binah"
+  "Da'at": "Da'at"
+  # Greek letters (Whisper always mishears these)
+  "Chamber Row": "Chamber Rho"
+  "chamber row": "Chamber Rho"
+  # NPCs
   "Murr": "Mer"
+  "Myr": "Mer"
+  "Vikrenth": "Vikranth"
   "Aya": "Aja"
+  # Locations
   "Neftalia": "Naphtaalia"
   "Kulth": "Kolth"
   "Kanaan": "Canaan"
   "Azaya": "Aziah"
-  "Sephiroth": "Sephirot"
-  "Bina": "Binah"
+  # PCs (kept as fallback)
+  "Ayla": "Aella"
+  "Vixena": "Vixeena"
+  "Dot": "Da'at"
