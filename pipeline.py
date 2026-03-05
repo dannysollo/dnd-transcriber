@@ -41,7 +41,7 @@ def banner(text: str):
     print("=" * w)
 
 
-def notify_claude(session_dir: Path):
+def notify_claude(session_dir: Path, session_id: str):
     """Trigger Claude via OpenClaw to analyze the completed transcript."""
     transcript_path = session_dir.resolve() / "transcript.md"
     context_path = Path(__file__).parent.resolve() / "ANALYZE_SESSION.md"
@@ -54,7 +54,7 @@ def notify_claude(session_dir: Path):
 
     print("\nPinging Claude via OpenClaw...")
     result = subprocess.run(
-        ["openclaw", "agent", "--message", message, "--deliver", "--channel", "discord"],
+        ["openclaw", "agent", "--message", message, "--deliver", "--session-id", session_id],
         capture_output=True, text=True
     )
     if result.returncode == 0:
@@ -111,10 +111,14 @@ def run(session_name: str, config_path: str = "config.yaml",
         print("\nReview the transcript, then re-run with --wiki-only to generate wiki suggestions.")
         return
 
-    # Step 4: Wiki suggestions
+    # Step 4: Wiki suggestions (skipped if no API key configured)
     print("\n[4/4] Generating summary and wiki suggestions via Claude...")
-    from wiki_updater import generate_wiki_updates
-    generate_wiki_updates(str(session_dir), config)
+    try:
+        from wiki_updater import generate_wiki_updates
+        generate_wiki_updates(str(session_dir), config)
+    except Exception as e:
+        print(f"  Skipped (wiki step failed: {e})")
+        print("  Paste transcript.md into Discord for manual analysis.")
 
     banner("All done!")
     print(f"  Session dir:      {session_dir}/")
@@ -122,7 +126,8 @@ def run(session_name: str, config_path: str = "config.yaml",
     print()
 
     if config.get("notify_claude", False) and not transcribe_only:
-        notify_claude(session_dir)
+        session_id = config.get("openclaw_session_id", "agent:main:discord:direct:235848101569626122")
+        notify_claude(session_dir, session_id)
     else:
         print("Paste transcript.md into Discord for Claude to analyze.")
     print()

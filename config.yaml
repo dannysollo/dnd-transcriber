@@ -39,6 +39,7 @@ anthropic_api_key: "${ANTHROPIC_API_KEY}"
 ## Set to true to automatically ping Claude via OpenClaw when transcription is done.
 ## Claude will read the transcript from the workspace and post analysis to Discord.
 notify_claude: true
+openclaw_session_id: "agent:main:discord:direct:235848101569626122"
 
 ## Regex patterns: context-aware replacements run before simple corrections.
 ## Use these for words that are also real English words (Greek letters, etc.)
