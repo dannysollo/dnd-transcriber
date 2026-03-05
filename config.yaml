@@ -40,6 +40,32 @@ anthropic_api_key: "${ANTHROPIC_API_KEY}"
 ## Claude will read the transcript from the workspace and post analysis to Discord.
 notify_claude: true
 
+## Regex patterns: context-aware replacements run before simple corrections.
+## Use these for words that are also real English words (Greek letters, etc.)
+## 'match' is a Python regex, 'replace' is the replacement string.
+patterns:
+  # Greek letters in "Chamber X" context
+  - {match: "(?i)\\bChamber\\s+Row\\b",    replace: "Chamber Rho"}
+  - {match: "(?i)\\bChamber\\s+Fie\\b",    replace: "Chamber Phi"}
+  - {match: "(?i)\\bChamber\\s+Fi\\b",     replace: "Chamber Phi"}
+  - {match: "(?i)\\bChamber\\s+Sigh\\b",   replace: "Chamber Psi"}
+  - {match: "(?i)\\bChamber\\s+Sai\\b",    replace: "Chamber Psi"}
+  - {match: "(?i)\\bChamber\\s+Sy\\b",     replace: "Chamber Psi"}
+  - {match: "(?i)\\bChamber\\s+Mew\\b",    replace: "Chamber Mu"}
+  - {match: "(?i)\\bChamber\\s+Zi\\b",     replace: "Chamber Xi"}
+  - {match: "(?i)\\bChamber\\s+Zee\\b",    replace: "Chamber Xi"}
+  - {match: "(?i)\\bRow\\s+Chamber\\b",    replace: "Rho Chamber"}
+  - {match: "(?i)\\bFie\\s+Chamber\\b",    replace: "Phi Chamber"}
+  - {match: "(?i)\\bFi\\s+Chamber\\b",     replace: "Phi Chamber"}
+  - {match: "(?i)\\bSigh\\s+Chamber\\b",   replace: "Psi Chamber"}
+  - {match: "(?i)\\bMew\\s+Chamber\\b",    replace: "Mu Chamber"}
+  - {match: "(?i)\\bZi\\s+Chamber\\b",     replace: "Xi Chamber"}
+  # Greek letters after character names (e.g. "Aella Row" → "Aella Rho")
+  - {match: "(?i)\\b(Kali|Aella|Vixeena|Belle|Mer|Junia|Judah|Aja|Sinclair|Gabriel|Keh|Cassiel|Vikranth|Marianne|Aulos|Julian|Alba|Lucian|Lily|Alexander)\\s+Row\\b",  replace: "\\1 Rho"}
+  - {match: "(?i)\\b(Kali|Aella|Vixeena|Belle|Mer|Junia|Judah|Aja|Sinclair|Gabriel|Keh|Cassiel|Vikranth|Marianne|Aulos|Julian|Alba|Lucian|Lily|Alexander)\\s+Fie\\b",  replace: "\\1 Phi"}
+  - {match: "(?i)\\b(Kali|Aella|Vixeena|Belle|Mer|Junia|Judah|Aja|Sinclair|Gabriel|Keh|Cassiel|Vikranth|Marianne|Aulos|Julian|Alba|Lucian|Lily|Alexander)\\s+Sigh\\b", replace: "\\1 Psi"}
+  - {match: "(?i)\\b(Kali|Aella|Vixeena|Belle|Mer|Junia|Judah|Aja|Sinclair|Gabriel|Keh|Cassiel|Vikranth|Marianne|Aulos|Julian|Alba|Lucian|Lily|Alexander)\\s+Mew\\b",  replace: "\\1 Mu"}
+
 ## Post-processing corrections: applied to transcript after Whisper transcription.
 ## Whole-word matching (won't replace partial words). Add more as you discover errors.
 corrections:
@@ -52,9 +78,6 @@ corrections:
   "Kesed": "Chesed"
   "Bina": "Binah"
   "Da'at": "Da'at"
-  # Greek letters (Whisper always mishears these)
-  "Chamber Row": "Chamber Rho"
-  "chamber row": "Chamber Rho"
   # NPCs
   "Murr": "Mer"
   "Myr": "Mer"

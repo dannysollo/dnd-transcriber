@@ -90,17 +90,36 @@ def merge_transcripts(session_dir: str, min_gap: float = 1.5) -> str:
 
 
 def apply_corrections(text: str, corrections: dict) -> str:
-    """Apply whole-word find/replace corrections to transcript text."""
+    """
+    Apply corrections to transcript text.
+    Config supports two forms:
+      corrections:           <- simple whole-word replacements
+        "Netsak": "Netzach"
+      patterns:              <- regex replacements for context-sensitive fixes
+        - match: "(?i)\\bChamber Row\\b"
+          replace: "Chamber Rho"
+    """
+    # Simple whole-word replacements
     for wrong, right in corrections.items():
         text = re.sub(r"\b" + re.escape(wrong) + r"\b", right, text)
     return text
 
 
-def save_transcript(session_dir: str, corrections: dict | None = None) -> str:
+def apply_patterns(text: str, patterns: list) -> str:
+    """Apply regex pattern replacements (for context-sensitive corrections)."""
+    for entry in patterns:
+        text = re.sub(entry["match"], entry["replace"], text)
+    return text
+
+
+def save_transcript(session_dir: str, corrections: dict | None = None, patterns: list | None = None) -> str:
     transcript = merge_transcripts(session_dir)
     if corrections:
         transcript = apply_corrections(transcript, corrections)
-        print(f"  Applied {len(corrections)} correction rules")
+        print(f"  Applied {len(corrections)} word corrections")
+    if patterns:
+        transcript = apply_patterns(transcript, patterns)
+        print(f"  Applied {len(patterns)} regex patterns")
     out_file = Path(session_dir) / "transcript.md"
     out_file.write_text(transcript, encoding="utf-8")
     line_count = transcript.count("\n")
@@ -121,4 +140,4 @@ if __name__ == "__main__":
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
-    save_transcript(sys.argv[1], corrections=config.get("corrections"))
+    save_transcript(sys.argv[1], corrections=config.get("corrections"), patterns=config.get("patterns"))
