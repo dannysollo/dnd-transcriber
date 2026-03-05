@@ -36,6 +36,10 @@ players:
 ## Or paste directly: anthropic_api_key: "sk-ant-..."
 anthropic_api_key: "${ANTHROPIC_API_KEY}"
 
+## Set to true to automatically ping Claude via OpenClaw when transcription is done.
+## Claude will read the transcript from the workspace and post analysis to Discord.
+notify_claude: true
+
 ## Post-processing corrections: applied to transcript after Whisper transcription.
 ## Whole-word matching (won't replace partial words). Add more as you discover errors.
 corrections:

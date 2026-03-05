@@ -15,6 +15,7 @@ Steps:
   4. Send to Claude → session summary + wiki suggestions
 """
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
@@ -38,6 +39,29 @@ def banner(text: str):
     print("\n" + "=" * w)
     print(f"  {text}")
     print("=" * w)
+
+
+def notify_claude(session_dir: Path):
+    """Trigger Claude via OpenClaw to analyze the completed transcript."""
+    transcript_path = session_dir.resolve() / "transcript.md"
+    context_path = Path(__file__).parent.resolve() / "ANALYZE_SESSION.md"
+
+    message = (
+        f"D&D session transcript is ready. "
+        f"Please read {context_path} for instructions, "
+        f"then analyze the transcript at {transcript_path}."
+    )
+
+    print("\nPinging Claude via OpenClaw...")
+    result = subprocess.run(
+        ["openclaw", "agent", "--message", message, "--deliver", "--channel", "discord"],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        print("  ✓ Claude notified — analysis will appear in Discord shortly.")
+    else:
+        print(f"  ✗ Notify failed: {result.stderr.strip()}")
+        print("    You can manually paste the transcript into Discord for analysis.")
 
 
 def run(session_name: str, config_path: str = "config.yaml",
@@ -95,10 +119,12 @@ def run(session_name: str, config_path: str = "config.yaml",
     banner("All done!")
     print(f"  Session dir:      {session_dir}/")
     print(f"  Transcript:       transcript.md")
-    print(f"  Summary:          summary.md")
-    print(f"  Wiki suggestions: wiki_suggestions.md")
     print()
-    print("Review wiki_suggestions.md and manually apply updates to your vault.")
+
+    if config.get("notify_claude", False) and not transcribe_only:
+        notify_claude(session_dir)
+    else:
+        print("Paste transcript.md into Discord for Claude to analyze.")
     print()
 
 
