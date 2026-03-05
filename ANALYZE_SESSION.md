@@ -35,21 +35,57 @@ Write 3–5 paragraphs covering:
 - Where things stand at the end / cliffhangers
 
 ### 2. Wiki Update Suggestions
-For each NPC, location, faction, or item with significant developments, suggest additions in this format:
+**This section has a strict format** — it gets parsed by `apply_updates.py` to apply
+changes automatically once Danny approves. Follow it exactly.
 
-#### [Page Name]
-**Section:** Notable Actions
-**Add:**
-- Bullet point matching the style of existing vault entries
+For each NPC, location, faction, or item with significant developments:
+
+```
+## [1] PageName — Section Name
+Page: relative/path/from/vault/root/PageName.md
+Section: Notable Actions
+- Bullet in past tense matching vault style
+- Another bullet if needed
+
+## [2] AnotherPage — Relationships
+Page: Characters/NPCs/AnotherPage.md
+Section: Relationships
+- New relationship bullet
+```
+
+To find the correct relative path: vault root is `../campaign-vault/`. Page paths follow
+the folder structure: `Characters/PCs/Kali.md`, `Locations/Aziah.md`,
+`Characters/NPCs/Aja.md`, `Factions/Chavvah.md`, etc.
+
+For a brand new entity with no existing page:
+```
+## [N] NEW PAGE: EntityName
+Description: One-sentence description of who/what this is.
+Section: Notable Actions
+- First known action
+```
 
 Rules:
+- Number suggestions sequentially starting at 1
 - Suggest ADDITIONS only — never rewrites
-- Match the bullet style in `../campaign-vault/` pages (concise, past tense, specific)
-- If a new character/place appeared that has no vault page yet, flag it: **NEW PAGE NEEDED: [Name]** + brief description
-- Reference wikilinks with `[[Name]]` format where relevant
+- Match the bullet style in vault pages (concise, past tense, specific)
+- Use `[[wikilinks]]` for cross-references within bullets
+- Only include things clearly evidenced in the transcript
 
 ### 3. Proper Noun Corrections
-If you notice names that were clearly mis-transcribed (e.g. "Kay" instead of "Keh", "mall cooth" instead of "Malkuth"), flag them so the vocab list can be improved.
+If you notice names that were clearly mis-transcribed (e.g. "Kay" instead of "Keh"),
+list them so they can be added to the corrections dict in config.yaml:
+- "wrong" → "Correct"
+
+## Approval Flow
+After posting analysis, Danny will reply with one of:
+- "apply all" — apply every suggestion
+- "apply 1, 3, 5" — apply specific ones
+- "skip 2" or "apply all skip 2" — apply all except listed
+- "none" / no reply needed — skip wiki updates
+
+Once approved, run:
+`python apply_updates.py sessions/<name>/ --all` (or `--apply 1,3,5`)
 
 ## Key Lore to Keep In Mind
 - This is a homebrew campaign with a theology system (Sephirot, Keter, Malkuth, etc.)

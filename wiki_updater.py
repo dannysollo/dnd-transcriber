@@ -137,27 +137,33 @@ Write 3–5 paragraphs summarizing what happened this session. Include:
 - Any cliffhangers or unresolved threads
 
 ### TASK 2 — WIKI UPDATE SUGGESTIONS
-For each NPC, location, faction, or item that had significant developments:
-- Suggest additions to the appropriate section (usually "Notable Actions")
-- Use the same bullet-point style as the existing pages
-- Only suggest things clearly evidenced in the transcript
-- If a completely new entity appeared that doesn't have a page, flag it with: **NEW PAGE NEEDED: [Name]** and give a brief description
+Use this EXACT format (it is parsed by a script to apply changes automatically):
 
-Format each suggestion as:
-
-#### [Page Name]
-**Section:** Notable Actions
-**Add:**
-- New bullet here
+## [1] PageName — Section Name
+Page: relative/path/from/vault/root/PageName.md
+Section: Notable Actions
+- Bullet in past tense matching vault style
 - Another bullet if needed
 
----
+## [2] AnotherPage — Relationships
+Page: Characters/NPCs/AnotherPage.md
+Section: Relationships
+- New relationship bullet
 
-Important rules:
+For new entities with no existing page:
+## [N] NEW PAGE: EntityName
+Description: One-sentence description.
+Section: Notable Actions
+- First known action
+
+Rules:
+- Number suggestions sequentially from 1
 - Suggest ADDITIONS only — do not rewrite existing content
-- Keep bullet style consistent with existing pages
-- Be specific — reference names, places, items from the transcript
-- If something is ambiguous in the transcript, note it with "(unclear from transcript)"
+- Match bullet style of existing pages (concise, past tense, specific)
+- Use [[wikilinks]] for cross-references within bullets
+- Only include things clearly evidenced in the transcript
+- If ambiguous, note with (unclear from transcript)
+- Vault page paths: Characters/PCs/, Characters/NPCs/, Locations/, Factions/, Items/, Events/
 """
 
     api_key = resolve_api_key(config.get("anthropic_api_key"))
