@@ -67,7 +67,9 @@ def run(session_name: str, config_path: str = "config.yaml",
         print("\n[1/4] Extracting vocabulary from vault...")
         from vocab_extractor import extract_from_vault
         vocab = extract_from_vault(config["vault_path"])
-        print(f"      Vocab prompt: {len(vocab)} chars")
+        vocab_file = Path("vocab.txt")
+        vocab_file.write_text(vocab, encoding="utf-8")
+        print(f"      Vocab prompt: {len(vocab)} chars → saved to vocab.txt")
 
         # Step 2: Transcribe
         print("\n[2/4] Transcribing audio tracks with Whisper...")
