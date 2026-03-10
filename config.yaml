@@ -2,7 +2,7 @@
 
 vault_path: "../campaign-vault"
 sessions_dir: "sessions"
-whisper_model: "large-v3"  # large-v3 recommended for 4060 Ti; "turbo" is faster but less accurate
+whisper_model: "turbo"  # large-v3 recommended for 4060 Ti; "turbo" is faster but less accurate
 
 ## Discord username → character/player info
 ## Keys must match a fragment of the Craig audio filename (Craig uses Discord usernames)
@@ -61,6 +61,9 @@ patterns:
   - {match: "(?i)\\bSigh\\s+Chamber\\b",   replace: "Psi Chamber"}
   - {match: "(?i)\\bMew\\s+Chamber\\b",    replace: "Mu Chamber"}
   - {match: "(?i)\\bZi\\s+Chamber\\b",     replace: "Xi Chamber"}
+  # Tehom multi-word mishearings
+  - {match: "(?i)\\bTae\\s+[Hh]ome\\b", replace: "Tehom"}
+  - {match: "(?i)\\bthe\\s+[Hh]ome\\b", replace: "Tehom"}
   # Greek letters after character names (e.g. "Aella Row" → "Aella Rho")
   - {match: "(?i)\\b(Kali|Aella|Vixeena|Belle|Mer|Junia|Judah|Aja|Sinclair|Gabriel|Keh|Cassiel|Vikranth|Marianne|Aulos|Julian|Alba|Lucian|Lily|Alexander)\\s+Row\\b",  replace: "\\1 Rho"}
   - {match: "(?i)\\b(Kali|Aella|Vixeena|Belle|Mer|Junia|Judah|Aja|Sinclair|Gabriel|Keh|Cassiel|Vikranth|Marianne|Aulos|Julian|Alba|Lucian|Lily|Alexander)\\s+Fie\\b",  replace: "\\1 Phi"}
@@ -78,18 +81,34 @@ corrections:
   "Piferet": "Tiferet"
   "Kesed": "Chesed"
   "Bina": "Binah"
+  "Byna": "Binah"
   "Da'at": "Da'at"
   # NPCs
   "Murr": "Mer"
   "Myr": "Mer"
   "Vikrenth": "Vikranth"
   "Aya": "Aja"
+  "Asriel": "Azrael"
+  "Juna": "Junia"
   # Locations
   "Neftalia": "Naphtaalia"
   "Kulth": "Kolth"
   "Kanaan": "Canaan"
   "Azaya": "Aziah"
+  "Azia": "Aziah"
+  "Isaiah": "Aziah"
+  "Fenceworth": "Fensworth"
+  "Fennsworth": "Fensworth"
   # PCs (kept as fallback)
   "Ayla": "Aella"
+  "Aayla": "Aella"
+  "Aela": "Aella"
   "Vixena": "Vixeena"
   "Dot": "Da'at"
+  # Kali mishearings (3-8-2026)
+  "Holly": "Kali"
+  "Collie": "Kali"
+  # Tehom mishearings
+  "Tahoe": "Tehom"
+  # Other
+  "Novo": "Nouveau"

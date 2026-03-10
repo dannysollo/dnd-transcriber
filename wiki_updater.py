@@ -1,17 +1,15 @@
 """
 wiki_updater.py
-Sends the session transcript to Claude and gets back:
-  1. A session summary
-  2. Suggested additions to NPC/location/faction wiki pages
+Notifies Claude via OpenClaw to analyze the session transcript.
+Claude reads ANALYZE_SESSION.md for instructions and posts the analysis to Discord.
 
-Does NOT auto-apply changes — outputs wiki_suggestions.md for your review.
+Does NOT call Anthropic directly — routes through OpenClaw.
 """
-import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
-import anthropic
 import yaml
 
 
@@ -74,150 +72,32 @@ def find_mentioned_pages(transcript: str, vault_pages: dict[str, Path]) -> dict[
 
 
 def generate_wiki_updates(session_dir: str, config: dict):
+    """Notify Claude via OpenClaw to analyze the transcript and post to Discord."""
     session = Path(session_dir)
-    transcript_file = session / "transcript.md"
+    transcript_path = session.resolve() / "transcript.md"
+    context_path = Path(__file__).parent.resolve() / "ANALYZE_SESSION.md"
+    session_id = config.get("openclaw_session_id", "agent:main:discord:direct:235848101569626122")
 
-    if not transcript_file.exists():
+    if not transcript_path.exists():
         print("ERROR: transcript.md not found. Run merge.py first.")
         sys.exit(1)
 
-    transcript = transcript_file.read_text(encoding="utf-8")
-    vault_path = config["vault_path"]
-
-    print("Scanning vault for mentioned entities...")
-    vault_pages = find_vault_pages(vault_path)
-    mentioned_pages = find_mentioned_pages(transcript, vault_pages)
-    print(f"Found {len(mentioned_pages)} mentioned entities: {', '.join(list(mentioned_pages.keys())[:15])}")
-
-    # Build pages context — limit to avoid exceeding context window
-    MAX_PAGES = 20
-    MAX_PAGE_CHARS = 2000  # truncate very long pages
-    pages_context_parts = []
-    for name, content in list(mentioned_pages.items())[:MAX_PAGES]:
-        truncated = content[:MAX_PAGE_CHARS]
-        if len(content) > MAX_PAGE_CHARS:
-            truncated += "\n... [truncated]"
-        pages_context_parts.append(f"### {name}\n{truncated}")
-    pages_context = "\n\n---\n\n".join(pages_context_parts)
-
-    # Truncate transcript if very long (Claude can handle large context but let's be safe)
-    MAX_TRANSCRIPT_CHARS = 80_000
-    transcript_snippet = transcript
-    if len(transcript) > MAX_TRANSCRIPT_CHARS:
-        transcript_snippet = transcript[:MAX_TRANSCRIPT_CHARS] + "\n\n... [transcript truncated]"
-
-    prompt = f"""You are helping maintain a Dungeons & Dragons campaign wiki (an Obsidian vault).
-
-I will give you a session transcript and the current state of relevant wiki pages.
-Your job is to:
-1. Write a session summary
-2. Suggest specific additions to existing wiki pages based on what happened
-
----
-
-## SESSION TRANSCRIPT
-
-{transcript_snippet}
-
----
-
-## CURRENT WIKI PAGES (for reference)
-
-{pages_context}
-
----
-
-## YOUR TASKS
-
-### TASK 1 — SESSION SUMMARY
-Write 3–5 paragraphs summarizing what happened this session. Include:
-- Key events and decisions
-- Important revelations or lore drops
-- How relationships changed
-- Any cliffhangers or unresolved threads
-
-### TASK 2 — WIKI UPDATE SUGGESTIONS
-Use this EXACT format (it is parsed by a script to apply changes automatically):
-
-## [1] PageName — Section Name
-Page: relative/path/from/vault/root/PageName.md
-Section: Notable Actions
-- Bullet in past tense matching vault style
-- Another bullet if needed
-
-## [2] AnotherPage — Relationships
-Page: Characters/NPCs/AnotherPage.md
-Section: Relationships
-- New relationship bullet
-
-For new entities with no existing page:
-## [N] NEW PAGE: EntityName
-Description: One-sentence description.
-Section: Notable Actions
-- First known action
-
-Rules:
-- Number suggestions sequentially from 1
-- Suggest ADDITIONS only — do not rewrite existing content
-- Match bullet style of existing pages (concise, past tense, specific)
-- Use [[wikilinks]] for cross-references within bullets
-- Only include things clearly evidenced in the transcript
-- If ambiguous, note with (unclear from transcript)
-- Vault page paths: Characters/PCs/, Characters/NPCs/, Locations/, Factions/, Items/, Events/
-"""
-
-    api_key = resolve_api_key(config.get("anthropic_api_key"))
-    client = anthropic.Anthropic(api_key=api_key)
-
-    print("Sending transcript to Claude...")
-    message = client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=4096,
-        messages=[{"role": "user", "content": prompt}],
+    message = (
+        f"D&D session transcript is ready for analysis. "
+        f"Please read {context_path} for instructions, "
+        f"then analyze the transcript at {transcript_path}."
     )
 
-    response = message.content[0].text
-
-    # Split response into summary + suggestions sections
-    if "TASK 2" in response or "WIKI UPDATE" in response.upper():
-        split_marker = next(
-            (m for m in ["### TASK 2", "## TASK 2", "WIKI UPDATE SUGGESTIONS"]
-             if m in response),
-            None
-        )
-        if split_marker:
-            idx = response.index(split_marker)
-            summary_text = response[:idx].strip()
-            # Clean up the summary section header
-            summary_text = re.sub(r"^#+\s*TASK 1.*\n?|^#+\s*SESSION SUMMARY.*\n?", "",
-                                   summary_text, flags=re.MULTILINE).strip()
-            wiki_text = response[idx:].strip()
-        else:
-            summary_text = response
-            wiki_text = ""
+    print(f"  Sending to Claude via OpenClaw (session: {session_id})...")
+    result = subprocess.run(
+        ["openclaw", "agent", "--message", message, "--deliver", "--session-id", session_id],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        print("  ✓ Claude notified — analysis will appear in Discord shortly.")
     else:
-        summary_text = response
-        wiki_text = ""
-
-    # Save outputs
-    summary_file = session / "summary.md"
-    suggestions_file = session / "wiki_suggestions.md"
-
-    summary_file.write_text(f"# Session Summary\n\n{summary_text}\n", encoding="utf-8")
-    print(f"Summary saved:          {summary_file}")
-
-    if wiki_text:
-        suggestions_file.write_text(
-            f"# Wiki Update Suggestions\n\n"
-            f"> Review these suggestions and apply them manually to your vault.\n\n"
-            f"{wiki_text}\n",
-            encoding="utf-8"
-        )
-        print(f"Wiki suggestions saved: {suggestions_file}")
-    else:
-        print("No wiki suggestions generated (check summary.md for full response).")
-
-    print("\nDone! Review the files above before applying anything to your vault.")
+        print(f"  ✗ OpenClaw notify failed: {result.stderr.strip()}")
+        raise RuntimeError(f"openclaw agent command failed: {result.stderr.strip()}")
 
 
 if __name__ == "__main__":

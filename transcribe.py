@@ -106,6 +106,9 @@ def transcribe_tracks(session_dir: str, config: dict, vocab_prompt: str):
             initial_prompt=vocab_prompt,
             word_timestamps=True,
             verbose=False,
+            condition_on_previous_text=False,  # prevents hallucination loops on silence
+            no_speech_threshold=0.6,           # skip segments with low speech probability
+            compression_ratio_threshold=2.4,   # discard repetitive/looping output
         )
 
         out_file = out_dir / f"{audio_file.stem}.json"

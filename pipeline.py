@@ -125,11 +125,6 @@ def run(session_name: str, config_path: str = "config.yaml",
     print(f"  Transcript:       transcript.md")
     print()
 
-    if config.get("notify_claude", False) and not transcribe_only:
-        session_id = config.get("openclaw_session_id", "agent:main:discord:direct:235848101569626122")
-        notify_claude(session_dir, session_id)
-    else:
-        print("Paste transcript.md into Discord for Claude to analyze.")
     print()
 
 
