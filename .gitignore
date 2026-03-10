@@ -4,8 +4,13 @@ __pycache__/
 *.pyo
 .DS_Store
 
-# Session data (audio files + transcripts — keep local)
-sessions/
+# Heavy session files — keep local only
+sessions/**/raw/
+sessions/**/speakers/
+
+# Temp files
+*.wav
+*_vad.wav
 
 # Whisper model cache
 ~/.cache/whisper/
