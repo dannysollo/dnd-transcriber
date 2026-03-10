@@ -100,11 +100,51 @@ patterns:
   - {match: "(?i)\\bRotor of [Rr]eturn\\b", replace: "Rotor of Return"}
   - {match: "\\bTehum\\b", replace: "Tehom"}
   - {match: "\\bninhursag\\b", replace: "Ninhursag"}
-  - {match: "\\bBell\\b",     replace: "Belle"}
-  - {match: "(?i)\\bVal\\b",  replace: "Belle"}
-  - {match: "(?i)\\bMel\\b",  replace: "Belle"}
-  - {match: "(?i)\\bVixen\\b", replace: "Vix"}
-  - {match: "\\bFix\\b",      replace: "Vix"}
+  - {match: "\\bBell\\b",              replace: "Belle"}
+  - {match: "(?i)\\bVal\\b",           replace: "Belle"}
+  - {match: "(?i)\\bMel\\b",           replace: "Belle"}
+  - {match: "(?i)\\bVixen\\b",         replace: "Vix"}
+  - {match: "\\bFix\\b",               replace: "Vix"}
+  - {match: "(?i)\\bVicks\\b",         replace: "Vix"}
+  - {match: "(?i)\\bGino\\b",          replace: "Juno"}
+  - {match: "(?i)\\bAelot\\b",         replace: "Aella"}
+  - {match: "(?i)\\bAiler\\b",         replace: "Aella"}
+  - {match: "(?i)\\bElla\\b",          replace: "Aella"}
+  - {match: "(?i)\\bAva\\b",           replace: "Aella"}
+  - {match: "(?i)\\bMehir\\b",         replace: "Mihir"}
+  - {match: "(?i)\\bNahir\\b",         replace: "Mihir"}
+  - {match: "(?i)\\bKul\\b",           replace: "Kolth"}
+  - {match: "(?i)\\bZion\\b",          replace: "Aziah"}
+  - {match: "(?i)\\bMarco\\b",         replace: "Marko"}
+  - {match: "(?i)\\bMark\\b",          replace: "Marko"}
+  - {match: "(?i)\\bNiko\\b",          replace: "Nico"}
+  - {match: "(?i)\\bNikam\\b",         replace: "Nico"}
+  - {match: "(?i)\\bFedsworth\\b",     replace: "Fensworth"}
+  - {match: "(?i)\\bMingo\\b",         replace: "Mango"}
+  - {match: "(?i)\\bVix\\s+Ps[yi]\\b", replace: "Vix Psi"}
+  - {match: "(?i)\\bVic\\s+Stine\\b",  replace: "Vix Psi"}
+  - {match: "(?i)\\bTae[-\\s]?[Hh]ome\\b",  replace: "Tehom"}
+  - {match: "(?i)\\bTaehome\\b",       replace: "Tehom"}
+  - {match: "(?i)\\bTeihome\\b",       replace: "Tehom"}
+  - {match: "(?i)\\bTake[-\\s]?home\\b", replace: "Tehom"}
+  - {match: "(?i)\\bTayholm\\b",       replace: "Tehom"}
+  - {match: "(?i)\\bTayhome\\b",        replace: "Tehom"}
+  - {match: "(?i)\\bTay\\s+[Hh]ome\\b", replace: "Tehom"}
+  - {match: "(?i)\\bTae-?[Hh]ong\\b",  replace: "Tehom"}
+  - {match: "(?i)\\bVitaeholm\\b",      replace: "Tehom"}
+  - {match: "(?i)\\bTee\\s+[Hh]ome\\b", replace: "Tehom"}
+  - {match: "(?i)\\bTanehome\\b",       replace: "Tehom"}
+  - {match: "(?i)\\bTe-?[Hh]ome\\b",   replace: "Tehom"}
+  - {match: "(?i)\\bA-?[Ll]evel\\b",   replace: "Aella"}
+  - {match: "(?i)\\bA-?[Ll]os\\b",     replace: "Aella"}
+  - {match: "(?i)\\bayladir\\b",        replace: "Aella, dear"}
+  - {match: "(?i)\\b(veroader|varoda)\\s+(of\\s+)?[Rr]eturn\\b", replace: "Rotor of Return"}
+  - {match: "(?i)\\bRota\\s+of\\s+[Rr]eturn\\b", replace: "Rotor of Return"}
+  - {match: "(?i)\\berish\\s+kegel\\b", replace: "Ereshkigal"}
+  - {match: "(?i)\\bthe\\s+first\\s+song\\b", replace: "Ninhursag"}
+  - {match: "(?i)\\bNoah'?s\\s+Ziya\\b", replace: "No Aziah"}
+  - {match: "(?i)\\bArbella'?s\\b",     replace: "Our Belle is"}
+  - {match: "(?i)\\bray\\b",            replace: "Rae"}
   # Greek letters after character names (e.g. "Aella Row" → "Aella Rho")
   - {match: "(?i)\\b(Kali|Aella|Vixeena|Belle|Mer|Junia|Judah|Aja|Sinclair|Gabriel|Keh|Cassiel|Vikranth|Marianne|Aulos|Julian|Alba|Lucian|Lily|Alexander)\\s+Row\\b",  replace: "\\1 Rho"}
   - {match: "(?i)\\b(Kali|Aella|Vixeena|Belle|Mer|Junia|Judah|Aja|Sinclair|Gabriel|Keh|Cassiel|Vikranth|Marianne|Aulos|Julian|Alba|Lucian|Lily|Alexander)\\s+Fie\\b",  replace: "\\1 Phi"}
@@ -133,7 +173,17 @@ corrections:
   "Asriel": "Azrael"
   "Juna": "Junia"
   "Judea": "Junia"
+  "Junot": "Judah"
+  "Judas": "Judah"
   "Mikhail": "Mikael"
+  "Michael": "Marko"
+  "Beseida": "Bethsaida"
+  "Ninersag": "Ninhursag"
+  "Bella": "Belle"
+  "Rakia": "Raqia"
+  "Vrakia": "Raqia"
+  "Tajom": "Tehom"
+  "Tejo": "Tehom"
   "Dell": "Del"
   # Locations
   "Neftalia": "Naphtaalia"

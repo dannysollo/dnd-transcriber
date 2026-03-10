@@ -128,9 +128,9 @@ def apply_corrections(text: str, corrections: dict) -> str:
         - match: "(?i)\\bChamber Row\\b"
           replace: "Chamber Rho"
     """
-    # Simple whole-word replacements
+    # Simple whole-word replacements (case-insensitive)
     for wrong, right in corrections.items():
-        text = re.sub(r"\b" + re.escape(wrong) + r"\b", right, text)
+        text = re.sub(r"\b" + re.escape(wrong) + r"\b", right, text, flags=re.IGNORECASE)
     return text
 
 
