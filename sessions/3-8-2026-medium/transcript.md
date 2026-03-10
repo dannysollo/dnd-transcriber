@@ -6084,7 +6084,7 @@
 
 **[03:44:58] Aella [Christina]:** Well, okay, we know that we killed those, like, Tay-Home egg things with gradient damage.
 
-**[03:45:05] DM (Danny):** Yeah, that was a little different, though. That was a later stage infection than this because Hod was fucking with it. You can try just Radiance blasting the Tejom if you want. It's just not going to do anything.
+**[03:45:05] DM (Danny):** Yeah, that was a little different, though. That was a later stage infection than this because Hod was fucking with it. You can try just Radiance blasting the Tehom if you want. It's just not going to do anything.
 
 **[03:45:19] DM (Juno):** might do 2%
 
