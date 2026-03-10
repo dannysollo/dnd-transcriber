@@ -90,7 +90,14 @@ def generate_wiki_updates(session_dir: str, config: dict):
 
     print(f"  Sending to Claude via OpenClaw (session: {session_id})...")
     result = subprocess.run(
-        ["openclaw", "agent", "--message", message, "--deliver", "--session-id", session_id],
+        [
+            "openclaw", "agent",
+            "--session-id", session_id,
+            "--message", message,
+            "--deliver",
+            "--reply-channel", "discord",
+            "--reply-to", "channel:1475874124869013710",
+        ],
         capture_output=True, text=True
     )
     if result.returncode == 0:
