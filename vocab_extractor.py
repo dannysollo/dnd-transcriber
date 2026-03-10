@@ -35,7 +35,7 @@ def extract_from_vault(vault_path: str, max_chars: int = 800) -> str:
     sorted_nouns = sorted(proper_nouns, key=lambda x: (len(x), x))
 
     # Format as a fake transcript opening — much better signal for Whisper
-    intro = "[00:00] DM: This session of our D&D campaign features characters Kali, Aella, Vixeena, and Belle, with DMs Danny and Juno. Campaign proper nouns include: "
+    intro = "[00:00] DM: This session of our D&D campaign features characters Kali, Aella, Vixeena (also called Vix), and Belle, with DMs Danny and Juno. Campaign proper nouns include: "
     budget = max_chars - len(intro) - 1
     noun_str = ", ".join(sorted_nouns)
     if len(noun_str) > budget:
