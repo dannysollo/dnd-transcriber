@@ -15,6 +15,9 @@ from pathlib import Path
 import yaml
 
 
+SAMPLE_RATE = 16000
+
+
 def convert_to_wav(input_path: Path) -> str:
     """
     Convert Craig's audio (often OGG-encapsulated FLAC/Opus) to a standard WAV
@@ -28,7 +31,7 @@ def convert_to_wav(input_path: Path) -> str:
         cmd = (
             ["ffmpeg", "-y"]
             + extra_args
-            + ["-i", str(input_path), "-ar", "16000", "-ac", "1", "-f", "wav", tmp.name]
+            + ["-i", str(input_path), "-ar", str(SAMPLE_RATE), "-ac", "1", "-f", "wav", tmp.name]
         )
         result = subprocess.run(cmd, capture_output=True)
         if result.returncode == 0:
@@ -38,6 +41,51 @@ def convert_to_wav(input_path: Path) -> str:
         f"ffmpeg could not convert {input_path.name}. "
         f"stderr: {result.stderr.decode()}"
     )
+
+
+def apply_vad(wav_path: str) -> str:
+    """
+    Apply Silero VAD to zero out non-speech portions of the audio.
+    Returns path to a new temp WAV with silence masked out.
+    Preserves original timestamps so Whisper output stays aligned.
+    """
+    import torch
+    import torchaudio
+    import soundfile as sf
+    from silero_vad import load_silero_vad, get_speech_timestamps
+
+    model = load_silero_vad()
+
+    audio_np, sr = sf.read(wav_path, dtype="float32", always_2d=False)
+    wav = torch.from_numpy(audio_np)
+    if sr != SAMPLE_RATE:
+        wav = torchaudio.functional.resample(wav, sr, SAMPLE_RATE)
+    if wav.dim() > 1:
+        wav = wav.mean(0)  # stereo → mono
+
+    speech_timestamps = get_speech_timestamps(
+        wav, model,
+        sampling_rate=SAMPLE_RATE,
+        threshold=0.4,               # sensitivity — lower catches more speech
+        min_speech_duration_ms=200,  # ignore very short blips
+        min_silence_duration_ms=400, # merge speech separated by <400ms silence
+        return_seconds=False,        # want sample indices, not seconds
+    )
+
+    if not speech_timestamps:
+        return wav_path  # nothing detected, pass through unchanged
+
+    # Build a binary mask: 1 = speech, 0 = silence
+    mask = torch.zeros_like(wav)
+    for ts in speech_timestamps:
+        mask[ts["start"]:ts["end"]] = 1.0
+
+    processed = wav * mask
+
+    tmp = tempfile.NamedTemporaryFile(suffix="_vad.wav", delete=False)
+    tmp.close()
+    sf.write(tmp.name, processed.numpy(), SAMPLE_RATE)
+    return tmp.name
 
 
 def get_speaker_label(filename: str, players: dict) -> str:
@@ -100,6 +148,14 @@ def transcribe_tracks(session_dir: str, config: dict, vocab_prompt: str):
         print(f"  Converting to WAV...")
         wav_path = convert_to_wav(audio_file)
 
+        # Apply VAD to suppress hallucinations on silence
+        use_vad = config.get("vad", True)
+        if use_vad:
+            print(f"  Applying VAD...")
+            vad_path = apply_vad(wav_path)
+            Path(wav_path).unlink(missing_ok=True)
+            wav_path = vad_path
+
         result = model.transcribe(
             wav_path,
             language="en",
@@ -124,7 +180,7 @@ def transcribe_tracks(session_dir: str, config: dict, vocab_prompt: str):
                 ensure_ascii=False,
             )
 
-        # Clean up temp WAV
+        # Clean up temp WAV (covers both original and VAD-processed file)
         Path(wav_path).unlink(missing_ok=True)
 
         seg_count = len(result["segments"])

@@ -28,6 +28,32 @@ def merge_transcripts(session_dir: str, min_gap: float = 1.5) -> str:
     session = Path(session_dir)
     speakers_dir = session / "speakers"
 
+    # Known Whisper hallucination phrases — entire-segment matches only.
+    # These are phrases Whisper emits on near-silence with high confidence.
+    HALLUCINATION_PHRASES = {
+        "thank you.", "thank you", "thanks.", "thanks",
+        "bye.", "bye", "bye bye.", "bye bye",
+        "you.", "you",
+        "no.", "no",
+        "yeah.", "yeah",
+        "okay.", "okay", "ok.", "ok",
+        "hmm.", "hmm", "hm.", "hm",
+        "uh.", "uh", "um.", "um",
+        "i'll fix that.", "i'll fix that",
+        "more sultry!", "more sultry",
+        "i'm on a boat, motherfucker.", "i'm on a boat, motherfucker",
+        "i'm so happy.", "i'm so happy",
+        "fensworth.", "fensworth",
+        "victor nation.", "victor nation",
+        "hot drive for navigational purposes.", "hot drive for navigational purposes",
+        "rotary return.", "rotary return",
+        "damn.", "damn",
+        "thanks for watching!", "thanks for watching",
+        "apps and links are in the description!", "apps and links are in the description",
+        "i don't know about biochemistry.", "i don't know about biochemistry",
+        "i didn't know about biochemistry.", "i didn't know about biochemistry",
+    }
+
     all_segments = []
 
     for json_file in sorted(speakers_dir.glob("*.json")):
@@ -41,6 +67,9 @@ def merge_transcripts(session_dir: str, min_gap: float = 1.5) -> str:
                 continue
             # Skip segments that are just filler/noise
             if text.lower() in ("[music]", "[applause]", "[laughter]", "...", "."):
+                continue
+            # Skip known Whisper hallucination phrases (entire segment matches only)
+            if text.lower() in HALLUCINATION_PHRASES:
                 continue
             all_segments.append(
                 {

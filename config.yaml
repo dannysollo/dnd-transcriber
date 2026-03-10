@@ -3,6 +3,7 @@
 vault_path: "../campaign-vault"
 sessions_dir: "sessions"
 whisper_model: "turbo"  # large-v3 recommended for 4060 Ti; "turbo" is faster but less accurate
+vad: true               # Voice Activity Detection — zeros out silence before Whisper to prevent hallucinations
 
 ## Discord username → character/player info
 ## Keys must match a fragment of the Craig audio filename (Craig uses Discord usernames)
@@ -64,6 +65,41 @@ patterns:
   # Tehom multi-word mishearings
   - {match: "(?i)\\bTae\\s+[Hh]ome\\b", replace: "Tehom"}
   - {match: "(?i)\\bthe\\s+[Hh]ome\\b", replace: "Tehom"}
+  # Lowercase proper nouns (turbo model issue)
+  - {match: "\\bglimmer\\b",    replace: "Glimmer"}
+  - {match: "\\bjudah\\b",      replace: "Judah"}
+  - {match: "\\bjunia\\b",      replace: "Junia"}
+  - {match: "\\bsinclair\\b",   replace: "Sinclair"}
+  - {match: "\\bmalkuth\\b",    replace: "Malkuth"}
+  - {match: "\\bsephirot\\b",   replace: "Sephirot"}
+  - {match: "\\bfensworth\\b",  replace: "Fensworth"}
+  - {match: "\\bnic[oa]\\b",    replace: "Nico"}
+  - {match: "\\brotor\\b",      replace: "Rotor"}
+  - {match: "\\btehom\\b",      replace: "Tehom"}
+  - {match: "\\bbinah\\b",      replace: "Binah"}
+  - {match: "\\bhokma\\b",      replace: "Hokma"}
+  - {match: "\\btiferet\\b",    replace: "Tiferet"}
+  - {match: "\\bnetzach\\b",    replace: "Netzach"}
+  - {match: "\\bchesed\\b",     replace: "Chesed"}
+  - {match: "\\bazrael\\b",     replace: "Azrael"}
+  - {match: "\\baziah\\b",      replace: "Aziah"}
+  - {match: "\\bcanaan\\b",     replace: "Canaan"}
+  - {match: "\\bketer\\b",      replace: "Keter"}
+  - {match: "\\bereshkigal\\b", replace: "Ereshkigal"}
+  - {match: "\\bbethsaida\\b",  replace: "Bethsaida"}
+  - {match: "\\bvikranth\\b",   replace: "Vikranth"}
+  - {match: "\\bmer\\b",        replace: "Mer"}
+  - {match: "(?i)\\bCollie\\b", replace: "Kali"}
+  - {match: "(?i)\\bHolly\\b",  replace: "Kali"}
+  - {match: "(?i)\\bAkali\\b",  replace: "Kali"}
+  - {match: "(?i)\\btolly\\b",  replace: "Kali"}
+  - {match: "(?i)\\bbroach\\b", replace: "brooch"}
+  - {match: "(?i)\\bBrucha\\b", replace: "Brooch"}
+  - {match: "(?i)\\bBridge of Shielding\\b", replace: "Brooch of Shielding"}
+  - {match: "(?i)\\bperiaptive\\b", replace: "periapt"}
+  - {match: "(?i)\\bRotor of [Rr]eturn\\b", replace: "Rotor of Return"}
+  - {match: "\\bTehum\\b", replace: "Tehom"}
+  - {match: "\\bninhursag\\b", replace: "Ninhursag"}
   # Greek letters after character names (e.g. "Aella Row" → "Aella Rho")
   - {match: "(?i)\\b(Kali|Aella|Vixeena|Belle|Mer|Junia|Judah|Aja|Sinclair|Gabriel|Keh|Cassiel|Vikranth|Marianne|Aulos|Julian|Alba|Lucian|Lily|Alexander)\\s+Row\\b",  replace: "\\1 Rho"}
   - {match: "(?i)\\b(Kali|Aella|Vixeena|Belle|Mer|Junia|Judah|Aja|Sinclair|Gabriel|Keh|Cassiel|Vikranth|Marianne|Aulos|Julian|Alba|Lucian|Lily|Alexander)\\s+Fie\\b",  replace: "\\1 Phi"}
@@ -82,6 +118,7 @@ corrections:
   "Kesed": "Chesed"
   "Bina": "Binah"
   "Byna": "Binah"
+  "Baina": "Binah"
   "Da'at": "Da'at"
   # NPCs
   "Murr": "Mer"
@@ -94,21 +131,58 @@ corrections:
   "Neftalia": "Naphtaalia"
   "Kulth": "Kolth"
   "Kanaan": "Canaan"
+  "Kanan": "Canaan"
   "Azaya": "Aziah"
   "Azia": "Aziah"
+  "Azai": "Aziah"
   "Isaiah": "Aziah"
   "Fenceworth": "Fensworth"
   "Fennsworth": "Fensworth"
+  "Colt": "Kolth"
   # PCs (kept as fallback)
   "Ayla": "Aella"
   "Aayla": "Aella"
   "Aela": "Aella"
+  "Aila": "Aella"
   "Vixena": "Vixeena"
+  "Vixina": "Vixeena"
   "Dot": "Da'at"
-  # Kali mishearings (3-8-2026)
-  "Holly": "Kali"
-  "Collie": "Kali"
+  # Kali mishearings — moved to patterns for case-insensitive matching
+  # "Holly": "Kali"   ← see patterns section
+  # "Collie": "Kali"  ← see patterns section
   # Tehom mishearings
   "Tahoe": "Tehom"
+  "Tehum": "Tehom"
   # Other
   "Novo": "Nouveau"
+  # Lowercase proper nouns (turbo model often skips capitalization)
+  "fensworth": "Fensworth"
+  "nico": "Nico"
+  "judah": "Judah"
+  "junia": "Junia"
+  "sinclair": "Sinclair"
+  "vikranth": "Vikranth"
+  "malkuth": "Malkuth"
+  "sephirot": "Sephirot"
+  "tehom": "Tehom"
+  "aziah": "Aziah"
+  "canaan": "Canaan"
+  "heresy": "Heresy"
+  "ereshkigal": "Ereshkigal"
+  "bethsaida": "Bethsaida"
+  "tiferet": "Tiferet"
+  "netzach": "Netzach"
+  "chesed": "Chesed"
+  "hokma": "Hokma"
+  "binah": "Binah"
+  "keter": "Keter"
+  "ophir": "Ophir"
+  "chavvah": "Chavvah"
+  "limassol": "Limassol"
+  "lacuna": "Lacuna"
+  # Slightly risky (common English words) — worth it in campaign context
+  "glimmer": "Glimmer"
+  "normality": "Normality"
+  "rotor": "Rotor"
+  "din": "Din"
+  "mer": "Mer"

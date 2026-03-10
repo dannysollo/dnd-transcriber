@@ -1,4 +1,7 @@
 openai-whisper
 anthropic
 pyyaml
+silero-vad
+torchaudio
+soundfile
 # torch is installed separately (see README — CUDA version matters)
