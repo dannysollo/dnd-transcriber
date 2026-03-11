@@ -5,3 +5,7 @@ silero-vad
 torchaudio
 soundfile
 # torch is installed separately (see README — CUDA version matters)
+fastapi
+uvicorn[standard]
+websockets
+python-multipart
