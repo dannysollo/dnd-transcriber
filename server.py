@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -61,16 +61,28 @@ def get_sessions_dir() -> Path:
     return BASE_DIR / config.get("sessions_dir", "sessions")
 
 
+AUDIO_EXTS = ("*.flac", "*.mp3", "*.ogg", "*.wav", "*.m4a")
+
+def has_audio(session_path: Path) -> bool:
+    raw = session_path / "raw"
+    if not raw.exists():
+        return False
+    return any(f for ext in AUDIO_EXTS for f in raw.glob(ext))
+
 def session_status(session_path: Path) -> str:
     """Determine rough status of a session based on present files."""
-    if (session_path / "transcript.md").exists():
+    has_transcript = (session_path / "transcript.md").exists()
+    has_summary = (session_path / "summary.md").exists()
+    has_speakers = (session_path / "speakers").exists() and any((session_path / "speakers").glob("*.json"))
+
+    if has_transcript and has_summary:
         return "complete"
-    speakers = list((session_path / "speakers").glob("*.json")) if (session_path / "speakers").exists() else []
-    if speakers:
+    if has_transcript:
+        return "has_transcript"
+    if has_speakers:
         return "transcribed"
-    raw = session_path / "raw"
-    if raw.exists() and any(raw.glob("*.flac")) or any(raw.glob("*.mp3")):
-        return "raw"
+    if has_audio(session_path):
+        return "has_audio"
     return "empty"
 
 
@@ -105,6 +117,37 @@ def create_session(body: CreateSessionBody):
         raise HTTPException(400, f"Session '{body.name}' already exists")
     (session_dir / "raw").mkdir(parents=True)
     return {"name": body.name, "status": "empty"}
+
+
+@app.post("/sessions/{name}/upload")
+async def upload_audio(name: str, files: list[UploadFile] = File(...)):
+    sessions_dir = get_sessions_dir()
+    raw_dir = sessions_dir / name / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    saved = []
+    for f in files:
+        dest = raw_dir / f.filename
+        content = await f.read()
+        dest.write_bytes(content)
+        saved.append(f.filename)
+    return {"saved": saved}
+
+
+class RenameSessionBody(BaseModel):
+    new_name: str
+
+
+@app.patch("/sessions/{name}")
+def rename_session(name: str, body: RenameSessionBody):
+    sessions_dir = get_sessions_dir()
+    old_path = sessions_dir / name
+    new_path = sessions_dir / body.new_name
+    if not old_path.exists():
+        raise HTTPException(404, f"Session '{name}' not found")
+    if new_path.exists():
+        raise HTTPException(400, f"Session '{body.new_name}' already exists")
+    old_path.rename(new_path)
+    return {"name": body.new_name, "status": session_status(new_path)}
 
 
 @app.get("/sessions/{name}/transcript")

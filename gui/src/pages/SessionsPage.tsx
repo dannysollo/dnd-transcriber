@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 interface Session {
@@ -10,10 +10,11 @@ interface Session {
 }
 
 const statusColors: Record<string, { bg: string; text: string; label: string }> = {
-  complete: { bg: 'rgba(34,197,94,0.15)', text: '#4ade80', label: 'Complete' },
-  transcribed: { bg: 'rgba(59,130,246,0.15)', text: '#60a5fa', label: 'Transcribed' },
-  raw: { bg: 'rgba(251,191,36,0.15)', text: '#fbbf24', label: 'Raw audio' },
-  empty: { bg: 'rgba(100,116,139,0.15)', text: '#64748b', label: 'Empty' },
+  complete:       { bg: 'rgba(34,197,94,0.15)',   text: '#4ade80', label: 'Complete' },
+  has_transcript: { bg: 'rgba(124,108,252,0.15)', text: '#a78bfa', label: 'Has transcript' },
+  transcribed:    { bg: 'rgba(59,130,246,0.15)',  text: '#60a5fa', label: 'Transcribed' },
+  has_audio:      { bg: 'rgba(251,191,36,0.15)',  text: '#fbbf24', label: 'Has audio' },
+  empty:          { bg: 'rgba(100,116,139,0.15)', text: '#64748b', label: 'Empty' },
 }
 
 export default function SessionsPage() {
@@ -21,6 +22,10 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
+  const [renamingSession, setRenamingSession] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [uploadingFor, setUploadingFor] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
 
   const load = async () => {
@@ -56,17 +61,46 @@ export default function SessionsPage() {
     }
   }
 
+  const renameSession = async (oldName: string, newNameVal: string) => {
+    if (!newNameVal.trim() || newNameVal.trim() === oldName) {
+      setRenamingSession(null)
+      return
+    }
+    const r = await fetch(`/sessions/${oldName}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_name: newNameVal.trim() }),
+    })
+    if (r.ok) {
+      setRenamingSession(null)
+      load()
+    } else {
+      const err = await r.json()
+      alert(err.detail || 'Rename failed')
+    }
+  }
+
+  const uploadFiles = async (sessionName: string, files: FileList) => {
+    if (!files.length) return
+    setUploadingFor(sessionName)
+    const form = new FormData()
+    for (const f of Array.from(files)) form.append('files', f)
+    const r = await fetch(`/sessions/${sessionName}/upload`, { method: 'POST', body: form })
+    setUploadingFor(null)
+    if (r.ok) {
+      load()
+    } else {
+      alert('Upload failed')
+    }
+  }
+
   return (
     <div style={{ padding: '32px', maxWidth: '900px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>Sessions</h1>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
-            All recording sessions
-          </p>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>All recording sessions</p>
         </div>
-
-        {/* Create session */}
         <div style={{ display: 'flex', gap: '8px' }}>
           <input
             type="text"
@@ -75,28 +109,16 @@ export default function SessionsPage() {
             onKeyDown={e => e.key === 'Enter' && createSession()}
             placeholder="2026-03-15"
             style={{
-              background: '#1a1d27',
-              border: '1px solid #2a2d3a',
-              borderRadius: '8px',
-              color: '#e2e8f0',
-              padding: '8px 12px',
-              fontSize: '13px',
-              width: '160px',
-              outline: 'none',
+              background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '8px',
+              color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', width: '160px', outline: 'none',
             }}
           />
           <button
             onClick={createSession}
             disabled={creating || !newName.trim()}
             style={{
-              background: '#7c6cfc',
-              border: 'none',
-              borderRadius: '8px',
-              color: '#fff',
-              padding: '8px 16px',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
+              background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
+              padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
               opacity: (creating || !newName.trim()) ? 0.5 : 1,
             }}
           >
@@ -105,61 +127,104 @@ export default function SessionsPage() {
         </div>
       </div>
 
+      {/* Hidden file input for uploads */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".flac,.mp3,.ogg,.wav,.m4a"
+        style={{ display: 'none' }}
+        onChange={e => {
+          if (uploadingFor && e.target.files) uploadFiles(uploadingFor, e.target.files)
+          e.target.value = ''
+        }}
+      />
+
       {loading ? (
         <div style={{ color: '#64748b', fontSize: '14px' }}>Loading...</div>
       ) : sessions.length === 0 ? (
         <div style={{
-          background: '#1a1d27',
-          border: '1px solid #2a2d3a',
-          borderRadius: '12px',
-          padding: '48px',
-          textAlign: 'center',
-          color: '#64748b',
+          background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '12px',
+          padding: '48px', textAlign: 'center', color: '#64748b',
         }}>
-          No sessions yet. Create one or drop audio files in the sessions/ directory.
+          No sessions yet. Create one above.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {sessions.map(s => {
             const sc = statusColors[s.status] || statusColors.empty
+            const isRenaming = renamingSession === s.name
             return (
               <div
                 key={s.name}
-                onClick={() => navigate(`/sessions/${s.name}`)}
                 style={{
-                  background: '#1a1d27',
-                  border: '1px solid #2a2d3a',
-                  borderRadius: '10px',
-                  padding: '16px 20px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px',
-                  transition: 'border-color 0.15s',
+                  background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '10px',
+                  padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '12px',
                 }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = '#7c6cfc')}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = '#2a2d3a')}
               >
+                {/* Name / rename */}
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0' }}>{s.name}</div>
+                  {isRenaming ? (
+                    <input
+                      autoFocus
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') renameSession(s.name, renameValue)
+                        if (e.key === 'Escape') setRenamingSession(null)
+                      }}
+                      onBlur={() => renameSession(s.name, renameValue)}
+                      style={{
+                        background: '#0f1117', border: '1px solid #7c6cfc', borderRadius: '6px',
+                        color: '#e2e8f0', padding: '4px 8px', fontSize: '14px', fontWeight: 600, outline: 'none',
+                      }}
+                    />
+                  ) : (
+                    <div
+                      onClick={() => navigate(`/sessions/${s.name}`)}
+                      style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0', cursor: 'pointer' }}
+                    >
+                      {s.name}
+                    </div>
+                  )}
                 </div>
+
                 {/* File badges */}
                 <div style={{ display: 'flex', gap: '6px' }}>
                   {s.has_transcript && <Badge label="transcript" />}
                   {s.has_summary && <Badge label="summary" />}
                   {s.has_wiki && <Badge label="wiki" />}
                 </div>
+
                 {/* Status badge */}
                 <div style={{
-                  background: sc.bg,
-                  color: sc.text,
-                  borderRadius: '20px',
-                  padding: '3px 10px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
+                  background: sc.bg, color: sc.text, borderRadius: '20px',
+                  padding: '3px 10px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
                 }}>
                   {sc.label}
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <ActionBtn
+                    title="Upload audio files"
+                    onClick={() => {
+                      setUploadingFor(s.name)
+                      fileInputRef.current?.click()
+                    }}
+                    loading={uploadingFor === s.name}
+                  >
+                    {uploadingFor === s.name ? '⏳' : '📁'}
+                  </ActionBtn>
+                  <ActionBtn
+                    title="Rename session"
+                    onClick={() => { setRenamingSession(s.name); setRenameValue(s.name) }}
+                  >
+                    ✏️
+                  </ActionBtn>
+                  <ActionBtn title="Open session" onClick={() => navigate(`/sessions/${s.name}`)}>
+                    →
+                  </ActionBtn>
                 </div>
               </div>
             )
@@ -173,14 +238,29 @@ export default function SessionsPage() {
 function Badge({ label }: { label: string }) {
   return (
     <span style={{
-      background: 'rgba(124,108,252,0.1)',
-      color: '#7c6cfc',
-      borderRadius: '4px',
-      padding: '2px 7px',
-      fontSize: '10px',
-      fontWeight: 600,
+      background: 'rgba(124,108,252,0.1)', color: '#7c6cfc',
+      borderRadius: '4px', padding: '2px 7px', fontSize: '10px', fontWeight: 600,
     }}>
       {label}
     </span>
+  )
+}
+
+function ActionBtn({ children, onClick, title, loading }: {
+  children: React.ReactNode; onClick: () => void; title?: string; loading?: boolean
+}) {
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); onClick() }}
+      title={title}
+      disabled={loading}
+      style={{
+        background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '6px',
+        color: '#94a3b8', padding: '4px 8px', fontSize: '13px', cursor: 'pointer',
+        opacity: loading ? 0.5 : 1,
+      }}
+    >
+      {children}
+    </button>
   )
 }

@@ -1,0 +1,3 @@
+# Transcript
+
+*No speech detected.*
