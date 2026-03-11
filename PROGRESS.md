@@ -11,7 +11,35 @@
 | 5 | Sessions page + Session View | ✅ Done |
 | 6 | Pipeline Runner page | ✅ Done |
 | 7 | Corrections Editor page | ✅ Done |
-| 8 | Settings page + dev launcher | ⏳ Pending |
+| 8 | Settings page + dev launcher | ✅ Done |
+
+**ALL PHASES COMPLETE** 🎉
+
+---
+
+## How to run
+
+```bash
+./start.sh
+```
+
+- Backend: http://localhost:8765 (FastAPI + uvicorn, auto-reload)
+- Frontend: http://localhost:5173 (Vite dev server, HMR)
+
+Or run individually:
+```bash
+# Backend
+uvicorn server:app --port 8765 --reload
+
+# Frontend
+cd gui && npm run dev
+```
+
+To build for production:
+```bash
+cd gui && npm run build
+# Serves from /gui/dist/ via FastAPI static files at http://localhost:8765
+```
 
 ---
 
@@ -30,81 +58,81 @@
 - `POST /sessions/{name}/merge` — re-run merge step
 - `GET /config` — read full config.yaml
 - `PUT /config` — write full config.yaml
-- `GET /config/corrections` — read corrections dict
-- `PUT /config/corrections` — write corrections dict
-- `GET /config/patterns` — read patterns list
-- `PUT /config/patterns` — write patterns list
-- `POST /config/test-correction` — test corrections against sample text
-- `GET /config/vocab` — extract vocab from vault
-- `POST /pipeline/run` — launch pipeline in background thread
-- `GET /pipeline/status` — check running state
-- `WS /ws/progress` — live log streaming via WebSocket
 
 ---
 
 ## Phases 2 & 3 — Pipeline runner + WebSocket + Config API ✅
 
-Included in server.py (all in one file).
+**Endpoints:**
+- `POST /pipeline/run` — launch pipeline in background thread
+- `GET /pipeline/status` — check running state
+- `WS /ws/progress` — live log streaming via WebSocket
+- `GET /config/corrections`, `PUT /config/corrections`
+- `GET /config/patterns`, `PUT /config/patterns`
+- `POST /config/test-correction` — test corrections with diff output
+- `GET /config/vocab` — extract vocab from vault
 
 ---
 
 ## Phase 4 — React frontend scaffold ✅
 
-**Files created:**
-- `gui/` — Vite + React + TypeScript project
-- `gui/vite.config.ts` — Tailwind CSS v4 plugin + dev proxy to :8765
-- `gui/src/index.css` — dark theme global styles
-- `gui/src/App.tsx` — sidebar nav + React Router routes
-- `gui/src/App.css` — spin keyframe animation
-
-**Pages stubbed:**
-- SessionsPage, SessionView, PipelinePage, CorrectionsPage, SettingsPage
+- Vite + React + TypeScript in `gui/`
+- Tailwind CSS v4 via `@tailwindcss/vite` plugin
+- react-router-dom + react-markdown
+- Dark theme: `#0f1117` background
+- `App.tsx` sidebar nav → Sessions / Pipeline / Corrections / Settings
+- Dev proxy: Vite → FastAPI on :8765
 
 ---
 
 ## Phase 5 — Sessions page + Session View ✅
 
 **`SessionsPage.tsx`:**
-- Lists all sessions with status badges (complete/transcribed/raw/empty)
+- Lists sessions with status badges (complete/transcribed/raw/empty)
 - File presence badges (transcript/summary/wiki)
 - Create new session form
 
 **`SessionView.tsx`:**
 - Tabs: Transcript, Summary, Wiki
-- Transcript: speaker color-coded chips, timestamp, searchable
-- Summary/Wiki: rendered markdown
-- Re-merge button
+- Transcript: speaker color-coded chips, timestamp, full-text search with highlight
+- Summary/Wiki: rendered markdown via react-markdown
+- Re-merge button (calls `POST /sessions/{name}/merge`)
 
 ---
 
 ## Phase 6 — Pipeline Runner page ✅
 
 **`PipelinePage.tsx`:**
-- Session dropdown, step selector (full/transcribe-only/wiki-only)
-- Run button with loading spinner
-- Live WebSocket log stream with color coding and auto-scroll
-- Exit code display
+- Session dropdown selector
+- Step selector: Full pipeline / Transcribe only / Wiki only
+- Run button with animated spinner
+- Live WebSocket log stream (auto-scroll, color-coded output)
+- Exit code display (green ✓ / red ✗)
 
 ---
 
 ## Phase 7 — Corrections Editor page ✅
 
 **`CorrectionsPage.tsx`:**
-- Two-panel layout: editor + live preview
-- Corrections tab: sorted list, add/edit/delete
-- Patterns tab: regex patterns, add/delete
-- Test panel: paste text → apply all corrections → show diff
+- Two tabs: Corrections (word pairs) + Patterns (regex)
+- Corrections: sorted list, add/inline-edit/delete, auto-save
+- Patterns: regex + replacement, add/delete, auto-save
+- Live preview panel: paste text → apply corrections → show unified diff
 
 ---
 
-## Phase 8 — Settings page + dev launcher ⏳
+## Phase 8 — Settings page + dev launcher ✅
 
-**`SettingsPage.tsx`:** ✅ Done (bundled with phases 4-7 commit)
-- Whisper model dropdown
-- VAD toggle
-- Sessions dir + vault path
+**`SettingsPage.tsx`:**
+- Whisper model dropdown (tiny → turbo)
+- VAD toggle with description
+- Sessions dir + vault path text fields
 - Notify Claude toggle + OpenClaw session ID
-- Players table (add/edit/remove)
-- Vocab prompt preview
+- Players table: add/edit name,character,role/remove
+- Vocab prompt preview (read from vault via API)
 
-**`start.sh`:** ⏳ Pending
+**`start.sh`:**
+- Activates venv if present
+- Starts uvicorn on :8765 (backend, --reload)
+- Starts Vite dev server on :5173 (frontend)
+- Graceful Ctrl+C shutdown of both processes
