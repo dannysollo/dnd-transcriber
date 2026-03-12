@@ -16,11 +16,19 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from auth import discord as discord_auth
+from auth.jwt import COOKIE_NAME, create_access_token
+from auth.middleware import AUTH_ENABLED, get_current_user, require_campaign_member, require_user
+from db import crud
+from db.database import get_db, init_db
+from db.models import User
 
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
 BASE_DIR = Path(__file__).parent
@@ -961,6 +969,7 @@ async def broadcast_logs():
 
 @app.on_event("startup")
 async def startup():
+    init_db()
     asyncio.create_task(broadcast_logs())
 
 
@@ -982,6 +991,364 @@ async def ws_progress(websocket: WebSocket):
     except WebSocketDisconnect:
         if websocket in ws_clients:
             ws_clients.remove(websocket)
+
+
+# ─── Auth routes ──────────────────────────────────────────────────────────────
+
+@app.get("/auth/discord")
+def auth_discord_redirect():
+    """Redirect user to Discord OAuth2 login page."""
+    url = discord_auth.get_authorization_url()
+    return RedirectResponse(url)
+
+
+@app.get("/auth/discord/callback")
+async def auth_discord_callback(
+    code: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Handle Discord OAuth2 callback: create/update user, set JWT cookie, redirect to /."""
+    if error or not code:
+        raise HTTPException(400, f"Discord OAuth error: {error or 'no code'}")
+
+    token_data = await discord_auth.exchange_code(code)
+    access_token = token_data.get("access_token")
+    if not access_token:
+        raise HTTPException(400, "Failed to get access token from Discord")
+
+    user_info = await discord_auth.get_user_info(access_token)
+    user = crud.create_or_update_user(
+        db,
+        discord_id=user_info["id"],
+        username=user_info["username"],
+        discriminator=user_info["discriminator"],
+        avatar=user_info["avatar"],
+        email=user_info["email"],
+    )
+
+    jwt_token = create_access_token(user.id)
+    response = RedirectResponse(url="/")
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=jwt_token,
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,  # 30 days
+    )
+    return response
+
+
+@app.get("/auth/me")
+def auth_me(user: Optional[User] = Depends(get_current_user)):
+    """Return current user info, or null if not authenticated."""
+    if user is None:
+        return JSONResponse({"user": None, "auth_enabled": AUTH_ENABLED})
+    return {
+        "user": {
+            "id": user.id,
+            "discord_id": user.discord_id,
+            "username": user.username,
+            "discriminator": user.discriminator,
+            "avatar": user.avatar,
+            "email": user.email,
+            "is_admin": user.is_admin,
+        },
+        "auth_enabled": AUTH_ENABLED,
+    }
+
+
+@app.post("/auth/logout")
+def auth_logout(response: Response):
+    """Clear the JWT cookie."""
+    response.delete_cookie(key=COOKIE_NAME)
+    return {"ok": True}
+
+
+# ─── Campaign routes ───────────────────────────────────────────────────────────
+
+class CreateCampaignBody(BaseModel):
+    slug: str
+    name: str
+    description: Optional[str] = None
+
+
+@app.get("/campaigns")
+def list_campaigns(
+    user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not AUTH_ENABLED or user is None:
+        return []
+    campaigns = crud.get_user_campaigns(db, user.id)
+    return [
+        {
+            "id": c.id,
+            "slug": c.slug,
+            "name": c.name,
+            "description": c.description,
+            "owner_id": c.owner_id,
+            "data_path": c.data_path,
+            "settings": c.settings,
+            "created_at": c.created_at.isoformat(),
+        }
+        for c in campaigns
+    ]
+
+
+@app.post("/campaigns", status_code=201)
+def create_campaign(
+    body: CreateCampaignBody,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    if AUTH_ENABLED and user is None:
+        raise HTTPException(401, "Not authenticated")
+    if crud.get_campaign_by_slug(db, body.slug):
+        raise HTTPException(400, f"Campaign slug '{body.slug}' already exists")
+    data_path = f"campaigns/{body.slug}"
+    campaign = crud.create_campaign(
+        db,
+        slug=body.slug,
+        name=body.name,
+        description=body.description,
+        owner_id=user.id if user else 0,
+        data_path=data_path,
+    )
+    return {
+        "id": campaign.id,
+        "slug": campaign.slug,
+        "name": campaign.name,
+        "description": campaign.description,
+        "owner_id": campaign.owner_id,
+        "data_path": campaign.data_path,
+        "settings": campaign.settings,
+        "created_at": campaign.created_at.isoformat(),
+    }
+
+
+@app.get("/campaigns/{slug}")
+def get_campaign(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    return {
+        "id": campaign.id,
+        "slug": campaign.slug,
+        "name": campaign.name,
+        "description": campaign.description,
+        "owner_id": campaign.owner_id,
+        "data_path": campaign.data_path,
+        "settings": campaign.settings,
+        "created_at": campaign.created_at.isoformat(),
+    }
+
+
+class UpdateCampaignBody(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    settings: Optional[dict] = None
+
+
+@app.patch("/campaigns/{slug}")
+def patch_campaign(
+    slug: str,
+    body: UpdateCampaignBody,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    kwargs = {k: v for k, v in body.model_dump().items() if v is not None}
+    campaign = crud.update_campaign(db, campaign, **kwargs)
+    return {
+        "id": campaign.id,
+        "slug": campaign.slug,
+        "name": campaign.name,
+        "description": campaign.description,
+        "settings": campaign.settings,
+    }
+
+
+@app.get("/campaigns/{slug}/members")
+def list_members(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    members = crud.get_campaign_members(db, campaign.id)
+    return [
+        {
+            "id": m.id,
+            "user_id": m.user_id,
+            "username": m.user.username,
+            "discord_id": m.user.discord_id,
+            "avatar": m.user.avatar,
+            "role": m.role,
+            "joined_at": m.joined_at.isoformat(),
+        }
+        for m in members
+    ]
+
+
+class UpdateMemberBody(BaseModel):
+    role: str
+
+
+@app.patch("/campaigns/{slug}/members/{user_id}")
+def update_member(
+    slug: str,
+    user_id: int,
+    body: UpdateMemberBody,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    member = crud.get_member(db, campaign.id, user_id)
+    if not member:
+        raise HTTPException(404, "Member not found")
+    if body.role not in ("dm", "player", "spectator"):
+        raise HTTPException(400, "Invalid role")
+    member = crud.update_member_role(db, member, body.role)
+    return {"user_id": member.user_id, "role": member.role}
+
+
+@app.delete("/campaigns/{slug}/members/{user_id}", status_code=204)
+def remove_member(
+    slug: str,
+    user_id: int,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    member = crud.get_member(db, campaign.id, user_id)
+    if not member:
+        raise HTTPException(404, "Member not found")
+    crud.remove_member(db, member)
+
+
+class CreateInviteBody(BaseModel):
+    role: str = "player"
+    expires_in_days: Optional[int] = None
+    max_uses: Optional[int] = None
+
+
+@app.post("/campaigns/{slug}/invites", status_code=201)
+def create_invite(
+    slug: str,
+    body: CreateInviteBody,
+    user: Optional[User] = Depends(get_current_user),
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if body.role not in ("dm", "player", "spectator"):
+        raise HTTPException(400, "Invalid role")
+    invite = crud.create_invite(
+        db,
+        campaign_id=campaign.id,
+        created_by=user.id if user else 0,
+        role=body.role,
+        expires_in_days=body.expires_in_days,
+        max_uses=body.max_uses,
+    )
+    return {
+        "id": invite.id,
+        "token": invite.token,
+        "role": invite.role,
+        "expires_at": invite.expires_at.isoformat() if invite.expires_at else None,
+        "max_uses": invite.max_uses,
+        "use_count": invite.use_count,
+        "created_at": invite.created_at.isoformat(),
+    }
+
+
+@app.get("/campaigns/{slug}/invites")
+def list_invites(
+    slug: str,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    invites = crud.get_campaign_invites(db, campaign.id)
+    return [
+        {
+            "id": i.id,
+            "token": i.token,
+            "role": i.role,
+            "expires_at": i.expires_at.isoformat() if i.expires_at else None,
+            "max_uses": i.max_uses,
+            "use_count": i.use_count,
+            "created_at": i.created_at.isoformat(),
+        }
+        for i in invites
+    ]
+
+
+@app.post("/invites/{token}/use")
+def use_invite(
+    token: str,
+    user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Accept an invite — the authenticated user joins the campaign."""
+    if AUTH_ENABLED and user is None:
+        raise HTTPException(401, "Not authenticated")
+    invite = crud.get_invite_by_token(db, token)
+    if not invite:
+        raise HTTPException(404, "Invite not found")
+
+    from datetime import datetime
+    if invite.expires_at and invite.expires_at < datetime.utcnow():
+        raise HTTPException(410, "Invite has expired")
+    if invite.max_uses and invite.use_count >= invite.max_uses:
+        raise HTTPException(410, "Invite has reached max uses")
+
+    if user:
+        existing = crud.get_member(db, invite.campaign_id, user.id)
+        if existing:
+            raise HTTPException(409, "Already a member of this campaign")
+        member = crud.use_invite(db, invite, user.id)
+        return {"campaign_id": member.campaign_id, "role": member.role}
+    return {"ok": True}
+
+
+@app.get("/invites/{token}")
+def get_invite_info(token: str, db: Session = Depends(get_db)):
+    """Public endpoint: return invite details (campaign name, role) without auth."""
+    invite = crud.get_invite_by_token(db, token)
+    if not invite:
+        raise HTTPException(404, "Invite not found")
+
+    from datetime import datetime
+    expired = bool(invite.expires_at and invite.expires_at < datetime.utcnow())
+    maxed = bool(invite.max_uses and invite.use_count >= invite.max_uses)
+
+    return {
+        "token": invite.token,
+        "campaign_name": invite.campaign.name,
+        "campaign_slug": invite.campaign.slug,
+        "role": invite.role,
+        "expired": expired,
+        "maxed": maxed,
+        "valid": not expired and not maxed,
+    }
 
 
 # ─── Static frontend ──────────────────────────────────────────────────────────
