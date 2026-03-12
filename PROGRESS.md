@@ -12,8 +12,73 @@
 | 6 | Pipeline Runner page | ✅ Done |
 | 7 | Corrections Editor page | ✅ Done |
 | 8 | Settings page + dev launcher | ✅ Done |
+| **Multi-campaign Phase 1** | **Auth + DB foundation** | **✅ Done** |
 
-**ALL PHASES COMPLETE** 🎉
+---
+
+## Multi-campaign Phase 1 — Auth + DB Foundation ✅
+
+Branch: `feature/multi-campaign`
+
+### What was added
+
+**Backend (Python):**
+- `db/models.py` — SQLAlchemy ORM models: `User`, `Campaign`, `CampaignMember`, `CampaignInvite`
+- `db/database.py` — Engine setup, `SessionLocal`, `get_db()` FastAPI dependency, `init_db()`
+- `db/crud.py` — Full CRUD for all models
+- `auth/discord.py` — Discord OAuth2: `get_authorization_url()`, `exchange_code()`, `get_user_info()`
+- `auth/jwt.py` — JWT creation/verification, 30-day expiry, httpOnly cookie
+- `auth/middleware.py` — `get_current_user`, `require_user`, `require_campaign_member(min_role)` deps
+- `server.py` — New routes: `/auth/*`, `/campaigns/*`, `/invites/*`
+- `requirements.txt` — Added: `sqlalchemy`, `authlib`, `httpx`, `python-jose[cryptography]`, `passlib`
+
+**Frontend (React/TypeScript):**
+- `AuthContext.tsx` — `AuthProvider`, `useAuth()` hook, `avatarUrl()` helper
+- `pages/LoginPage.tsx` — Discord login button, auto-redirect if already logged in
+- `pages/CampaignsPage.tsx` — List + create campaigns
+- `pages/CampaignSettingsPage.tsx` — Settings / Members / Invites tabs
+- `pages/InvitePage.tsx` — `/invite/:token` accept-invite page
+- `App.tsx` — New routes, sidebar user avatar + logout, dev-mode badge
+- `main.tsx` — Wrapped in `AuthProvider`
+
+### Auth behavior
+
+| Environment | Behavior |
+|-------------|----------|
+| `AUTH_ENABLED=false` (default) | All routes accessible; "Dev Mode" badge in sidebar; `/auth/me` returns `auth_enabled: false` |
+| `AUTH_ENABLED=true` | Discord OAuth required; JWT httpOnly cookie set on login; role-based access enforced |
+
+### New API endpoints
+
+```
+GET  /auth/discord              → redirect to Discord OAuth
+GET  /auth/discord/callback     → handle callback, set cookie, redirect /
+GET  /auth/me                   → {user, auth_enabled}
+POST /auth/logout               → clear cookie
+
+GET  /campaigns                 → user's campaigns
+POST /campaigns                 → create campaign
+GET  /campaigns/{slug}          → campaign details
+PATCH /campaigns/{slug}         → update settings (dm+)
+GET  /campaigns/{slug}/members  → member list
+PATCH /campaigns/{slug}/members/{user_id} → change role (dm+)
+DELETE /campaigns/{slug}/members/{user_id} → remove member (dm+)
+POST /campaigns/{slug}/invites  → create invite link (dm+)
+GET  /campaigns/{slug}/invites  → list invites (dm+)
+GET  /invites/{token}           → public invite info (no auth required)
+POST /invites/{token}/use       → accept invite
+```
+
+### Environment variables (for auth)
+
+```
+AUTH_ENABLED=true
+DISCORD_CLIENT_ID=...
+DISCORD_CLIENT_SECRET=...
+DISCORD_REDIRECT_URI=http://localhost:8765/auth/discord/callback
+SECRET_KEY=...             # JWT signing key (random per-restart if unset — dev only)
+DATABASE_URL=sqlite:///./transcriber.db   # default
+```
 
 ---
 
