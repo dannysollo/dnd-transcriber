@@ -1,3 +1,0 @@
-# Transcript
-
-*No speech detected.*
