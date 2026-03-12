@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useApiUrl } from '../CampaignContext'
 import ReactMarkdown from 'react-markdown'
 
 // Speaker color palette
@@ -121,6 +122,7 @@ type Tab = 'transcript' | 'summary' | 'wiki' | 'changes'
 export default function SessionView() {
   const { name } = useParams<{ name: string }>()
   const navigate = useNavigate()
+  const apiUrl = useApiUrl()
   const [tab, setTab] = useState<Tab>('transcript')
   const [transcript, setTranscript] = useState<string | null>(null)
   const [summary, setSummary] = useState<string | null>(null)
@@ -148,9 +150,9 @@ export default function SessionView() {
   const load = async () => {
     setLoading(true)
     const [t, s, w] = await Promise.allSettled([
-      fetch(`/sessions/${name}/transcript`).then(r => r.ok ? r.json() : null),
-      fetch(`/sessions/${name}/summary`).then(r => r.ok ? r.json() : null),
-      fetch(`/sessions/${name}/wiki`).then(r => r.ok ? r.json() : null),
+      fetch(apiUrl(`/sessions/${name}/transcript`)).then(r => r.ok ? r.json() : null),
+      fetch(apiUrl(`/sessions/${name}/summary`)).then(r => r.ok ? r.json() : null),
+      fetch(apiUrl(`/sessions/${name}/wiki`)).then(r => r.ok ? r.json() : null),
     ])
     setTranscript(t.status === 'fulfilled' && t.value ? t.value.content : null)
     setSummary(s.status === 'fulfilled' && s.value ? s.value.content : null)
@@ -160,7 +162,7 @@ export default function SessionView() {
 
   const loadAudioFiles = async () => {
     try {
-      const r = await fetch(`/sessions/${name}/audio-files`)
+      const r = await fetch(apiUrl(`/sessions/${name}/audio-files`))
       const data = await r.json()
       const files: AudioFile[] = data.files || []
       setAudioFiles(files)
@@ -170,7 +172,7 @@ export default function SessionView() {
 
   const loadPlayers = async () => {
     try {
-      const r = await fetch('/config')
+      const r = await fetch(apiUrl('/config'))
       if (r.ok) {
         const config = await r.json()
         const playersObj = config.players || {}
@@ -190,7 +192,7 @@ export default function SessionView() {
     if (changesLoaded) return
     setChangesLoading(true)
     try {
-      const r = await fetch(`/sessions/${name}/corrections-report`)
+      const r = await fetch(apiUrl(`/sessions/${name}/corrections-report`))
       if (r.ok) {
         setChangesReport(await r.json())
       } else {
@@ -247,14 +249,14 @@ export default function SessionView() {
         setUploadingAudio(true)
         const form = new FormData()
         form.append('file', zipFiles[0])
-        await fetch(`/sessions/${name}/import-zip`, { method: 'POST', body: form })
+        await fetch(apiUrl(`/sessions/${name}/import-zip`), { method: 'POST', body: form })
         setUploadingAudio(false)
         await loadAudioFiles()
       } else if (audioDropped.length > 0) {
         setUploadingAudio(true)
         const form = new FormData()
         audioDropped.forEach(f => form.append('files', f))
-        await fetch(`/sessions/${name}/upload`, { method: 'POST', body: form })
+        await fetch(apiUrl(`/sessions/${name}/upload`), { method: 'POST', body: form })
         setUploadingAudio(false)
         await loadAudioFiles()
       }
@@ -274,7 +276,7 @@ export default function SessionView() {
   const doMerge = async () => {
     setMerging(true)
     try {
-      const r = await fetch(`/sessions/${name}/merge`, { method: 'POST' })
+      const r = await fetch(apiUrl(`/sessions/${name}/merge`), { method: 'POST' })
       if (r.ok) {
         load()
         // Invalidate changes report so it reloads next time
@@ -634,7 +636,7 @@ function TranscriptView({
     if (!sessionName) return
     setSavingLine(true)
     try {
-      await fetch(`/sessions/${sessionName}/transcript/line/${lineIdx + 1}`, {
+      await fetch(apiUrl(`/sessions/${sessionName}/transcript/line/${lineIdx + 1}`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: value }),
@@ -650,7 +652,7 @@ function TranscriptView({
     if (!sessionName) return
     setSavingAll(true)
     try {
-      await fetch(`/sessions/${sessionName}/transcript`, {
+      await fetch(apiUrl(`/sessions/${sessionName}/transcript`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: editedLines.join('\n') }),
@@ -1066,8 +1068,8 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
     setDiffLoading(true)
     try {
       const [rawRes, corrRes] = await Promise.allSettled([
-        fetch(`/sessions/${sessionName}/raw-transcript`).then(r => r.ok ? r.json() : null),
-        fetch(`/sessions/${sessionName}/transcript`).then(r => r.ok ? r.json() : null),
+        fetch(apiUrl(`/sessions/${sessionName}/raw-transcript`)).then(r => r.ok ? r.json() : null),
+        fetch(apiUrl(`/sessions/${sessionName}/transcript`)).then(r => r.ok ? r.json() : null),
       ])
       setRawContent(rawRes.status === 'fulfilled' && rawRes.value ? rawRes.value.content : '')
       setCorrContent(corrRes.status === 'fulfilled' && corrRes.value ? corrRes.value.content : '')
@@ -1478,7 +1480,7 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
 
   const loadSpeakers = async () => {
     try {
-      const r = await fetch(`/sessions/${sessionName}/speakers`)
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/speakers`))
       if (r.ok) setSpeakers((await r.json()).speakers)
     } catch (_) {}
   }
@@ -1490,7 +1492,7 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
     setRenaming(true)
     setRenameResult(null)
     try {
-      const r = await fetch(`/sessions/${sessionName}/rename-speaker`, {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/rename-speaker`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ old_name: oldName, new_name: newName.trim() }),
@@ -1625,7 +1627,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: strin
     setImporting(true)
     setImportResult(null)
     try {
-      const r = await fetch(`/sessions/${sessionName}/import-corrections`, { method: 'POST' })
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/import-corrections`), { method: 'POST' })
       if (r.ok) setImportResult(await r.json())
     } finally {
       setImporting(false)
@@ -1636,7 +1638,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: strin
     const fetchSuggestions = async () => {
       setLoading(true)
       try {
-        const r = await fetch(`/sessions/${sessionName}/wiki-suggestions-parsed`)
+        const r = await fetch(apiUrl(`/sessions/${sessionName}/wiki-suggestions-parsed`))
         setSuggestions(r.ok ? await r.json() : null)
       } catch (_) {
         setSuggestions(null)
@@ -1651,7 +1653,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: strin
     setApplying(true)
     setApplyOutput(null)
     try {
-      const r = await fetch(`/sessions/${sessionName}/apply-wiki`, {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/apply-wiki`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode, ids }),

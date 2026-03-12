@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom'
 import './App.css'
 import SessionsPage from './pages/SessionsPage'
@@ -10,6 +11,7 @@ import CampaignsPage from './pages/CampaignsPage'
 import CampaignSettingsPage from './pages/CampaignSettingsPage'
 import InvitePage from './pages/InvitePage'
 import { useAuth, avatarUrl } from './AuthContext'
+import { useCampaign } from './CampaignContext'
 
 const navItems = [
   { to: '/', label: 'Sessions', icon: '📜' },
@@ -21,6 +23,8 @@ const navItems = [
 
 export default function App() {
   const { user, isLoggedIn, authEnabled, loading } = useAuth()
+  const { campaigns, activeCampaign, setActiveCampaign } = useCampaign()
+  const [campaignDropdownOpen, setCampaignDropdownOpen] = useState(false)
   const navigate = useNavigate()
 
   const logout = async () => {
@@ -53,6 +57,60 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* Campaign selector */}
+        {campaigns.length > 0 && (
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid #1e2130', position: 'relative' }}>
+            <div
+              onClick={() => setCampaignDropdownOpen(o => !o)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '6px 10px', borderRadius: '6px', cursor: 'pointer',
+                background: 'rgba(124,108,252,0.08)', border: '1px solid rgba(124,108,252,0.2)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '10px', color: '#64748b', marginBottom: '1px' }}>Campaign</div>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: '#a89cff' }}>
+                  {activeCampaign?.name ?? 'None'}
+                </div>
+              </div>
+              {campaigns.length > 1 && (
+                <span style={{ fontSize: '10px', color: '#475569' }}>
+                  {campaignDropdownOpen ? '▲' : '▼'}
+                </span>
+              )}
+            </div>
+
+            {campaignDropdownOpen && campaigns.length > 1 && (
+              <div style={{
+                position: 'absolute', left: '12px', right: '12px', top: '100%',
+                background: '#1a1d2e', border: '1px solid #2a2d3a',
+                borderRadius: '6px', zIndex: 100, overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+              }}>
+                {campaigns.map(c => (
+                  <div
+                    key={c.slug}
+                    onClick={() => {
+                      setActiveCampaign(c)
+                      setCampaignDropdownOpen(false)
+                    }}
+                    style={{
+                      padding: '8px 12px', fontSize: '12px', cursor: 'pointer',
+                      color: activeCampaign?.slug === c.slug ? '#a89cff' : '#94a3b8',
+                      background: activeCampaign?.slug === c.slug ? 'rgba(124,108,252,0.12)' : 'transparent',
+                    }}
+                  >
+                    {c.name}
+                    <span style={{ fontSize: '10px', color: '#475569', marginLeft: '6px' }}>
+                      [{c.role}]
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Nav links */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '12px', flex: 1 }}>

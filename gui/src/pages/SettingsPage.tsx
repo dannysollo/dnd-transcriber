@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useApiUrl } from '../CampaignContext'
 
 
 export default function SettingsPage() {
+  const apiUrl = useApiUrl()
   const [config, setConfig] = useState<Record<string, any> | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -11,24 +13,24 @@ export default function SettingsPage() {
 
   const load = async () => {
     setLoading(true)
-    const r = await fetch('/config')
+    const r = await fetch(apiUrl('/config'))
     const data = await r.json()
     setConfig(data)
     setLoading(false)
 
     // Load vocab
-    const vr = await fetch('/config/vocab')
+    const vr = await fetch(apiUrl('/config/vocab'))
     const vdata = await vr.json()
     setVocab(vdata.vocab || '')
     setVocabError(vdata.error || '')
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [apiUrl])
 
   const save = async () => {
     if (!config) return
     setSaving(true)
-    await fetch('/config', {
+    await fetch(apiUrl('/config'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ config }),

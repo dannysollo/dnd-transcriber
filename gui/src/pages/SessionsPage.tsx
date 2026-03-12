@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useApiUrl } from '../CampaignContext'
 
 interface Session {
   name: string
@@ -30,24 +31,25 @@ export default function SessionsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragCounters = useRef<Record<string, number>>({})
   const navigate = useNavigate()
+  const apiUrl = useApiUrl()
 
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/sessions')
+      const r = await fetch(apiUrl('/sessions'))
       setSessions(await r.json())
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [apiUrl])
 
   const createSession = async () => {
     if (!newName.trim()) return
     setCreating(true)
     try {
-      const r = await fetch('/sessions', {
+      const r = await fetch(apiUrl('/sessions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName.trim() }),
@@ -69,7 +71,7 @@ export default function SessionsPage() {
       setRenamingSession(null)
       return
     }
-    const r = await fetch(`/sessions/${oldName}`, {
+    const r = await fetch(apiUrl(`/sessions/${oldName}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ new_name: newNameVal.trim() }),
@@ -88,7 +90,7 @@ export default function SessionsPage() {
     setUploadingFor(sessionName)
     const form = new FormData()
     for (const f of Array.from(files)) form.append('files', f)
-    const r = await fetch(`/sessions/${sessionName}/upload`, { method: 'POST', body: form })
+    const r = await fetch(apiUrl(`/sessions/${sessionName}/upload`), { method: 'POST', body: form })
     setUploadingFor(null)
     if (r.ok) {
       load()
@@ -101,7 +103,7 @@ export default function SessionsPage() {
     setUploadingFor(sessionName)
     const form = new FormData()
     files.forEach(f => form.append('files', f))
-    const r = await fetch(`/sessions/${sessionName}/upload`, { method: 'POST', body: form })
+    const r = await fetch(apiUrl(`/sessions/${sessionName}/upload`), { method: 'POST', body: form })
     setUploadingFor(null)
     if (r.ok) load()
     else alert('Upload failed')
@@ -111,14 +113,14 @@ export default function SessionsPage() {
     setUploadingFor(sessionName)
     const form = new FormData()
     form.append('file', file)
-    const r = await fetch(`/sessions/${sessionName}/import-zip`, { method: 'POST', body: form })
+    const r = await fetch(apiUrl(`/sessions/${sessionName}/import-zip`), { method: 'POST', body: form })
     setUploadingFor(null)
     if (r.ok) load()
     else alert('Zip import failed')
   }
 
   const deleteSession = async (name: string) => {
-    const r = await fetch(`/sessions/${name}`, { method: 'DELETE' })
+    const r = await fetch(apiUrl(`/sessions/${name}`), { method: 'DELETE' })
     if (r.ok) {
       setConfirmDelete(null)
       load()

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useApiUrl } from '../CampaignContext'
 
 interface Pattern {
   match: string
@@ -6,6 +7,7 @@ interface Pattern {
 }
 
 export default function CorrectionsPage() {
+  const apiUrl = useApiUrl()
   const [corrections, setCorrections] = useState<Record<string, string>>({})
   const [patterns, setPatterns] = useState<Pattern[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,23 +46,23 @@ export default function CorrectionsPage() {
   const load = async () => {
     setLoading(true)
     const [c, p] = await Promise.all([
-      fetch('/config/corrections').then(r => r.json()),
-      fetch('/config/patterns').then(r => r.json()),
+      fetch(apiUrl('/config/corrections')).then(r => r.json()),
+      fetch(apiUrl('/config/patterns')).then(r => r.json()),
     ])
     setCorrections(c.corrections || {})
     setPatterns(p.patterns || [])
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [apiUrl])
 
   // Fetch session count for Re-merge All button label
   useEffect(() => {
-    fetch('/sessions').then(r => r.json()).then((sessions: Array<{ name: string; status: string }>) => {
+    fetch(apiUrl('/sessions')).then(r => r.json()).then((sessions: Array<{ name: string; status: string }>) => {
       const withTranscripts = sessions.filter(s => s.status === 'has_transcript' || s.status === 'complete' || s.status === 'transcribed')
       setSessionCount(withTranscripts.length)
     }).catch(() => {})
-  }, [])
+  }, [apiUrl])
 
   // Auto-scroll merge logs
   useEffect(() => {
@@ -96,7 +98,7 @@ export default function CorrectionsPage() {
     }
 
     ws.onopen = () => {
-      fetch('/merge/all', { method: 'POST' }).then(r => {
+      fetch(apiUrl('/merge/all'), { method: 'POST' }).then(r => {
         if (!r.ok) {
           r.json().then(err => {
             setMergeAllLogs(prev => [...prev, `Error: ${err.detail || 'Failed to start'}`])
@@ -122,7 +124,7 @@ export default function CorrectionsPage() {
 
   const saveCorrections = async (updated: Record<string, string>) => {
     setSaving(true)
-    await fetch('/config/corrections', {
+    await fetch(apiUrl('/config/corrections'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ corrections: updated }),
@@ -134,7 +136,7 @@ export default function CorrectionsPage() {
 
   const savePatterns = async (updated: Pattern[]) => {
     setSaving(true)
-    await fetch('/config/patterns', {
+    await fetch(apiUrl('/config/patterns'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patterns: updated }),
@@ -178,7 +180,7 @@ export default function CorrectionsPage() {
   const runTest = async () => {
     if (!testText.trim()) return
     setTesting(true)
-    const r = await fetch('/config/test-correction', {
+    const r = await fetch(apiUrl('/config/test-correction'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
