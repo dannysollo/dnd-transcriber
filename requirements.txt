@@ -9,3 +9,9 @@ fastapi
 uvicorn[standard]
 websockets
 python-multipart
+# Auth + DB
+sqlalchemy
+authlib
+httpx
+python-jose[cryptography]
+passlib
