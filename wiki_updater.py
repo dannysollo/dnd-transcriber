@@ -1,15 +1,15 @@
 """
 wiki_updater.py
-Notifies Claude via OpenClaw to analyze the session transcript.
-Claude reads ANALYZE_SESSION.md for instructions and posts the analysis to Discord.
-
-Does NOT call Anthropic directly — routes through OpenClaw.
+Analyzes the session transcript using Claude and saves wiki suggestions to file.
+Also sends a Discord notification via OpenClaw.
 """
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
+import anthropic
 import yaml
 
 
@@ -72,7 +72,7 @@ def find_mentioned_pages(transcript: str, vault_pages: dict[str, Path]) -> dict[
 
 
 def generate_wiki_updates(session_dir: str, config: dict):
-    """Notify Claude via OpenClaw to analyze the transcript and post to Discord."""
+    """Analyze transcript with Claude, save wiki_suggestions.md, and notify Discord."""
     session = Path(session_dir)
     transcript_path = session.resolve() / "transcript.md"
     context_path = Path(__file__).parent.resolve() / "ANALYZE_SESSION.md"
@@ -82,10 +82,30 @@ def generate_wiki_updates(session_dir: str, config: dict):
         print("ERROR: transcript.md not found. Run merge.py first.")
         sys.exit(1)
 
+    transcript_content = transcript_path.read_text(encoding="utf-8")
+    analyze_session_md_content = context_path.read_text(encoding="utf-8")
+
+    # Generate wiki suggestions using Claude directly
+    print("  Analyzing transcript with Claude...")
+    client = anthropic.Anthropic()  # uses ANTHROPIC_API_KEY env var
+    response = client.messages.create(
+        model="claude-opus-4-5",
+        max_tokens=4096,
+        system=analyze_session_md_content,
+        messages=[{"role": "user", "content": transcript_content}]
+    )
+    suggestions_text = response.content[0].text
+
+    # Save to wiki_suggestions.md
+    suggestions_path = session.resolve() / "wiki_suggestions.md"
+    suggestions_path.write_text(suggestions_text, encoding="utf-8")
+    print("  ✓ Saved wiki_suggestions.md")
+
+    # Also send Discord notification so Danny gets pinged
     message = (
-        f"D&D session transcript is ready for analysis. "
-        f"Please read {context_path} for instructions, "
-        f"then analyze the transcript at {transcript_path}."
+        f"D&D session transcript analysis complete. "
+        f"Wiki suggestions saved to {suggestions_path}. "
+        f"Review and run: python apply_updates.py {session} --all"
     )
 
     print(f"  Sending to Claude via OpenClaw (session: {session_id})...")
@@ -104,7 +124,6 @@ def generate_wiki_updates(session_dir: str, config: dict):
         print("  ✓ Claude notified — analysis will appear in Discord shortly.")
     else:
         print(f"  ✗ OpenClaw notify failed: {result.stderr.strip()}")
-        raise RuntimeError(f"openclaw agent command failed: {result.stderr.strip()}")
 
 
 if __name__ == "__main__":

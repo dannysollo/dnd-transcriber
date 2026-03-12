@@ -112,7 +112,7 @@ def list_sessions():
                 "status": session_status(d),
                 "has_transcript": (d / "transcript.md").exists(),
                 "has_summary": (d / "summary.md").exists(),
-                "has_wiki": (d / "wiki.md").exists(),
+                "has_wiki": (d / "wiki_suggestions.md").exists() or (d / "wiki.md").exists(),
             })
     return sessions
 
@@ -183,10 +183,70 @@ def get_summary(name: str):
 @app.get("/sessions/{name}/wiki")
 def get_wiki(name: str):
     sessions_dir = get_sessions_dir()
-    path = sessions_dir / name / "wiki.md"
-    if not path.exists():
-        raise HTTPException(404, "Wiki not found")
-    return {"content": path.read_text(encoding="utf-8")}
+    session_dir = sessions_dir / name
+    # Prefer wiki_suggestions.md, fall back to wiki.md
+    for filename in ("wiki_suggestions.md", "wiki.md"):
+        path = session_dir / filename
+        if path.exists():
+            return {"content": path.read_text(encoding="utf-8")}
+    raise HTTPException(404, "Wiki not found")
+
+
+class ApplyWikiBody(BaseModel):
+    mode: str  # "all" | "apply" | "skip"
+    ids: list[int] = []
+
+
+@app.post("/sessions/{name}/apply-wiki")
+def apply_wiki(name: str, body: ApplyWikiBody):
+    sessions_dir = get_sessions_dir()
+    session_dir = sessions_dir / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+
+    cmd = [sys.executable, str(BASE_DIR / "apply_updates.py"), str(session_dir),
+           "--config", str(CONFIG_PATH)]
+
+    if body.mode == "all":
+        cmd.append("--all")
+    elif body.mode == "apply":
+        if not body.ids:
+            raise HTTPException(400, "mode=apply requires ids")
+        cmd.extend(["--apply", ",".join(str(i) for i in body.ids)])
+    elif body.mode == "skip":
+        cmd.append("--all")
+        if body.ids:
+            cmd.extend(["--skip", ",".join(str(i) for i in body.ids)])
+    else:
+        raise HTTPException(400, f"Invalid mode: {body.mode}")
+
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(BASE_DIR))
+    output = result.stdout + (result.stderr if result.stderr else "")
+    return {"output": output, "applied": body.ids}
+
+
+@app.get("/sessions/{name}/wiki-suggestions-parsed")
+def get_wiki_suggestions_parsed(name: str):
+    sessions_dir = get_sessions_dir()
+    suggestions_file = sessions_dir / name / "wiki_suggestions.md"
+    if not suggestions_file.exists():
+        raise HTTPException(404, "wiki_suggestions.md not found")
+
+    from apply_updates import parse_suggestions
+    suggestions = parse_suggestions(suggestions_file)
+
+    result = []
+    for num, s in sorted(suggestions.items()):
+        result.append({
+            "id": num,
+            "title": s["title"],
+            "page": s["page"],
+            "section": s["section"],
+            "bullets": s["bullets"],
+            "new_page": s["new_page"],
+            "description": s.get("description"),
+        })
+    return result
 
 
 @app.get("/sessions/{name}/raw-transcript")

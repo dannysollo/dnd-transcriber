@@ -104,6 +104,18 @@ interface ChangesReport {
   }
 }
 
+// ─── Types for Wiki tab ───────────────────────────────────────────────────────
+
+interface WikiSuggestion {
+  id: number
+  title: string
+  page: string | null
+  section: string
+  bullets: string[]
+  new_page: boolean
+  description: string | null
+}
+
 type Tab = 'transcript' | 'summary' | 'wiki' | 'changes'
 
 export default function SessionView() {
@@ -516,7 +528,7 @@ export default function SessionView() {
         ) : tab === 'summary' ? (
           <MarkdownView content={summary} emptyMsg="No summary yet. Run the pipeline to generate one." />
         ) : tab === 'wiki' ? (
-          <MarkdownView content={wiki} emptyMsg="No wiki suggestions yet. Run the pipeline to generate them." />
+          <WikiView sessionName={name!} wikiMarkdown={wiki} />
         ) : (
           <ChangesView
             report={changesReport}
@@ -1227,6 +1239,268 @@ function ExampleLine({ text, word, color }: { text: string; word: string; color:
         )
       )}
     </>
+  )
+}
+
+// ─── Wiki tab ─────────────────────────────────────────────────────────────────
+
+function WikiView({ sessionName, wikiMarkdown }: { sessionName: string; wikiMarkdown: string | null }) {
+  const [suggestions, setSuggestions] = useState<WikiSuggestion[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [appliedIds, setAppliedIds] = useState<Set<number>>(new Set())
+  const [skippedIds, setSkippedIds] = useState<Set<number>>(new Set())
+  const [applying, setApplying] = useState(false)
+  const [applyOutput, setApplyOutput] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      setLoading(true)
+      try {
+        const r = await fetch(`/sessions/${sessionName}/wiki-suggestions-parsed`)
+        setSuggestions(r.ok ? await r.json() : null)
+      } catch (_) {
+        setSuggestions(null)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchSuggestions()
+  }, [sessionName])
+
+  const callApplyWiki = async (mode: 'all' | 'apply' | 'skip', ids: number[]) => {
+    setApplying(true)
+    setApplyOutput(null)
+    try {
+      const r = await fetch(`/sessions/${sessionName}/apply-wiki`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, ids }),
+      })
+      const data = await r.json()
+      setApplyOutput(data.output || '')
+      if (mode === 'all') {
+        setAppliedIds(new Set(suggestions?.filter(s => !skippedIds.has(s.id)).map(s => s.id) ?? []))
+      } else if (mode === 'apply') {
+        setAppliedIds(prev => new Set([...prev, ...ids]))
+      } else if (mode === 'skip') {
+        // applied all except skipped
+        setAppliedIds(new Set(suggestions?.filter(s => !skippedIds.has(s.id)).map(s => s.id) ?? []))
+      }
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  const toggleSkip = (id: number) => {
+    setSkippedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  if (loading) {
+    return <div style={{ color: '#64748b', paddingTop: '60px', textAlign: 'center' }}>Loading wiki suggestions...</div>
+  }
+
+  if (!suggestions || suggestions.length === 0) {
+    return <MarkdownView content={wikiMarkdown} emptyMsg="No wiki suggestions yet. Run the pipeline to generate them." />
+  }
+
+  const unappliedCount = suggestions.filter(s => !appliedIds.has(s.id) && !skippedIds.has(s.id)).length
+
+  return (
+    <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => callApplyWiki('all', [])}
+          disabled={applying}
+          style={{
+            background: 'rgba(52,211,153,0.15)',
+            border: '1px solid rgba(52,211,153,0.3)',
+            borderRadius: '8px',
+            color: '#34d399',
+            padding: '7px 16px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            opacity: applying ? 0.5 : 1,
+          }}
+        >
+          Apply All
+        </button>
+        {skippedIds.size > 0 && (
+          <button
+            onClick={() => callApplyWiki('skip', [...skippedIds])}
+            disabled={applying}
+            style={{
+              background: 'rgba(124,108,252,0.15)',
+              border: '1px solid rgba(124,108,252,0.3)',
+              borderRadius: '8px',
+              color: '#a89cff',
+              padding: '7px 16px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              opacity: applying ? 0.5 : 1,
+            }}
+          >
+            Apply Selected ({unappliedCount} of {suggestions.length})
+          </button>
+        )}
+        {applying && (
+          <span style={{ fontSize: '12px', color: '#64748b' }}>Applying...</span>
+        )}
+        <span style={{ fontSize: '12px', color: '#475569', marginLeft: 'auto' }}>
+          {suggestions.length} suggestion{suggestions.length !== 1 ? 's' : ''}
+          {appliedIds.size > 0 && <span style={{ color: '#34d399' }}> · {appliedIds.size} applied</span>}
+          {skippedIds.size > 0 && <span style={{ color: '#64748b' }}> · {skippedIds.size} skipped</span>}
+        </span>
+      </div>
+
+      {/* Apply output */}
+      {applyOutput && (
+        <pre style={{
+          background: '#0a0d14',
+          border: '1px solid #1e2130',
+          borderRadius: '8px',
+          padding: '12px 16px',
+          fontSize: '11px',
+          color: '#94a3b8',
+          fontFamily: 'monospace',
+          whiteSpace: 'pre-wrap',
+          overflowX: 'auto',
+          maxHeight: '200px',
+          overflowY: 'auto',
+        }}>
+          {applyOutput}
+        </pre>
+      )}
+
+      {/* Suggestion cards */}
+      {suggestions.map(s => {
+        const isApplied = appliedIds.has(s.id)
+        const isSkipped = skippedIds.has(s.id)
+        return (
+          <div
+            key={s.id}
+            style={{
+              border: `1px solid ${isApplied ? 'rgba(52,211,153,0.3)' : '#1e2130'}`,
+              borderRadius: '10px',
+              background: isApplied ? 'rgba(52,211,153,0.05)' : '#0d1017',
+              overflow: 'hidden',
+              opacity: isSkipped ? 0.45 : 1,
+              transition: 'opacity 0.2s, border-color 0.2s',
+            }}
+          >
+            {/* Card header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px' }}>
+              <span style={{
+                background: '#1a1d27',
+                border: '1px solid #2a2d3a',
+                borderRadius: '6px',
+                padding: '2px 8px',
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#475569',
+                flexShrink: 0,
+              }}>
+                #{s.id}
+              </span>
+              <span style={{
+                fontSize: '14px',
+                fontWeight: 600,
+                color: isSkipped ? '#475569' : '#e2e8f0',
+                flex: 1,
+                textDecoration: isSkipped ? 'line-through' : 'none',
+              }}>
+                {s.title}
+              </span>
+              <span style={{
+                background: 'rgba(124,108,252,0.12)',
+                border: '1px solid rgba(124,108,252,0.25)',
+                color: '#a78bfa',
+                borderRadius: '999px',
+                padding: '2px 10px',
+                fontSize: '11px',
+                flexShrink: 0,
+              }}>
+                {s.section}
+              </span>
+            </div>
+
+            {/* Page path */}
+            {s.page && (
+              <div style={{ padding: '0 16px 8px', fontSize: '11px', color: '#475569', fontFamily: 'monospace' }}>
+                {s.page}
+              </div>
+            )}
+
+            {/* Bullets */}
+            <div style={{ padding: '0 16px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {s.bullets.map((b, i) => (
+                <div key={i} style={{ fontSize: '13px', color: '#94a3b8', lineHeight: 1.6 }}>
+                  {b}
+                </div>
+              ))}
+            </div>
+
+            {/* Card actions */}
+            <div style={{
+              display: 'flex',
+              gap: '8px',
+              padding: '8px 16px',
+              borderTop: '1px solid #1e2130',
+              background: 'rgba(0,0,0,0.2)',
+              alignItems: 'center',
+            }}>
+              {isApplied ? (
+                <span style={{ color: '#34d399', fontSize: '12px', fontWeight: 700 }}>✓ Applied</span>
+              ) : (
+                <>
+                  <button
+                    onClick={() => callApplyWiki('apply', [s.id])}
+                    disabled={applying || isSkipped}
+                    style={{
+                      background: 'rgba(52,211,153,0.12)',
+                      border: '1px solid rgba(52,211,153,0.25)',
+                      borderRadius: '6px',
+                      color: '#34d399',
+                      padding: '4px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: applying || isSkipped ? 'not-allowed' : 'pointer',
+                      opacity: applying || isSkipped ? 0.5 : 1,
+                    }}
+                  >
+                    Apply
+                  </button>
+                  <button
+                    onClick={() => toggleSkip(s.id)}
+                    disabled={applying}
+                    style={{
+                      background: isSkipped ? 'rgba(100,116,139,0.15)' : 'transparent',
+                      border: `1px solid ${isSkipped ? '#475569' : '#2a2d3a'}`,
+                      borderRadius: '6px',
+                      color: isSkipped ? '#94a3b8' : '#475569',
+                      padding: '4px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: applying ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {isSkipped ? 'Undo Skip' : 'Skip'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
