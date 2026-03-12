@@ -25,7 +25,10 @@ export default function SessionsPage() {
   const [renamingSession, setRenamingSession] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [uploadingFor, setUploadingFor] = useState<string | null>(null)
+  const [dragOverSession, setDragOverSession] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragCounters = useRef<Record<string, number>>({})
   const navigate = useNavigate()
 
   const load = async () => {
@@ -94,6 +97,70 @@ export default function SessionsPage() {
     }
   }
 
+  const uploadFilesArray = async (sessionName: string, files: File[]) => {
+    setUploadingFor(sessionName)
+    const form = new FormData()
+    files.forEach(f => form.append('files', f))
+    const r = await fetch(`/sessions/${sessionName}/upload`, { method: 'POST', body: form })
+    setUploadingFor(null)
+    if (r.ok) load()
+    else alert('Upload failed')
+  }
+
+  const importZip = async (sessionName: string, file: File) => {
+    setUploadingFor(sessionName)
+    const form = new FormData()
+    form.append('file', file)
+    const r = await fetch(`/sessions/${sessionName}/import-zip`, { method: 'POST', body: form })
+    setUploadingFor(null)
+    if (r.ok) load()
+    else alert('Zip import failed')
+  }
+
+  const deleteSession = async (name: string) => {
+    const r = await fetch(`/sessions/${name}`, { method: 'DELETE' })
+    if (r.ok) {
+      setConfirmDelete(null)
+      load()
+    } else {
+      alert('Delete failed')
+    }
+  }
+
+  const handleDragEnter = (e: React.DragEvent, name: string) => {
+    e.preventDefault()
+    dragCounters.current[name] = (dragCounters.current[name] || 0) + 1
+    setDragOverSession(name)
+  }
+
+  const handleDragLeave = (e: React.DragEvent, name: string) => {
+    e.preventDefault()
+    dragCounters.current[name] = (dragCounters.current[name] || 0) - 1
+    if ((dragCounters.current[name] || 0) <= 0) {
+      dragCounters.current[name] = 0
+      setDragOverSession(prev => prev === name ? null : prev)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }
+
+  const handleDrop = async (e: React.DragEvent, sessionName: string) => {
+    e.preventDefault()
+    dragCounters.current[sessionName] = 0
+    setDragOverSession(null)
+    const files = Array.from(e.dataTransfer.files)
+    const zipFiles = files.filter(f => f.name.toLowerCase().endsWith('.zip'))
+    const audioFiles = files.filter(f => /\.(flac|mp3|ogg|wav|m4a)$/i.test(f.name))
+    if (zipFiles.length > 0) {
+      await importZip(sessionName, zipFiles[0])
+    } else if (audioFiles.length > 0) {
+      await uploadFilesArray(sessionName, audioFiles)
+    }
+  }
+
   return (
     <div style={{ padding: '32px', maxWidth: '900px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
@@ -154,12 +221,68 @@ export default function SessionsPage() {
           {sessions.map(s => {
             const sc = statusColors[s.status] || statusColors.empty
             const isRenaming = renamingSession === s.name
+            const isDragOver = dragOverSession === s.name
+            const isUploading = uploadingFor === s.name
+
+            // Inline delete confirmation
+            if (confirmDelete === s.name) {
+              return (
+                <div
+                  key={s.name}
+                  style={{
+                    background: '#1a1d27',
+                    border: '1px solid rgba(248,113,113,0.4)',
+                    borderRadius: '10px',
+                    padding: '14px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                  }}
+                >
+                  <span style={{ flex: 1, fontSize: '14px', color: '#f87171' }}>
+                    Delete <strong>{s.name}</strong>?
+                  </span>
+                  <button
+                    onClick={() => deleteSession(s.name)}
+                    style={{
+                      background: 'rgba(248,113,113,0.15)', border: '1px solid rgba(248,113,113,0.4)',
+                      borderRadius: '6px', color: '#f87171', padding: '5px 14px',
+                      fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    Yes, delete
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(null)}
+                    style={{
+                      background: 'transparent', border: '1px solid #2a2d3a',
+                      borderRadius: '6px', color: '#94a3b8', padding: '5px 14px',
+                      fontSize: '13px', cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )
+            }
+
             return (
               <div
                 key={s.name}
+                onDragEnter={e => handleDragEnter(e, s.name)}
+                onDragLeave={e => handleDragLeave(e, s.name)}
+                onDragOver={handleDragOver}
+                onDrop={e => handleDrop(e, s.name)}
                 style={{
-                  background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '10px',
-                  padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '12px',
+                  background: isDragOver ? 'rgba(124,108,252,0.06)' : '#1a1d27',
+                  border: isDragOver ? '1px solid #7c6cfc' : '1px solid #2a2d3a',
+                  boxShadow: isDragOver ? '0 0 0 2px rgba(124,108,252,0.25)' : 'none',
+                  borderRadius: '10px',
+                  padding: '14px 20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  transition: 'border-color 0.15s, box-shadow 0.15s',
                 }}
               >
                 {/* Name / rename */}
@@ -189,6 +312,13 @@ export default function SessionsPage() {
                   )}
                 </div>
 
+                {/* Drag hint when hovering */}
+                {isDragOver && (
+                  <span style={{ fontSize: '12px', color: '#a78bfa' }}>
+                    Drop to upload
+                  </span>
+                )}
+
                 {/* File badges */}
                 <div style={{ display: 'flex', gap: '6px' }}>
                   {s.has_transcript && <Badge label="transcript" />}
@@ -212,9 +342,9 @@ export default function SessionsPage() {
                       setUploadingFor(s.name)
                       fileInputRef.current?.click()
                     }}
-                    loading={uploadingFor === s.name}
+                    loading={isUploading}
                   >
-                    {uploadingFor === s.name ? '⏳' : '📁'}
+                    {isUploading ? '⏳' : '📁'}
                   </ActionBtn>
                   <ActionBtn
                     title="Rename session"
@@ -224,6 +354,13 @@ export default function SessionsPage() {
                   </ActionBtn>
                   <ActionBtn title="Open session" onClick={() => navigate(`/sessions/${s.name}`)}>
                     →
+                  </ActionBtn>
+                  <ActionBtn
+                    title="Delete session"
+                    onClick={() => setConfirmDelete(s.name)}
+                    danger
+                  >
+                    🗑️
                   </ActionBtn>
                 </div>
               </div>
@@ -246,8 +383,8 @@ function Badge({ label }: { label: string }) {
   )
 }
 
-function ActionBtn({ children, onClick, title, loading }: {
-  children: React.ReactNode; onClick: () => void; title?: string; loading?: boolean
+function ActionBtn({ children, onClick, title, loading, danger }: {
+  children: React.ReactNode; onClick: () => void; title?: string; loading?: boolean; danger?: boolean
 }) {
   return (
     <button
@@ -255,8 +392,13 @@ function ActionBtn({ children, onClick, title, loading }: {
       title={title}
       disabled={loading}
       style={{
-        background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '6px',
-        color: '#94a3b8', padding: '4px 8px', fontSize: '13px', cursor: 'pointer',
+        background: 'transparent',
+        border: `1px solid ${danger ? 'rgba(248,113,113,0.3)' : '#2a2d3a'}`,
+        borderRadius: '6px',
+        color: danger ? '#f87171' : '#94a3b8',
+        padding: '4px 8px',
+        fontSize: '13px',
+        cursor: 'pointer',
         opacity: loading ? 0.5 : 1,
       }}
     >

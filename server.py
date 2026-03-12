@@ -2,19 +2,23 @@
 server.py — FastAPI backend for the DnD Transcriber GUI
 """
 import asyncio
+import io
 import json
 import os
 import queue
 import re
+import shutil
 import subprocess
 import sys
 import threading
+import zipfile
 from pathlib import Path
 from typing import Optional
 
 import yaml
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -62,6 +66,14 @@ def get_sessions_dir() -> Path:
 
 
 AUDIO_EXTS = ("*.flac", "*.mp3", "*.ogg", "*.wav", "*.m4a")
+AUDIO_EXTENSIONS = {".flac", ".mp3", ".ogg", ".wav", ".m4a"}
+AUDIO_MIME = {
+    ".flac": "audio/flac",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+}
 
 def has_audio(session_path: Path) -> bool:
     raw = session_path / "raw"
@@ -175,6 +187,67 @@ def get_wiki(name: str):
     if not path.exists():
         raise HTTPException(404, "Wiki not found")
     return {"content": path.read_text(encoding="utf-8")}
+
+
+# ─── Delete session ───────────────────────────────────────────────────────────
+
+@app.delete("/sessions/{name}", status_code=204)
+def delete_session(name: str):
+    sessions_dir = get_sessions_dir()
+    session_dir = sessions_dir / name
+    if not session_dir.exists():
+        raise HTTPException(404, f"Session '{name}' not found")
+    shutil.rmtree(session_dir)
+
+
+# ─── Zip import ───────────────────────────────────────────────────────────────
+
+@app.post("/sessions/{name}/import-zip")
+async def import_zip(name: str, file: UploadFile = File(...)):
+    sessions_dir = get_sessions_dir()
+    session_dir = sessions_dir / name
+    if not session_dir.exists():
+        raise HTTPException(404, f"Session '{name}' not found")
+    raw_dir = session_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    content = await file.read()
+    extracted = []
+    with zipfile.ZipFile(io.BytesIO(content)) as zf:
+        for member in zf.namelist():
+            ext = Path(member).suffix.lower()
+            if ext in AUDIO_EXTENSIONS:
+                filename = Path(member).name
+                if filename:
+                    dest = raw_dir / filename
+                    dest.write_bytes(zf.read(member))
+                    extracted.append(filename)
+    return {"extracted": extracted}
+
+
+# ─── Audio files ──────────────────────────────────────────────────────────────
+
+@app.get("/sessions/{name}/audio-files")
+def get_audio_files(name: str):
+    sessions_dir = get_sessions_dir()
+    raw_dir = sessions_dir / name / "raw"
+    if not raw_dir.exists():
+        return {"files": []}
+    files = [
+        f.name for f in sorted(raw_dir.iterdir())
+        if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS
+    ]
+    return {"files": files}
+
+
+@app.get("/sessions/{name}/audio/{filename}")
+def get_audio_file(name: str, filename: str):
+    sessions_dir = get_sessions_dir()
+    safe_filename = Path(filename).name
+    path = sessions_dir / name / "raw" / safe_filename
+    if not path.exists() or path.suffix.lower() not in AUDIO_EXTENSIONS:
+        raise HTTPException(404, "Audio file not found")
+    media_type = AUDIO_MIME.get(path.suffix.lower(), "application/octet-stream")
+    return FileResponse(str(path), media_type=media_type)
 
 
 # ─── Merge (re-run merge step on existing speakers) ───────────────────────────
