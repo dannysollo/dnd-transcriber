@@ -18,7 +18,7 @@ from typing import Optional
 import yaml
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -423,11 +423,57 @@ def get_audio_files(name: str):
     raw_dir = sessions_dir / name / "raw"
     if not raw_dir.exists():
         return {"files": []}
-    files = [
-        f.name for f in sorted(raw_dir.iterdir())
-        if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS
+    audio_files = [
+        f for f in sorted(raw_dir.iterdir())
+        if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS and f.name != "_merged.mp3"
     ]
-    return {"files": files}
+    result = []
+    if len(audio_files) >= 2:
+        result.append({
+            "filename": "_merged",
+            "label": "All tracks (merged)",
+            "url": f"/sessions/{name}/audio/merged",
+        })
+    for f in audio_files:
+        result.append({
+            "filename": f.name,
+            "label": f.name,
+            "url": f"/sessions/{name}/audio/{f.name}",
+        })
+    return {"files": result}
+
+
+@app.get("/sessions/{name}/audio/merged")
+def get_merged_audio(name: str):
+    sessions_dir = get_sessions_dir()
+    raw_dir = sessions_dir / name / "raw"
+    if not raw_dir.exists():
+        raise HTTPException(404, "No audio directory found")
+    audio_files = [
+        f for f in sorted(raw_dir.iterdir())
+        if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS and f.name != "_merged.mp3"
+    ]
+    if not audio_files:
+        raise HTTPException(404, "No audio files found")
+    if len(audio_files) == 1:
+        return RedirectResponse(url=f"/sessions/{name}/audio/{audio_files[0].name}")
+    merged_path = raw_dir / "_merged.mp3"
+    if merged_path.exists():
+        return FileResponse(str(merged_path), media_type="audio/mpeg")
+    inputs: list[str] = []
+    for f in audio_files:
+        inputs.extend(["-i", str(f)])
+    n = len(audio_files)
+    cmd = [
+        "ffmpeg", "-y",
+        *inputs,
+        "-filter_complex", f"amix=inputs={n}:duration=longest:normalize=0",
+        str(merged_path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True)
+    if proc.returncode != 0:
+        raise HTTPException(500, f"ffmpeg failed: {proc.stderr.decode()}")
+    return FileResponse(str(merged_path), media_type="audio/mpeg")
 
 
 @app.get("/sessions/{name}/audio/{filename}")

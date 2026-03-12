@@ -22,6 +22,29 @@ function getSpeakerColor(speaker: string, colorMap: Map<string, string>): string
   return colorMap.get(speaker)!
 }
 
+interface AudioFile {
+  filename: string
+  label: string
+  url: string
+}
+
+interface Player {
+  username: string
+  name: string
+  character: string | null
+  role: string
+}
+
+function findTrackForSpeaker(speakerLabel: string, audioFiles: AudioFile[], players: Player[]): AudioFile | null {
+  for (const player of players) {
+    if (speakerLabel.includes(player.name) || (player.character && speakerLabel.includes(player.character))) {
+      const match = audioFiles.find(f => f.filename.toLowerCase().includes(player.username.toLowerCase()))
+      if (match) return match
+    }
+  }
+  return null
+}
+
 interface ParsedLine {
   type: 'heading' | 'speech' | 'other'
   raw: string
@@ -93,8 +116,10 @@ export default function SessionView() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [merging, setMerging] = useState(false)
-  const [audioFiles, setAudioFiles] = useState<string[]>([])
+  const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
   const [selectedAudio, setSelectedAudio] = useState<string>('')
+  const [players, setPlayers] = useState<Player[]>([])
+  const [mixingInProgress, setMixingInProgress] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [isDragOver, setIsDragOver] = useState(false)
   const [uploadingAudio, setUploadingAudio] = useState(false)
@@ -103,6 +128,7 @@ export default function SessionView() {
   const [changesLoaded, setChangesLoaded] = useState(false)
   const [targetTimestamp, setTargetTimestamp] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
+  const pendingSeekRef = useRef<number | null>(null)
   const dragCounter = useRef(0)
   const speakerColors = new Map<string, string>()
 
@@ -123,9 +149,27 @@ export default function SessionView() {
     try {
       const r = await fetch(`/sessions/${name}/audio-files`)
       const data = await r.json()
-      const files: string[] = data.files || []
+      const files: AudioFile[] = data.files || []
       setAudioFiles(files)
-      if (files.length > 0 && !selectedAudio) setSelectedAudio(files[0])
+      if (files.length > 0 && !selectedAudio) setSelectedAudio(files[0].filename)
+    } catch (_) {}
+  }
+
+  const loadPlayers = async () => {
+    try {
+      const r = await fetch('/config')
+      if (r.ok) {
+        const config = await r.json()
+        const playersObj = config.players || {}
+        setPlayers(
+          Object.entries(playersObj).map(([username, info]: [string, any]) => ({
+            username,
+            name: info.name as string,
+            character: info.character as string | null,
+            role: info.role as string,
+          }))
+        )
+      }
     } catch (_) {}
   }
 
@@ -150,7 +194,13 @@ export default function SessionView() {
   useEffect(() => {
     load()
     loadAudioFiles()
+    loadPlayers()
   }, [name])
+
+  useEffect(() => {
+    if (selectedAudio === '_merged') setMixingInProgress(true)
+    else setMixingInProgress(false)
+  }, [selectedAudio])
 
   useEffect(() => {
     if (tab === 'changes') {
@@ -230,6 +280,20 @@ export default function SessionView() {
     if (audioRef.current) {
       audioRef.current.currentTime = seconds
       audioRef.current.play()
+    }
+  }
+
+  const seekAndSwitch = (seconds: number, speaker?: string) => {
+    if (selectedAudio === '_merged' || !speaker || players.length === 0) {
+      seekTo(seconds)
+      return
+    }
+    const match = findTrackForSpeaker(speaker, audioFiles, players)
+    if (match && match.filename !== selectedAudio) {
+      pendingSeekRef.current = seconds
+      setSelectedAudio(match.filename)
+    } else {
+      seekTo(seconds)
     }
   }
 
@@ -390,13 +454,13 @@ export default function SessionView() {
             </span>
             {audioFiles.map(f => (
               <button
-                key={f}
-                onClick={() => setSelectedAudio(f)}
+                key={f.filename}
+                onClick={() => setSelectedAudio(f.filename)}
                 style={{
-                  background: selectedAudio === f ? 'rgba(124,108,252,0.2)' : 'transparent',
-                  border: `1px solid ${selectedAudio === f ? '#7c6cfc' : '#2a2d3a'}`,
+                  background: selectedAudio === f.filename ? 'rgba(124,108,252,0.2)' : 'transparent',
+                  border: `1px solid ${selectedAudio === f.filename ? '#7c6cfc' : '#2a2d3a'}`,
                   borderRadius: '4px',
-                  color: selectedAudio === f ? '#a78bfa' : '#64748b',
+                  color: selectedAudio === f.filename ? '#a78bfa' : '#64748b',
                   padding: '2px 8px',
                   fontSize: '11px',
                   cursor: 'pointer',
@@ -405,9 +469,9 @@ export default function SessionView() {
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}
-                title={f}
+                title={f.label}
               >
-                {f}
+                {f.filename === '_merged' && mixingInProgress ? `${f.label} (mixing...)` : f.label}
               </button>
             ))}
           </div>
@@ -415,9 +479,20 @@ export default function SessionView() {
             <audio
               ref={audioRef}
               key={selectedAudio}
-              src={`/sessions/${encodeURIComponent(name!)}/audio/${encodeURIComponent(selectedAudio)}`}
+              src={
+                selectedAudio === '_merged'
+                  ? `/sessions/${encodeURIComponent(name!)}/audio/merged`
+                  : `/sessions/${encodeURIComponent(name!)}/audio/${encodeURIComponent(selectedAudio)}`
+              }
               controls
               onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
+              onLoadedMetadata={() => {
+                setMixingInProgress(false)
+                if (pendingSeekRef.current !== null) {
+                  seekTo(pendingSeekRef.current)
+                  pendingSeekRef.current = null
+                }
+              }}
               style={{ width: '100%', height: '36px', accentColor: '#7c6cfc' }}
             />
           )}
@@ -434,7 +509,7 @@ export default function SessionView() {
             search={search}
             speakerColors={speakerColors}
             currentTime={audioFiles.length > 0 ? currentTime : undefined}
-            onSeek={audioFiles.length > 0 ? seekTo : undefined}
+            onSeek={audioFiles.length > 0 ? seekAndSwitch : undefined}
             targetTimestamp={targetTimestamp}
             onTargetReached={() => setTargetTimestamp(null)}
           />
@@ -467,7 +542,7 @@ function TranscriptView({
   search: string
   speakerColors: Map<string, string>
   currentTime?: number
-  onSeek?: (seconds: number) => void
+  onSeek?: (seconds: number, speaker?: string) => void
   targetTimestamp?: string | null
   onTargetReached?: () => void
 }) {
@@ -584,7 +659,7 @@ function TranscriptView({
               {/* Timestamp — clickable if audio available */}
               {onSeek && tsSeconds !== null ? (
                 <button
-                  onClick={() => onSeek(tsSeconds)}
+                  onClick={() => onSeek(tsSeconds, line.speaker)}
                   title={`Seek to ${line.timestamp}`}
                   style={{
                     fontSize: '11px',
