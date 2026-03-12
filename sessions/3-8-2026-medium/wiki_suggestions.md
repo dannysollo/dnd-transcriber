@@ -1,46 +1,56 @@
-## [1] Nico Nouveau — NEW PAGE
-Description: Aella's younger brother, a Fensworth native and self-taught handyman who recently developed sorcery after dreaming of a mysterious woman.
-Section: Overview
-- Tall (6'3"), warm and grounded; works odd jobs around Fensworth (roofing repairs, goat pen maintenance, water wheel repairs) and helps care for the family.
-- Began developing sorcery approximately two months ago, awakening with new spells each time after dreaming of an indistinct woman whose face he cannot recall; dreams feel peaceful and safe.
-- Currently knows [[Prestidigitation]] and [[Fireball]]; [[Vixeena]] Glimmer-scanned him and found 48 Glimmer.
-- Wears his sister's handmade prosthetic leg; [[Aella]] discovered the internal clockwork power disc has disappeared, yet the leg still functions when worn, powered seemingly by Nico himself.
-- Found an [[Amulet of Dispel Magic]] (once per long rest) in [[Alexander Nouveau]]'s attic workshop while cleaning.
+## [1] Nico Nouveau — Notable Actions
+Page: Characters/NPCs/Nico.md
+Section: Notable Actions
+- Reunited with [[Aella]] at the Fensworth train station; she briefed him on events in Kolth, the destruction of the Institute, and the party's knighting by the Queen
+- Revealed he has been developing sorcerous abilities over the past two months, learning prestidigitation in secret
+- Disclosed recurring dreams of an indistinct woman whose face he cannot remember — a development that alarmed Aella and Kali
+- Found a necklace in the family attic inscribed with the name **Alexander Nouveau** (his grandfather); has been wearing it
+- Session ends with Nico stepping into Tehom flooding the family home basement
 
-## [2] Fensworth — NEW PAGE
-Description: A small, isolated mountain mining town east of Aziah, Aella's hometown and current arc location.
-Section: Overview
-- Blue-collar mining town in the mountains; primary industries are rare earth mining and metalworking; exports specialized metals to Aziah.
-- Religious divide between Nephilim and Church of Malkuth residents; both factions coexist tensely but without open conflict given the town's proximity to Naphtaalia.
-- Known locations: general store, foreman's office, Vulcan's blacksmith, assay office, chapel, cavern (Beacon Street), mines (multiple branches, including the closed Branch 7), western pastures and dam.
-- Current troubles: livestock (goats) and some townspeople suffering intermittent illness (fever, chills, nausea); Branch 7 mine closed after a freak cave-in exposed three miners to [[Tehom]]; water table found to be contaminated with Tehom.
+## [2] Del — Notable Actions
+Page: Characters/NPCs/Del.md
+Section: Notable Actions
+- Was visited by [[Kali]] before the party's departure for Fensworth; thanked Kali for the speech that helped convince her not to take her own life after [[Mikael]]'s death
+- Confirmed she is attempting to hold herself together, though still dependent on alcohol
+- Warned by Kali to remain vigilant around [[Binah]], who is likely to continue hunting for Sephirot cords despite a recent failed attempt
 
-## [3] Fensworth — Mine Branch 7
+## [3] Kali — Equipment
+Page: Characters/PCs/Kali.md
+Section: Equipment
+- Acquired **Death's Eternal March** (legendary +1 breastplate): shifts damage resistance based on damage taken; grants +2 to saves vs. magical effects and +1d8 bonus damage when bloodied; 1 legendary resistance per day
+- Acquired **Brooch of Shielding**: force damage resistance, immunity to magic missile
+- Acquired **Guardian Emblem**: 3/day reaction to downgrade a critical hit to a normal hit
+- Acquired **Periapt of Wound Closure**: auto-stabilizes at 0 HP; heals double from hit dice
+- Retired Nephilim robes; now wears a black-and-gold asymmetrical armored coat with breastplate
+
+## [4] Aella — Equipment
+Page: Characters/PCs/Aella.md
+Section: Equipment
+- Acquired **Serpent Scale Armor**: no DEX cap on AC bonus; total AC 23
+- Acquired **Brooch of Shielding**: force damage resistance
+- Acquired **Clockwork Amulet**
+- Created new **Eldritch Cannon — Angel of Death**: miniature angel form; frightens then stuns enemies in 20-foot radius; self-detonates
+
+## [5] Fensworth — Notable Events
 Page: Locations/Fensworth.md
-Section: Mine Branch 7
-- Closed after a freak cave-in in the ceiling exposed three miners to [[Tehom]] seeping through the water table; all three returned unharmed but mute and left town the next morning.
-- [[Kali]], [[Aella]], [[Belle]], and [[Vixeena]] investigated and found Tehom contaminating the groundwater throughout the mine system.
-- The party performed a Barotraumatic Sublimation ritual powered by [[Vixeena]]'s CSF and linked to a Mer-power ritual to create a self-sustaining Tehom suppression effect.
+Section: Notable Events
+- Party arrived to investigate a mine incident that hospitalized three miners
+- Discovered the town's water table is contaminated with [[Tehom]], flooding the mines from below rather than just from stormwater
+- Mine incident confirmed as a freak ceiling collapse exposing miners to a Tehom pocket, not a deliberate ritual
+- Party performed anti-[[Tehom]] ritual catalyzed by [[Vixeena]]'s CSF, chained to Mer-power ritual for sustained effect; Tehom cleared from mines but underlying water table remains infected
+- A severe storm struck; Tehom discovered flooding the basement of the Nouveau family home — session cliffhanger
 
-## [4] Alexander Nouveau — Notable Actions
-Page: Characters/NPCs/Alexander-Nouveau.md
+## [6] NEW PAGE: Alexander Nouveau
+Description: Deceased grandfather of Aella and Nico Nouveau; an artificer who worked on war golems.
 Section: Notable Actions
-- A sealed, undelivered letter was found in a hidden compartment in his Fensworth workshop, addressed to an unknown colleague.
-- In the letter, described a project he called "the vessel" — something he oversaw but was not directly involved with — and expressed deep moral conflict about whether it should be allowed to continue or its results destroyed.
-- Wrote that the project is "implemented but currently inaccessible" and should remain so indefinitely unless someone actively intervenes.
+- Designed war golem schematics, plans for which remained in the Fensworth family attic
+- A necklace bearing his name — a pocket watch gear piece with escapement — was discovered by Nico while cleaning the attic
 
-## [5] Rotor of Return — Function
-Page: Items/Rotor-of-Return.md
-Section: Function
-- Serves as the memory and navigational core of the [[Ninhursag]] arc: stores coordinates and information from every chamber the arc has visited, allowing it to return to known chambers.
-- Maintains a permanent link to each visited chamber, enabling retrieval of items and preventing travel from being one-way.
-- [[Judah]] confirmed its appearance is unknown and it is likely disguised as a nondescript magical item; magical identification (e.g. Identify) should be able to reveal it.
-- Suspected by the party to be connected to or merged with [[Nico Nouveau]]'s prosthetic leg; the original clockwork power disc is missing, yet the leg remains functional when worn.
+---
 
-## [6] Din — Notable Actions
-Page: Characters/NPCs/Din.md
-Section: Notable Actions
-- Fully returned to her own body following [[Mikael]]'s death, initially against her will.
-- [[Kali]]'s speech convinced her not to take her own life; she expressed gratitude and said she would try to take Kali's words to heart.
-- Remains a heavy drinker; asked Kali for an update on [[Mer]]'s status before the party departed for Fensworth.
-- Was warned that Binah likely won't attempt another attack soon following her failed strike, but to remain vigilant; Din acknowledged it calmly.
+## Proper Noun Corrections
+The following were likely mis-transcribed and should be considered for config.yaml corrections:
+- "Binari" → "canary" *(one instance, Belle talking to the bird)*
+- "Mer-Tehom ritual" / "Mer-power ritual" — confirm correct ritual names with DMs
+- "Vulcan" → "Velka" or correct NPC name *(Aella drops off her gun with someone in Fensworth; name may be mis-transcribed)*
+- "CSI" → "CSF" *(one instance — cerebral spinal fluid)*
