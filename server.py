@@ -189,6 +189,20 @@ def get_wiki(name: str):
     return {"content": path.read_text(encoding="utf-8")}
 
 
+@app.get("/sessions/{name}/raw-transcript")
+def get_raw_transcript(name: str):
+    sessions_dir = get_sessions_dir()
+    session_dir = sessions_dir / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    try:
+        from merge import merge_transcripts
+        raw_text = merge_transcripts(str(session_dir))
+        return {"content": raw_text}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 @app.get("/sessions/{name}/corrections-report")
 def corrections_report(name: str):
     sessions_dir = get_sessions_dir()

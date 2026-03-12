@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 
@@ -522,6 +522,7 @@ export default function SessionView() {
             report={changesReport}
             loading={changesLoading}
             onHallucinationClick={goToHallucination}
+            sessionName={name!}
           />
         )}
       </div>
@@ -755,6 +756,348 @@ function MarkdownView({ content, emptyMsg }: { content: string | null; emptyMsg:
   )
 }
 
+// ─── Word-level diff helpers ──────────────────────────────────────────────────
+
+interface WordDiffPart {
+  word: string
+  changed: boolean
+}
+
+function computeWordDiff(rawLine: string, corrLine: string): { raw: WordDiffPart[]; corr: WordDiffPart[] } {
+  const tokenize = (s: string) => s.split(/(\s+)/).filter(t => t.length > 0)
+  const rawTokens = tokenize(rawLine)
+  const corrTokens = tokenize(corrLine)
+  const m = rawTokens.length
+  const n = corrTokens.length
+
+  // LCS DP table
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      if (rawTokens[i - 1] === corrTokens[j - 1]) dp[i][j] = dp[i - 1][j - 1] + 1
+      else dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1])
+
+  // Backtrack
+  type Op = { type: 'same' | 'removed' | 'added'; value: string }
+  const ops: Op[] = []
+  let i = m, j = n
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && rawTokens[i - 1] === corrTokens[j - 1]) {
+      ops.unshift({ type: 'same', value: rawTokens[i - 1] })
+      i--; j--
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      ops.unshift({ type: 'added', value: corrTokens[j - 1] })
+      j--
+    } else {
+      ops.unshift({ type: 'removed', value: rawTokens[i - 1] })
+      i--
+    }
+  }
+
+  const rawParts: WordDiffPart[] = []
+  const corrParts: WordDiffPart[] = []
+  for (const op of ops) {
+    if (op.type === 'same') {
+      rawParts.push({ word: op.value, changed: false })
+      corrParts.push({ word: op.value, changed: false })
+    } else if (op.type === 'removed') {
+      rawParts.push({ word: op.value, changed: true })
+    } else {
+      corrParts.push({ word: op.value, changed: true })
+    }
+  }
+  return { raw: rawParts, corr: corrParts }
+}
+
+// ─── DiffViewer ───────────────────────────────────────────────────────────────
+
+type DisplayItem =
+  | { type: 'line'; lineNum: number; rawParts: WordDiffPart[]; corrParts: WordDiffPart[]; hasChanges: boolean }
+  | { type: 'separator'; skipped: number }
+
+function DiffViewer({ sessionName }: { sessionName: string }) {
+  const [showDiff, setShowDiff] = useState(false)
+  const [changedLinesOnly, setChangedLinesOnly] = useState(false)
+  const [rawContent, setRawContent] = useState<string | null>(null)
+  const [corrContent, setCorrContent] = useState<string | null>(null)
+  const [diffLoading, setDiffLoading] = useState(false)
+  const leftRef = useRef<HTMLDivElement>(null)
+  const rightRef = useRef<HTMLDivElement>(null)
+  const scrollingRef = useRef(false)
+
+  const loadDiff = async () => {
+    if (rawContent !== null) return
+    setDiffLoading(true)
+    try {
+      const [rawRes, corrRes] = await Promise.allSettled([
+        fetch(`/sessions/${sessionName}/raw-transcript`).then(r => r.ok ? r.json() : null),
+        fetch(`/sessions/${sessionName}/transcript`).then(r => r.ok ? r.json() : null),
+      ])
+      setRawContent(rawRes.status === 'fulfilled' && rawRes.value ? rawRes.value.content : '')
+      setCorrContent(corrRes.status === 'fulfilled' && corrRes.value ? corrRes.value.content : '')
+    } finally {
+      setDiffLoading(false)
+    }
+  }
+
+  const handleToggle = () => {
+    const next = !showDiff
+    setShowDiff(next)
+    if (next) loadDiff()
+  }
+
+  const syncScroll = (from: 'left' | 'right') => {
+    if (scrollingRef.current) return
+    scrollingRef.current = true
+    if (from === 'left' && rightRef.current && leftRef.current) {
+      rightRef.current.scrollTop = leftRef.current.scrollTop
+    } else if (from === 'right' && leftRef.current && rightRef.current) {
+      leftRef.current.scrollTop = rightRef.current.scrollTop
+    }
+    requestAnimationFrame(() => { scrollingRef.current = false })
+  }
+
+  // Build diff pairs
+  const rawLines = rawContent != null ? rawContent.split('\n') : []
+  const corrLines = corrContent != null ? corrContent.split('\n') : []
+  const totalLines = Math.max(rawLines.length, corrLines.length)
+
+  type LinePair = {
+    lineNum: number
+    rawLine: string
+    corrLine: string
+    hasChanges: boolean
+    rawParts: WordDiffPart[]
+    corrParts: WordDiffPart[]
+  }
+
+  const pairs: LinePair[] = []
+  if (rawContent != null && corrContent != null) {
+    for (let i = 0; i < totalLines; i++) {
+      const rawLine = rawLines[i] ?? ''
+      const corrLine = corrLines[i] ?? ''
+      const hasChanges = rawLine !== corrLine
+      const { raw, corr } = hasChanges
+        ? computeWordDiff(rawLine, corrLine)
+        : { raw: [{ word: rawLine, changed: false }], corr: [{ word: corrLine, changed: false }] }
+      pairs.push({ lineNum: i + 1, rawLine, corrLine, hasChanges, rawParts: raw, corrParts: corr })
+    }
+  }
+
+  const changedCount = pairs.filter(p => p.hasChanges).length
+
+  const displayItems: DisplayItem[] = (() => {
+    if (!changedLinesOnly) return pairs.map(p => ({ type: 'line' as const, lineNum: p.lineNum, rawParts: p.rawParts, corrParts: p.corrParts, hasChanges: p.hasChanges }))
+    const items: DisplayItem[] = []
+    let lastLineNum = -999
+    for (const p of pairs) {
+      if (!p.hasChanges) continue
+      if (items.length > 0 && p.lineNum > lastLineNum + 1) {
+        items.push({ type: 'separator', skipped: p.lineNum - lastLineNum - 1 })
+      }
+      items.push({ type: 'line', lineNum: p.lineNum, rawParts: p.rawParts, corrParts: p.corrParts, hasChanges: p.hasChanges })
+      lastLineNum = p.lineNum
+    }
+    return items
+  })()
+
+  const panelStyle: React.CSSProperties = {
+    flex: 1,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: 0,
+  }
+
+  const scrollAreaStyle: React.CSSProperties = {
+    flex: 1,
+    overflowY: 'auto',
+    overflowX: 'auto',
+    fontFamily: 'monospace',
+    fontSize: '12px',
+    lineHeight: '1.6',
+  }
+
+  const renderWords = (parts: WordDiffPart[], side: 'raw' | 'corr') => {
+    const highlightBg = side === 'raw' ? 'rgba(239,68,68,0.25)' : 'rgba(34,197,94,0.25)'
+    const highlightColor = side === 'raw' ? '#fca5a5' : '#86efac'
+    return parts.map((p, i) =>
+      p.changed ? (
+        <mark key={i} style={{ background: highlightBg, color: highlightColor, borderRadius: '2px', padding: '0 1px' }}>
+          {p.word}
+        </mark>
+      ) : (
+        <span key={i}>{p.word}</span>
+      )
+    )
+  }
+
+  return (
+    <div style={{ marginBottom: '8px' }}>
+      {/* Toggle button + controls row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: showDiff ? '10px' : '0' }}>
+        <button
+          onClick={handleToggle}
+          style={{
+            background: showDiff ? 'rgba(124,108,252,0.2)' : 'rgba(30,33,48,0.8)',
+            border: `1px solid ${showDiff ? 'rgba(124,108,252,0.5)' : '#2a2d3a'}`,
+            borderRadius: '8px',
+            color: showDiff ? '#a89cff' : '#64748b',
+            padding: '6px 14px',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          {showDiff ? 'Hide Diff' : 'Show Diff'}
+        </button>
+
+        {showDiff && rawContent != null && (
+          <>
+            <span style={{ fontSize: '12px', color: '#475569' }}>
+              <span style={{ color: changedCount > 0 ? '#a89cff' : '#475569', fontWeight: 700 }}>{changedCount}</span>
+              {' '}line{changedCount !== 1 ? 's' : ''} changed out of{' '}
+              <span style={{ fontWeight: 700, color: '#94a3b8' }}>{totalLines}</span> total
+            </span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#94a3b8', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={changedLinesOnly}
+                onChange={e => setChangedLinesOnly(e.target.checked)}
+                style={{ accentColor: '#7c6cfc' }}
+              />
+              Changed lines only
+            </label>
+          </>
+        )}
+      </div>
+
+      {/* Diff panels */}
+      {showDiff && (
+        <div style={{
+          border: '1px solid #1e2130',
+          borderRadius: '10px',
+          overflow: 'hidden',
+          height: '400px',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          {diffLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: '#64748b', gap: '8px' }}>
+              <span style={{ fontSize: '16px' }}>⟳</span> Loading diff...
+            </div>
+          ) : rawContent == null ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: '#64748b' }}>
+              No transcript data available.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+              {/* Left panel — Raw */}
+              <div style={panelStyle}>
+                <div style={{
+                  padding: '6px 10px',
+                  background: 'rgba(239,68,68,0.08)',
+                  borderBottom: '1px solid rgba(239,68,68,0.2)',
+                  borderRight: '1px solid #1e2130',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#fca5a5',
+                  letterSpacing: '0.06em',
+                  flexShrink: 0,
+                }}>
+                  RAW (WHISPER OUTPUT)
+                </div>
+                <div
+                  ref={leftRef}
+                  onScroll={() => syncScroll('left')}
+                  style={{ ...scrollAreaStyle, borderRight: '1px solid #1e2130', background: 'rgba(239,68,68,0.02)' }}
+                >
+                  {displayItems.map((item, idx) =>
+                    item.type === 'separator' ? (
+                      <div key={idx} style={{ padding: '2px 8px', color: '#475569', fontSize: '11px', background: '#0d1017', borderTop: '1px solid #1e2130', borderBottom: '1px solid #1e2130' }}>
+                        ···  {item.skipped} line{item.skipped !== 1 ? 's' : ''} hidden
+                      </div>
+                    ) : (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          gap: '0',
+                          padding: '0 8px',
+                          background: item.hasChanges ? 'rgba(239,68,68,0.07)' : 'transparent',
+                          opacity: item.hasChanges ? 1 : 0.45,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-all',
+                        }}
+                      >
+                        <span style={{ color: '#374151', minWidth: '36px', userSelect: 'none', paddingRight: '8px', textAlign: 'right', flexShrink: 0 }}>
+                          {item.lineNum}
+                        </span>
+                        <span style={{ color: '#e2e8f0' }}>
+                          {renderWords(item.rawParts, 'raw')}
+                        </span>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {/* Right panel — Corrected */}
+              <div style={panelStyle}>
+                <div style={{
+                  padding: '6px 10px',
+                  background: 'rgba(34,197,94,0.08)',
+                  borderBottom: '1px solid rgba(34,197,94,0.2)',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#86efac',
+                  letterSpacing: '0.06em',
+                  flexShrink: 0,
+                }}>
+                  CORRECTED
+                </div>
+                <div
+                  ref={rightRef}
+                  onScroll={() => syncScroll('right')}
+                  style={{ ...scrollAreaStyle, background: 'rgba(34,197,94,0.02)' }}
+                >
+                  {displayItems.map((item, idx) =>
+                    item.type === 'separator' ? (
+                      <div key={idx} style={{ padding: '2px 8px', color: '#475569', fontSize: '11px', background: '#0d1017', borderTop: '1px solid #1e2130', borderBottom: '1px solid #1e2130' }}>
+                        ···  {item.skipped} line{item.skipped !== 1 ? 's' : ''} hidden
+                      </div>
+                    ) : (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          gap: '0',
+                          padding: '0 8px',
+                          background: item.hasChanges ? 'rgba(34,197,94,0.07)' : 'transparent',
+                          opacity: item.hasChanges ? 1 : 0.45,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-all',
+                        }}
+                      >
+                        <span style={{ color: '#374151', minWidth: '36px', userSelect: 'none', paddingRight: '8px', textAlign: 'right', flexShrink: 0 }}>
+                          {item.lineNum}
+                        </span>
+                        <span style={{ color: '#e2e8f0' }}>
+                          {renderWords(item.corrParts, 'corr')}
+                        </span>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Changes tab ──────────────────────────────────────────────────────────────
 
 function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: string }) {
@@ -891,32 +1234,39 @@ function ChangesView({
   report,
   loading,
   onHallucinationClick,
+  sessionName,
 }: {
   report: ChangesReport | null
   loading: boolean
   onHallucinationClick: (timestamp: string) => void
+  sessionName: string
 }) {
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#64748b', paddingTop: '60px', justifyContent: 'center' }}>
-        <span style={{ fontSize: '18px', animation: 'spin 1s linear infinite' }}>⟳</span>
-        Analyzing corrections...
-      </div>
-    )
-  }
-
-  if (!report) {
-    return (
-      <div style={{ color: '#64748b', textAlign: 'center', paddingTop: '60px' }}>
-        No transcript yet. Run the pipeline to generate one.
-      </div>
-    )
-  }
-
-  const { corrections_applied, patterns_applied, hallucinations, stats } = report
+  const corrections_applied = report?.corrections_applied ?? []
+  const patterns_applied = report?.patterns_applied ?? []
+  const hallucinations = report?.hallucinations ?? []
+  const stats = report?.stats ?? { total_corrections: 0, total_hits: 0, hallucination_count: 0 }
 
   return (
-    <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+    <div style={{ maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+
+      {/* Diff viewer */}
+      <DiffViewer sessionName={sessionName} />
+
+      {loading && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#64748b', paddingTop: '20px', justifyContent: 'center' }}>
+          <span style={{ fontSize: '18px', animation: 'spin 1s linear infinite' }}>⟳</span>
+          Analyzing corrections...
+        </div>
+      )}
+
+      {!loading && !report && (
+        <div style={{ color: '#64748b', textAlign: 'center', paddingTop: '20px' }}>
+          No transcript yet. Run the pipeline to generate one.
+        </div>
+      )}
+
+      {!loading && report && (
+      <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
 
       {/* Stats bar */}
       <div style={{
@@ -1022,6 +1372,8 @@ function ChangesView({
         )}
       </section>
 
+      </div>
+      )}
     </div>
   )
 }
