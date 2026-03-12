@@ -1,6 +1,6 @@
 # DnD Session Transcriber
 
-Turns Craig bot Discord recordings into speaker-labeled transcripts, session summaries, and Obsidian wiki update suggestions.
+Turns Craig bot Discord recordings into speaker-labeled transcripts, session summaries, and Obsidian wiki update suggestions — with a full web GUI for review and editing.
 
 ## Pipeline
 
@@ -9,138 +9,129 @@ Craig records session (per-user .flac files)
   → Whisper transcribes each track (with campaign vocab prompt)
   → Merge into timestamped transcript
   → Claude generates summary + wiki suggestions
-  → You review and apply updates to the vault
+  → Review, edit, and apply updates via the web GUI (or CLI)
 ```
 
 ---
 
-## Setup
-
-### 1. Prerequisites (WSL2)
-
-Make sure you have NVIDIA drivers on Windows and CUDA in WSL:
-```bash
-nvidia-smi  # should show your 4060 Ti if CUDA is working in WSL
-```
-
-If `nvidia-smi` fails in WSL, see: https://docs.nvidia.com/cuda/wsl-user-guide/
-
-Install ffmpeg (required by Whisper):
-```bash
-sudo apt update && sudo apt install ffmpeg
-```
-
-### 2. Python environment
+## Quick Start (GUI)
 
 ```bash
 cd dnd-transcriber
-python -m venv venv
-source venv/bin/activate
-
-# Install PyTorch with CUDA 12.x first (check your CUDA version with: nvcc --version)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-
-# Then install the rest
-pip install -r requirements.txt
+./start.sh
 ```
 
-### 3. Configure
+- **Frontend:** http://localhost:5173
+- **Backend API:** http://localhost:8765
 
-Edit `config.yaml`:
-- Replace `DISCORD_USERNAME_*` keys with actual Discord usernames
-- Set correct character/player names
-- Set `whisper_model` (default: `large-v3`, or `turbo` for faster results)
-- Set `ANTHROPIC_API_KEY` env variable (or paste key directly in config)
+### First-time setup
 
 ```bash
+# 1. Python environment
+python -m venv venv
+source venv/bin/activate
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip install -r requirements.txt
+
+# 2. Frontend
+cd gui && npm install && cd ..
+
+# 3. Configure
+cp config.yaml.example config.yaml  # edit as needed
 export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+### Prerequisites
+
+- NVIDIA GPU with CUDA (recommended — CPU works but is slow)
+- ffmpeg: `sudo apt install ffmpeg`
+- Node.js 18+
+
+---
+
+## Web GUI
+
+The GUI wraps the full pipeline in a browser interface:
+
+| Page | What it does |
+|------|-------------|
+| **Sessions** | Create sessions, upload Craig zip or individual FLACs via drag-and-drop, rename/delete |
+| **Session View** | Tabs: Transcript (speaker colors, audio sync, edit mode) · Summary · Wiki suggestions · Changes (diff + hallucination flags) |
+| **Pipeline** | Run full pipeline or individual steps with live log stream |
+| **Corrections** | Add/edit/delete word replacements and regex patterns with live preview diff |
+| **Settings** | Whisper model, VAD, players list, vocab prompt, notification config |
+
+### Transcript features
+- Speaker color-coding with audio track auto-switch on timestamp click
+- Merged audio playback (ffmpeg-mixed, served from backend)
+- Inline edit mode — click any line to correct it
+- Speaker rename panel — reassign display names without editing files
+- Side-by-side diff vs raw Whisper output
+
+### Wiki suggestions
+- Structured suggestion cards (page, section, bullets)
+- Per-card Apply / Skip buttons
+- Apply All → runs `apply_updates.py` to write directly to vault
+- Import Corrections → pulls proper noun corrections from suggestions into config
+
+---
+
+## CLI Usage
+
+```bash
+# Full pipeline
+python pipeline.py sessions/session-01
+
+# Transcription only
+python pipeline.py sessions/session-01 --transcribe-only
+
+# Wiki suggestions only (transcript already exists)
+python pipeline.py sessions/session-01 --wiki-only
+
+# Re-merge with updated corrections (no re-transcribe)
+python merge.py sessions/session-01 config.yaml
+
+# Apply approved wiki suggestions
+python apply_updates.py sessions/session-01 --all
+python apply_updates.py sessions/session-01 --apply 1,3,5
+python apply_updates.py sessions/session-01 --skip 2
 ```
 
 ---
 
 ## Recording with Craig
 
-Craig bot is free and made for TTRPGs. It records each user on a separate track.
-
-1. Invite Craig to your server: https://craig.horse
-2. At session start: `/join` in your voice channel
-3. At session end: `/stop` (Craig will DM you a download link)
-4. Download the **FLAC** zip (not the mixed track)
-5. Extract the zip — you'll get one `.flac` file per person
+1. Invite Craig: https://craig.horse
+2. `/join` at session start, `/stop` at end
+3. Download the **FLAC** zip (not the mixed track)
+4. Drag-and-drop the zip onto the session card in the GUI — it auto-extracts
 
 ---
 
-## Running a Session
+## Configuration
 
-### Step 1: Set up session folder
+Edit `config.yaml`:
 
-```bash
-python pipeline.py session-01
+```yaml
+whisper_model: turbo        # tiny / base / medium / large-v3 / turbo
+vad: true                   # Voice Activity Detection (removes silence)
+sessions_dir: sessions
+vault_path: ../campaign-vault
+
+players:
+  - username: dannysollo
+    name: Danny
+    character: DM
+    role: dm
+
+corrections:                # Whisper mis-transcriptions to fix
+  "Tehom": "Tehom"
+  "Tajom": "Tehom"
+
+patterns:                   # Regex corrections
+  - match: "(?i)\\bTehom\\b"
+    replace: "Tehom"
 ```
-
-If the session folder doesn't exist yet, it will be created. This also prints the path where Craig files should go.
-
-### Step 2: Add Craig files
-
-Copy the extracted Craig `.flac` files into:
-```
-sessions/session-01/raw/
-```
-
-The filenames will contain the Discord usernames, e.g.:
-```
-sessions/session-01/raw/
-  12345678-dannysollo.flac
-  12345678-playeruser.flac
-  ...
-```
-
-### Step 3: Run the pipeline
-
-```bash
-# Full pipeline (transcribe + wiki suggestions)
-python pipeline.py session-01
-
-# Transcription only (to review before sending to Claude)
-python pipeline.py session-01 --transcribe-only
-
-# Wiki suggestions only (if transcript already exists)
-python pipeline.py session-01 --wiki-only
-```
-
-### Step 4: Review outputs
-
-```
-sessions/session-01/
-  raw/                     ← Craig audio files
-  speakers/                ← Per-speaker Whisper JSON (intermediate)
-  transcript.md            ← Full labeled transcript ← review this
-  summary.md               ← Session summary
-  wiki_suggestions.md      ← Suggested vault updates ← review before applying
-```
-
-Open `wiki_suggestions.md`, review the suggested additions, and manually copy them into your Obsidian vault.
-
----
-
-## Proper Noun Handling
-
-The `vocab_extractor.py` script scans your entire vault and builds a Whisper prompt seeded with:
-- All page names (character names, locations, factions, items)
-- `[[wikilinks]]` found in notes
-- **Bold capitalized terms** (often proper nouns)
-
-This dramatically improves recognition of campaign-specific words. As you add more pages to your vault, the vocabulary automatically improves on the next run.
-
----
-
-## Tips
-
-- **First run**: Whisper downloads the model (~3GB for large-v3). Be patient.
-- **Speed**: large-v3 on a 4060 Ti processes ~10min of audio per minute. A 3hr session takes ~18 min.
-- **Quality vs Speed**: Use `turbo` model in config for ~3x speedup with minor quality tradeoff.
-- **Transcript review**: Always check `transcript.md` before running wiki suggestions — fix obvious errors first if needed.
-- **Proper nouns**: If a character/place name is still being mangled, add it as a page in your vault. It'll get picked up automatically.
 
 ---
 
@@ -148,18 +139,36 @@ This dramatically improves recognition of campaign-specific words. As you add mo
 
 ```
 dnd-transcriber/
-  pipeline.py          ← Main entry point
-  vocab_extractor.py   ← Scrapes vault for proper nouns
-  transcribe.py        ← Runs Whisper on audio tracks
-  merge.py             ← Merges tracks into single transcript
-  wiki_updater.py      ← Claude integration for summaries + wiki suggestions
-  config.yaml          ← Your configuration
+  pipeline.py            ← Main CLI entry point
+  server.py              ← FastAPI backend (GUI)
+  merge.py               ← Merges tracks into transcript, applies corrections
+  transcribe.py          ← Runs Whisper on audio tracks
+  wiki_updater.py        ← Claude integration for summaries + wiki suggestions
+  apply_updates.py       ← Applies approved suggestions to Obsidian vault
+  vocab_extractor.py     ← Scrapes vault for proper nouns → Whisper prompt
+  config.yaml            ← Your configuration
+  start.sh               ← Dev launcher (backend + frontend)
   requirements.txt
-  sessions/            ← Session data (gitignore if private)
+  ANALYZE_SESSION.md     ← Instructions for Claude session analysis
+  gui/                   ← React + Vite frontend
+    src/
+      pages/             ← SessionsPage, SessionView, PipelinePage, etc.
+      components/
+    package.json
+  sessions/              ← Session data (audio gitignored, transcripts tracked)
     session-01/
-      raw/             ← Craig .flac files go here
-      speakers/        ← Intermediate Whisper output
-      transcript.md
-      summary.md
-      wiki_suggestions.md
+      raw/               ← Craig .flac files (gitignored)
+      speakers/          ← Intermediate Whisper JSON (gitignored)
+      transcript.md      ← Labeled transcript ✓ committed
+      summary.md         ← Session summary ✓ committed
+      wiki_suggestions.md ← Suggested vault updates ✓ committed
 ```
+
+---
+
+## Tips
+
+- **Speed:** `turbo` model is ~3x faster than `large-v3` with minor quality tradeoff. On a 4060 Ti, a 4hr session takes ~20 min with turbo.
+- **Proper nouns:** If a name is being mangled, add its page to your Obsidian vault — `vocab_extractor.py` picks it up automatically next run.
+- **Corrections:** Use the GUI corrections editor to add/test fixes. Hit "Re-merge All" to apply across all sessions at once.
+- **Wiki review:** Always read `wiki_suggestions.md` before hitting Apply All — suggestions are additions only, never rewrites.
