@@ -1107,8 +1107,10 @@ def list_campaigns(
     if not AUTH_ENABLED or user is None:
         return []
     campaigns = crud.get_user_campaigns(db, user.id)
-    return [
-        {
+    result = []
+    for c in campaigns:
+        member = crud.get_member(db, c.id, user.id) if user else None
+        result.append({
             "id": c.id,
             "slug": c.slug,
             "name": c.name,
@@ -1117,9 +1119,9 @@ def list_campaigns(
             "data_path": c.data_path,
             "settings": c.settings,
             "created_at": c.created_at.isoformat(),
-        }
-        for c in campaigns
-    ]
+            "role": member.role if member else "unknown",
+        })
+    return result
 
 
 @app.post("/campaigns", status_code=201)
@@ -1375,6 +1377,691 @@ def get_invite_info(token: str, db: Session = Depends(get_db)):
         "maxed": maxed,
         "valid": not expired and not maxed,
     }
+
+
+# ─── Campaign-scoped routes ───────────────────────────────────────────────────
+# All /sessions/*, /config/*, /pipeline/run, /merge/all mirrored under
+# /campaigns/{slug}/ with membership auth enforcement.
+# Auth: members (spectator+) can read; DMs can write. AUTH_ENABLED=false skips.
+
+# ── Sessions ──────────────────────────────────────────────────────────────────
+
+@app.get("/campaigns/{slug}/sessions")
+def campaign_list_sessions(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    sessions_dir = get_sessions_dir(slug)
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    sessions = []
+    for d in sorted(sessions_dir.iterdir(), reverse=True):
+        if d.is_dir() and not d.name.startswith("."):
+            sessions.append({
+                "name": d.name,
+                "status": session_status(d),
+                "has_transcript": (d / "transcript.md").exists(),
+                "has_summary": (d / "summary.md").exists(),
+                "has_wiki": (d / "wiki_suggestions.md").exists() or (d / "wiki.md").exists(),
+            })
+    return sessions
+
+
+@app.post("/campaigns/{slug}/sessions")
+def campaign_create_session(
+    slug: str,
+    body: CreateSessionBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    sessions_dir = get_sessions_dir(slug)
+    session_dir = sessions_dir / body.name
+    if session_dir.exists():
+        raise HTTPException(400, f"Session '{body.name}' already exists")
+    (session_dir / "raw").mkdir(parents=True)
+    return {"name": body.name, "status": "empty"}
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/upload")
+async def campaign_upload_audio(
+    slug: str,
+    name: str,
+    files: list[UploadFile] = File(...),
+    _member=Depends(require_campaign_member("dm")),
+):
+    sessions_dir = get_sessions_dir(slug)
+    raw_dir = sessions_dir / name / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    saved = []
+    for f in files:
+        dest = raw_dir / f.filename
+        content = await f.read()
+        dest.write_bytes(content)
+        saved.append(f.filename)
+    return {"saved": saved}
+
+
+@app.patch("/campaigns/{slug}/sessions/{name}")
+def campaign_rename_session(
+    slug: str,
+    name: str,
+    body: RenameSessionBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    sessions_dir = get_sessions_dir(slug)
+    old_path = sessions_dir / name
+    new_path = sessions_dir / body.new_name
+    if not old_path.exists():
+        raise HTTPException(404, f"Session '{name}' not found")
+    if new_path.exists():
+        raise HTTPException(400, f"Session '{body.new_name}' already exists")
+    old_path.rename(new_path)
+    return {"name": body.new_name, "status": session_status(new_path)}
+
+
+@app.delete("/campaigns/{slug}/sessions/{name}", status_code=204)
+def campaign_delete_session(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("dm")),
+):
+    sessions_dir = get_sessions_dir(slug)
+    session_dir = sessions_dir / name
+    if not session_dir.exists():
+        raise HTTPException(404, f"Session '{name}' not found")
+    shutil.rmtree(session_dir)
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/transcript")
+def campaign_get_transcript(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    path = get_sessions_dir(slug) / name / "transcript.md"
+    if not path.exists():
+        raise HTTPException(404, "Transcript not found")
+    return {"content": path.read_text(encoding="utf-8")}
+
+
+@app.put("/campaigns/{slug}/sessions/{name}/transcript")
+def campaign_put_transcript(
+    slug: str,
+    name: str,
+    body: TranscriptContentBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    path = session_dir / "transcript.md"
+    path.write_text(body.content, encoding="utf-8")
+    return {"lines": body.content.count("\n")}
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/transcript/line/{line_number}")
+def campaign_get_transcript_line(
+    slug: str,
+    name: str,
+    line_number: int,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    path = get_sessions_dir(slug) / name / "transcript.md"
+    if not path.exists():
+        raise HTTPException(404, "Transcript not found")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if line_number < 1 or line_number > len(lines):
+        raise HTTPException(404, f"Line {line_number} not found")
+    return {"line": lines[line_number - 1], "line_number": line_number}
+
+
+@app.put("/campaigns/{slug}/sessions/{name}/transcript/line/{line_number}")
+def campaign_put_transcript_line(
+    slug: str,
+    name: str,
+    line_number: int,
+    body: TranscriptLineBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    path = get_sessions_dir(slug) / name / "transcript.md"
+    if not path.exists():
+        raise HTTPException(404, "Transcript not found")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if line_number < 1 or line_number > len(lines):
+        raise HTTPException(404, f"Line {line_number} not found")
+    lines[line_number - 1] = body.content
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return {"line_number": line_number, "content": body.content}
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/summary")
+def campaign_get_summary(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    path = get_sessions_dir(slug) / name / "summary.md"
+    if not path.exists():
+        raise HTTPException(404, "Summary not found")
+    return {"content": path.read_text(encoding="utf-8")}
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/wiki")
+def campaign_get_wiki(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    session_dir = get_sessions_dir(slug) / name
+    for filename in ("wiki_suggestions.md", "wiki.md"):
+        path = session_dir / filename
+        if path.exists():
+            return {"content": path.read_text(encoding="utf-8")}
+    raise HTTPException(404, "Wiki not found")
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/wiki-suggestions-parsed")
+def campaign_get_wiki_suggestions_parsed(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    suggestions_file = get_sessions_dir(slug) / name / "wiki_suggestions.md"
+    if not suggestions_file.exists():
+        raise HTTPException(404, "wiki_suggestions.md not found")
+    from apply_updates import parse_suggestions
+    suggestions = parse_suggestions(suggestions_file)
+    result = []
+    for num, s in sorted(suggestions.items()):
+        result.append({
+            "id": num,
+            "title": s["title"],
+            "page": s["page"],
+            "section": s["section"],
+            "bullets": s["bullets"],
+            "new_page": s["new_page"],
+            "description": s.get("description"),
+        })
+    return result
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/apply-wiki")
+def campaign_apply_wiki(
+    slug: str,
+    name: str,
+    body: ApplyWikiBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    config_path = BASE_DIR / "campaigns" / slug / "config.yaml"
+    if not config_path.exists():
+        config_path = CONFIG_PATH
+    cmd = [sys.executable, str(BASE_DIR / "apply_updates.py"), str(session_dir),
+           "--config", str(config_path)]
+    if body.mode == "all":
+        cmd.append("--all")
+    elif body.mode == "apply":
+        if not body.ids:
+            raise HTTPException(400, "mode=apply requires ids")
+        cmd.extend(["--apply", ",".join(str(i) for i in body.ids)])
+    elif body.mode == "skip":
+        cmd.append("--all")
+        if body.ids:
+            cmd.extend(["--skip", ",".join(str(i) for i in body.ids)])
+    else:
+        raise HTTPException(400, f"Invalid mode: {body.mode}")
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(BASE_DIR))
+    output = result.stdout + (result.stderr if result.stderr else "")
+    return {"output": output, "applied": body.ids}
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/raw-transcript")
+def campaign_get_raw_transcript(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    try:
+        from merge import merge_transcripts
+        raw_text = merge_transcripts(str(session_dir))
+        return {"content": raw_text}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/corrections-report")
+def campaign_corrections_report(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    sessions_dir = get_sessions_dir(slug)
+    session_dir = sessions_dir / name
+    transcript_path = session_dir / "transcript.md"
+    if not transcript_path.exists():
+        raise HTTPException(404, "Transcript not found")
+    config = load_config(slug)
+    corrections = config.get("corrections") or {}
+    patterns = config.get("patterns") or []
+    from merge import merge_transcripts
+    raw_text = merge_transcripts(str(session_dir))
+    corrected_text = transcript_path.read_text(encoding="utf-8")
+    raw_lines = raw_text.splitlines()
+
+    corrections_applied = []
+    for wrong, right in corrections.items():
+        try:
+            pat = r"\b" + re.escape(wrong) + r"\b"
+            hits = re.findall(pat, raw_text, flags=re.IGNORECASE)
+            hit_count = len(hits)
+        except re.error:
+            hit_count = 0
+        examples = []
+        if hit_count > 0:
+            try:
+                corr_lines = re.sub(
+                    r"\b" + re.escape(wrong) + r"\b", right, raw_text, flags=re.IGNORECASE
+                ).splitlines()
+                for raw_line, corr_line in zip(raw_lines, corr_lines):
+                    if raw_line != corr_line and len(examples) < 3:
+                        examples.append(f"{raw_line[:120]} → {corr_line[:120]}")
+            except re.error:
+                pass
+        corrections_applied.append({
+            "original": wrong, "replacement": right,
+            "hit_count": hit_count, "examples": examples,
+        })
+    corrections_applied.sort(key=lambda x: x["hit_count"], reverse=True)
+
+    patterns_applied = []
+    for entry in patterns:
+        match_pat = entry.get("match", "")
+        replace = entry.get("replace", "")
+        try:
+            hits = re.findall(match_pat, raw_text)
+            hit_count = len(hits) if isinstance(hits[0], str) else len(hits) if hits else 0
+        except (re.error, IndexError, TypeError):
+            hit_count = 0
+        examples = []
+        if hit_count > 0:
+            try:
+                corr_lines = re.sub(match_pat, replace, raw_text).splitlines()
+                for raw_line, corr_line in zip(raw_lines, corr_lines):
+                    if raw_line != corr_line and len(examples) < 3:
+                        examples.append(f"{raw_line[:120]} → {corr_line[:120]}")
+            except re.error:
+                pass
+        patterns_applied.append({
+            "original": match_pat, "replacement": replace,
+            "hit_count": hit_count, "examples": examples,
+        })
+    patterns_applied.sort(key=lambda x: x["hit_count"], reverse=True)
+
+    total_hits = (
+        sum(c["hit_count"] for c in corrections_applied)
+        + sum(p["hit_count"] for p in patterns_applied)
+    )
+    return {
+        "corrections_applied": corrections_applied,
+        "patterns_applied": patterns_applied,
+        "hallucinations": [],
+        "stats": {
+            "total_corrections": len(corrections_applied) + len(patterns_applied),
+            "total_hits": total_hits,
+            "hallucination_count": 0,
+        },
+    }
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/speakers")
+def campaign_get_speakers(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    path = get_sessions_dir(slug) / name / "transcript.md"
+    if not path.exists():
+        raise HTTPException(404, "Transcript not found")
+    content = path.read_text(encoding="utf-8")
+    line_re = re.compile(r'^\*\*\[[^\]]+\] ([^:]+):\*\*')
+    speaker_counts: dict[str, int] = {}
+    for line in content.splitlines():
+        m = line_re.match(line)
+        if m:
+            spk = m.group(1).strip()
+            speaker_counts[spk] = speaker_counts.get(spk, 0) + 1
+    return {"speakers": [
+        {"name": spk, "line_count": cnt}
+        for spk, cnt in sorted(speaker_counts.items(), key=lambda x: -x[1])
+    ]}
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/rename-speaker")
+def campaign_rename_speaker(
+    slug: str,
+    name: str,
+    body: RenameSpeakerBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    path = get_sessions_dir(slug) / name / "transcript.md"
+    if not path.exists():
+        raise HTTPException(404, "Transcript not found")
+    content = path.read_text(encoding="utf-8")
+    old_escaped = re.escape(body.old_name)
+    pattern = r'(\*\*\[[^\]]+\] )' + old_escaped + r'(:\*\*)'
+    new_content, count = re.subn(
+        pattern,
+        lambda m: m.group(1) + body.new_name + m.group(2),
+        content,
+    )
+    path.write_text(new_content, encoding="utf-8")
+    return {"replacements": count}
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/merge")
+def campaign_merge_session(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("dm")),
+):
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    config = load_config(slug)
+    try:
+        from merge import save_transcript
+        result = save_transcript(
+            str(session_dir),
+            corrections=config.get("corrections"),
+            patterns=config.get("patterns"),
+        )
+        return {"lines": result.count("\n"), "chars": len(result)}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/import-corrections")
+def campaign_import_corrections(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("dm")),
+):
+    wiki_path = get_sessions_dir(slug) / name / "wiki_suggestions.md"
+    if not wiki_path.exists():
+        raise HTTPException(404, "wiki_suggestions.md not found")
+    content = wiki_path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+    in_section = False
+    found: list[tuple[str, str]] = []
+    for line in lines:
+        if re.match(r'^#+\s+.*[Pp]roper\s+[Nn]oun\s+[Cc]orrections', line):
+            in_section = True
+            continue
+        if in_section and re.match(r'^#', line):
+            break
+        if in_section:
+            m = re.match(r'^-\s+"([^"]+)"\s+(?:→|->)\s+"([^"]+)"', line)
+            if m:
+                found.append((m.group(1), m.group(2)))
+    config = load_config(slug)
+    corrections = dict(config.get("corrections") or {})
+    imported = []
+    skipped = []
+    for wrong, right in found:
+        if wrong in corrections:
+            skipped.append({"from": wrong, "to": right})
+        else:
+            corrections[wrong] = right
+            imported.append({"from": wrong, "to": right})
+    if imported:
+        config["corrections"] = corrections
+        save_config(config, slug)
+    return {"imported": imported, "skipped": skipped}
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/import-zip")
+async def campaign_import_zip(
+    slug: str,
+    name: str,
+    file: UploadFile = File(...),
+    _member=Depends(require_campaign_member("dm")),
+):
+    sessions_dir = get_sessions_dir(slug)
+    session_dir = sessions_dir / name
+    if not session_dir.exists():
+        raise HTTPException(404, f"Session '{name}' not found")
+    raw_dir = session_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    content = await file.read()
+    extracted = []
+    with zipfile.ZipFile(io.BytesIO(content)) as zf:
+        for member in zf.namelist():
+            ext = Path(member).suffix.lower()
+            if ext in AUDIO_EXTENSIONS:
+                filename = Path(member).name
+                if filename:
+                    dest = raw_dir / filename
+                    dest.write_bytes(zf.read(member))
+                    extracted.append(filename)
+    return {"extracted": extracted}
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/audio-files")
+def campaign_get_audio_files(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    raw_dir = get_sessions_dir(slug) / name / "raw"
+    if not raw_dir.exists():
+        return {"files": []}
+    audio_files = [
+        f for f in sorted(raw_dir.iterdir())
+        if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS and f.name != "_merged.mp3"
+    ]
+    result = []
+    if len(audio_files) >= 2:
+        result.append({
+            "filename": "_merged",
+            "label": "All tracks (merged)",
+            "url": f"/campaigns/{slug}/sessions/{name}/audio/merged",
+        })
+    for f in audio_files:
+        result.append({
+            "filename": f.name,
+            "label": f.name,
+            "url": f"/campaigns/{slug}/sessions/{name}/audio/{f.name}",
+        })
+    return {"files": result}
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/audio/merged")
+def campaign_get_merged_audio(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    raw_dir = get_sessions_dir(slug) / name / "raw"
+    if not raw_dir.exists():
+        raise HTTPException(404, "No audio directory found")
+    audio_files = [
+        f for f in sorted(raw_dir.iterdir())
+        if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS and f.name != "_merged.mp3"
+    ]
+    if not audio_files:
+        raise HTTPException(404, "No audio files found")
+    if len(audio_files) == 1:
+        return RedirectResponse(url=f"/campaigns/{slug}/sessions/{name}/audio/{audio_files[0].name}")
+    merged_path = raw_dir / "_merged.mp3"
+    if merged_path.exists():
+        return FileResponse(str(merged_path), media_type="audio/mpeg")
+    inputs: list[str] = []
+    for f in audio_files:
+        inputs.extend(["-i", str(f)])
+    n = len(audio_files)
+    cmd = [
+        "ffmpeg", "-y", *inputs,
+        "-filter_complex", f"amix=inputs={n}:duration=longest:normalize=0",
+        str(merged_path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True)
+    if proc.returncode != 0:
+        raise HTTPException(500, f"ffmpeg failed: {proc.stderr.decode()}")
+    return FileResponse(str(merged_path), media_type="audio/mpeg")
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/audio/{filename}")
+def campaign_get_audio_file(
+    slug: str,
+    name: str,
+    filename: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    safe_filename = Path(filename).name
+    path = get_sessions_dir(slug) / name / "raw" / safe_filename
+    if not path.exists() or path.suffix.lower() not in AUDIO_EXTENSIONS:
+        raise HTTPException(404, "Audio file not found")
+    media_type = AUDIO_MIME.get(path.suffix.lower(), "application/octet-stream")
+    return FileResponse(str(path), media_type=media_type)
+
+
+# ── Config ────────────────────────────────────────────────────────────────────
+
+@app.get("/campaigns/{slug}/config")
+def campaign_get_config(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    return load_config(slug)
+
+
+@app.put("/campaigns/{slug}/config")
+def campaign_put_config(
+    slug: str,
+    body: ConfigBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    save_config(body.config, slug)
+    return {"ok": True}
+
+
+@app.get("/campaigns/{slug}/config/corrections")
+def campaign_get_corrections(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    config = load_config(slug)
+    return {"corrections": config.get("corrections", {})}
+
+
+@app.put("/campaigns/{slug}/config/corrections")
+def campaign_put_corrections(
+    slug: str,
+    body: CorrectionsBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    config = load_config(slug)
+    config["corrections"] = body.corrections
+    save_config(config, slug)
+    return {"ok": True}
+
+
+@app.get("/campaigns/{slug}/config/patterns")
+def campaign_get_patterns(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    config = load_config(slug)
+    return {"patterns": config.get("patterns", [])}
+
+
+@app.put("/campaigns/{slug}/config/patterns")
+def campaign_put_patterns(
+    slug: str,
+    body: PatternsBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    config = load_config(slug)
+    config["patterns"] = body.patterns
+    save_config(config, slug)
+    return {"ok": True}
+
+
+@app.post("/campaigns/{slug}/config/test-correction")
+def campaign_test_correction(
+    slug: str,
+    body: TestCorrectionBody,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    from merge import apply_corrections, apply_patterns
+    original = body.text
+    result = original
+    if body.corrections:
+        result = apply_corrections(result, body.corrections)
+    if body.patterns:
+        result = apply_patterns(result, body.patterns)
+    if result == original:
+        return {"changed": False, "result": result, "diffs": []}
+    diffs = []
+    orig_lines = original.splitlines()
+    res_lines = result.splitlines()
+    for i, (o, r) in enumerate(zip(orig_lines, res_lines)):
+        if o != r:
+            diffs.append({"line": i + 1, "before": o, "after": r})
+    return {"changed": True, "result": result, "diffs": diffs}
+
+
+@app.get("/campaigns/{slug}/config/vocab")
+def campaign_get_vocab(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    config = load_config(slug)
+    try:
+        from vocab_extractor import extract_from_vault
+        vocab = extract_from_vault(config["vault_path"])
+        return {"vocab": vocab}
+    except Exception as e:
+        return {"vocab": "", "error": str(e)}
+
+
+# ── Pipeline ──────────────────────────────────────────────────────────────────
+
+@app.post("/campaigns/{slug}/pipeline/run")
+def campaign_pipeline_run(
+    slug: str,
+    body: PipelineRunBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    if pipeline_state["running"]:
+        raise HTTPException(409, "Pipeline already running")
+    t = threading.Thread(
+        target=_pipeline_thread,
+        args=(body.session, body.transcribe_only, body.wiki_only, slug),
+        daemon=True,
+    )
+    t.start()
+    return {"ok": True, "session": body.session}
+
+
+# ── Merge all ─────────────────────────────────────────────────────────────────
+
+@app.post("/campaigns/{slug}/merge/all")
+def campaign_merge_all(
+    slug: str,
+    _member=Depends(require_campaign_member("dm")),
+):
+    if pipeline_state["running"]:
+        raise HTTPException(409, "Pipeline already running")
+    pipeline_state["running"] = True
+    pipeline_state["session"] = None
+    pipeline_state["log"] = []
+    t = threading.Thread(target=_merge_all_thread, args=(slug,), daemon=True)
+    t.start()
+    return {"ok": True}
 
 
 # ─── Static frontend ──────────────────────────────────────────────────────────
