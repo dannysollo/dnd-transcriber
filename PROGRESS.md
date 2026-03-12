@@ -13,6 +13,80 @@
 | 7 | Corrections Editor page | ✅ Done |
 | 8 | Settings page + dev launcher | ✅ Done |
 | **Multi-campaign Phase 1** | **Auth + DB foundation** | **✅ Done** |
+| **Multi-campaign Phase 2** | **File structure migration + campaign-scoped routes + frontend** | **✅ Done** |
+
+---
+
+## Multi-campaign Phase 2 — File Structure Migration + Scoped Routes ✅
+
+Branch: `feature/multi-campaign`
+
+### What was added
+
+**`migrate.py`:**
+- Idempotent migration: `sessions/*` → `campaigns/as-above-so-below/sessions/`
+- Copies `config.yaml` → `campaigns/as-above-so-below/config.yaml`
+- Creates `Campaign` DB record (slug=`as-above-so-below`, name=`As Above, So Below`)
+- Auto-runs on server startup when `sessions/` exists but `campaigns/` does not
+
+**New file layout:**
+```
+campaigns/{slug}/config.yaml
+campaigns/{slug}/sessions/{session-name}/raw/  speakers/  transcript.md  summary.md  wiki_suggestions.md
+```
+
+**`server.py` — helper updates:**
+- `load_config(campaign_slug=None)` — loads from `campaigns/{slug}/config.yaml` when slug given, falls back to root `config.yaml`
+- `save_config(config, campaign_slug=None)` — saves to campaign-scoped path
+- `get_sessions_dir(campaign_slug=None)` — returns `campaigns/{slug}/sessions/` or legacy `sessions/`
+- Startup auto-migration if `sessions/` exists but `campaigns/` does not
+- `_pipeline_thread` and `_merge_all_thread` accept optional `campaign_slug`
+- `/campaigns` list endpoint now includes `role` field for the requesting user
+
+**`server.py` — new campaign-scoped routes:**
+All existing session/config/pipeline routes mirrored under `/campaigns/{slug}/`:
+```
+GET/POST  /campaigns/{slug}/sessions
+GET/PUT   /campaigns/{slug}/sessions/{name}/transcript
+GET/PUT   /campaigns/{slug}/sessions/{name}/transcript/line/{n}
+GET       /campaigns/{slug}/sessions/{name}/summary
+GET       /campaigns/{slug}/sessions/{name}/wiki
+GET       /campaigns/{slug}/sessions/{name}/wiki-suggestions-parsed
+POST      /campaigns/{slug}/sessions/{name}/apply-wiki
+GET       /campaigns/{slug}/sessions/{name}/raw-transcript
+GET       /campaigns/{slug}/sessions/{name}/corrections-report
+GET       /campaigns/{slug}/sessions/{name}/speakers
+POST      /campaigns/{slug}/sessions/{name}/rename-speaker
+POST      /campaigns/{slug}/sessions/{name}/merge
+POST      /campaigns/{slug}/sessions/{name}/import-corrections
+POST      /campaigns/{slug}/sessions/{name}/import-zip
+POST      /campaigns/{slug}/sessions/{name}/upload
+PATCH     /campaigns/{slug}/sessions/{name}
+DELETE    /campaigns/{slug}/sessions/{name}
+GET       /campaigns/{slug}/sessions/{name}/audio-files
+GET       /campaigns/{slug}/sessions/{name}/audio/merged
+GET       /campaigns/{slug}/sessions/{name}/audio/{filename}
+GET/PUT   /campaigns/{slug}/config
+GET/PUT   /campaigns/{slug}/config/corrections
+GET/PUT   /campaigns/{slug}/config/patterns
+POST      /campaigns/{slug}/config/test-correction
+GET       /campaigns/{slug}/config/vocab
+POST      /campaigns/{slug}/pipeline/run
+POST      /campaigns/{slug}/merge/all
+```
+Auth: spectator+ for reads, dm+ for writes. `AUTH_ENABLED=false` skips all checks.
+Un-prefixed routes kept as backward-compat aliases (use root `sessions/` + `config.yaml`).
+
+**Frontend:**
+- `CampaignContext.tsx` — `Campaign` interface, `CampaignProvider`, `useCampaign()`, `useApiUrl()` hook
+- `main.tsx` — wrapped in `CampaignProvider`
+- `App.tsx` — campaign selector dropdown in sidebar (shows active campaign name, switches when multiple campaigns)
+- `SessionsPage`, `SessionView`, `CorrectionsPage`, `PipelinePage`, `SettingsPage` — use `useApiUrl()` for all fetch calls; auto-prefixes `/campaigns/{slug}/` when an active campaign is set; falls back to legacy routes when no campaign
+
+**`pipeline.py`:**
+- Added `--campaign` flag: loads config and sessions from `campaigns/{slug}/`
+- Example: `python pipeline.py 2026-03-15 --campaign as-above-so-below`
+- Backward compat: omit flag for original behavior
 
 ---
 
