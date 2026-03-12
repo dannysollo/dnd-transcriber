@@ -83,3 +83,25 @@ class CampaignInvite(Base):
     campaign: Mapped["Campaign"] = relationship("Campaign", back_populates="invites")
     creator: Mapped["User"] = relationship("User", foreign_keys=[created_by])
     used_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[used_by])
+
+
+class TranscriptEdit(Base):
+    __tablename__ = "transcript_edits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    campaign_id: Mapped[int] = mapped_column(Integer, ForeignKey("campaigns.id"), nullable=False, index=True)
+    session_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    line_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    original_text: Mapped[str] = mapped_column(Text, nullable=False)
+    proposed_text: Mapped[str] = mapped_column(Text, nullable=False)
+    # "pending" | "approved" | "rejected"
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    reviewed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    campaign: Mapped["Campaign"] = relationship("Campaign")
+    submitter: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+    reviewer: Mapped["User | None"] = relationship("User", foreign_keys=[reviewed_by])

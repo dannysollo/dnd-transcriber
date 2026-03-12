@@ -7,7 +7,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from db.models import Campaign, CampaignInvite, CampaignMember, User
+from db.models import Campaign, CampaignInvite, CampaignMember, TranscriptEdit, User
 
 
 # ─── User ─────────────────────────────────────────────────────────────────────
@@ -170,3 +170,70 @@ def use_invite(db: Session, invite: CampaignInvite, user_id: int) -> CampaignMem
     member = add_member(db, invite.campaign_id, user_id, invite.role)
     db.commit()
     return member
+
+
+# ─── TranscriptEdit ───────────────────────────────────────────────────────────
+
+def create_transcript_edit(
+    db: Session,
+    campaign_id: int,
+    session_name: str,
+    user_id: int,
+    line_number: int,
+    original_text: str,
+    proposed_text: str,
+) -> TranscriptEdit:
+    edit = TranscriptEdit(
+        campaign_id=campaign_id,
+        session_name=session_name,
+        user_id=user_id,
+        line_number=line_number,
+        original_text=original_text,
+        proposed_text=proposed_text,
+        status="pending",
+    )
+    db.add(edit)
+    db.commit()
+    db.refresh(edit)
+    return edit
+
+
+def get_pending_edits(db: Session, campaign_id: int) -> list[TranscriptEdit]:
+    return (
+        db.query(TranscriptEdit)
+        .filter(TranscriptEdit.campaign_id == campaign_id, TranscriptEdit.status == "pending")
+        .order_by(TranscriptEdit.submitted_at)
+        .all()
+    )
+
+
+def get_pending_edit_count(db: Session, campaign_id: int) -> int:
+    return (
+        db.query(TranscriptEdit)
+        .filter(TranscriptEdit.campaign_id == campaign_id, TranscriptEdit.status == "pending")
+        .count()
+    )
+
+
+def get_transcript_edit(db: Session, edit_id: int) -> Optional[TranscriptEdit]:
+    return db.query(TranscriptEdit).filter(TranscriptEdit.id == edit_id).first()
+
+
+def approve_edit(db: Session, edit: TranscriptEdit, reviewer_id: int) -> TranscriptEdit:
+    edit.status = "approved"
+    edit.reviewed_by = reviewer_id
+    edit.reviewed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(edit)
+    return edit
+
+
+def reject_edit(db: Session, edit: TranscriptEdit, reviewer_id: int,
+                note: Optional[str] = None) -> TranscriptEdit:
+    edit.status = "rejected"
+    edit.reviewed_by = reviewer_id
+    edit.reviewed_at = datetime.utcnow()
+    edit.review_note = note
+    db.commit()
+    db.refresh(edit)
+    return edit

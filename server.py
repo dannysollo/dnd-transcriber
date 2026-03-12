@@ -28,7 +28,7 @@ from auth.jwt import COOKIE_NAME, create_access_token
 from auth.middleware import AUTH_ENABLED, get_current_user, require_campaign_member, require_user
 from db import crud
 from db.database import get_db, init_db
-from db.models import User
+from db.models import TranscriptEdit, User
 
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
 BASE_DIR = Path(__file__).parent
@@ -1519,7 +1519,9 @@ def campaign_put_transcript_line(
     name: str,
     line_number: int,
     body: TranscriptLineBody,
-    _member=Depends(require_campaign_member("dm")),
+    member=Depends(require_campaign_member("player")),
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     path = get_sessions_dir(slug) / name / "transcript.md"
     if not path.exists():
@@ -1527,9 +1529,40 @@ def campaign_put_transcript_line(
     lines = path.read_text(encoding="utf-8").splitlines()
     if line_number < 1 or line_number > len(lines):
         raise HTTPException(404, f"Line {line_number} not found")
+
+    original = lines[line_number - 1]
+
+    # Determine if approval is needed
+    is_dm = (not AUTH_ENABLED) or (member is not None and member.role == "dm")
+    needs_approval = False
+    if AUTH_ENABLED and not is_dm:
+        campaign = crud.get_campaign_by_slug(db, slug)
+        if campaign and campaign.settings.get("require_edit_approval"):
+            needs_approval = True
+
+    if needs_approval and current_user is not None:
+        campaign = crud.get_campaign_by_slug(db, slug)
+        edit = crud.create_transcript_edit(
+            db,
+            campaign_id=campaign.id,
+            session_name=name,
+            user_id=current_user.id,
+            line_number=line_number,
+            original_text=original,
+            proposed_text=body.content,
+        )
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "pending",
+                "edit_id": edit.id,
+                "line_number": line_number,
+            },
+        )
+
     lines[line_number - 1] = body.content
     path.write_text("\n".join(lines), encoding="utf-8")
-    return {"line_number": line_number, "content": body.content}
+    return {"status": "applied", "line_number": line_number, "content": body.content}
 
 
 @app.get("/campaigns/{slug}/sessions/{name}/summary")
@@ -2062,6 +2095,95 @@ def campaign_merge_all(
     t = threading.Thread(target=_merge_all_thread, args=(slug,), daemon=True)
     t.start()
     return {"ok": True}
+
+
+# ── Edit approval queue ───────────────────────────────────────────────────────
+
+class RejectEditBody(BaseModel):
+    note: Optional[str] = None
+
+
+@app.get("/campaigns/{slug}/edits")
+def campaign_list_edits(
+    slug: str,
+    count: bool = False,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if count:
+        return {"count": crud.get_pending_edit_count(db, campaign.id)}
+    edits = crud.get_pending_edits(db, campaign.id)
+    return [
+        {
+            "id": e.id,
+            "session_name": e.session_name,
+            "line_number": e.line_number,
+            "original_text": e.original_text,
+            "proposed_text": e.proposed_text,
+            "status": e.status,
+            "submitted_at": e.submitted_at.isoformat(),
+            "submitter_username": e.submitter.username if e.submitter else None,
+            "submitter_id": e.user_id,
+        }
+        for e in edits
+    ]
+
+
+@app.post("/campaigns/{slug}/edits/{edit_id}/approve")
+def campaign_approve_edit(
+    slug: str,
+    edit_id: int,
+    _member=Depends(require_campaign_member("dm")),
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    edit = crud.get_transcript_edit(db, edit_id)
+    if not edit or edit.campaign_id != campaign.id:
+        raise HTTPException(404, "Edit not found")
+    if edit.status != "pending":
+        raise HTTPException(400, f"Edit is already {edit.status}")
+
+    # Apply the edit to transcript.md
+    path = get_sessions_dir(slug) / edit.session_name / "transcript.md"
+    if not path.exists():
+        raise HTTPException(404, "Transcript not found")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    n = edit.line_number
+    if 1 <= n <= len(lines):
+        lines[n - 1] = edit.proposed_text
+        path.write_text("\n".join(lines), encoding="utf-8")
+
+    reviewer_id = current_user.id if current_user else 0
+    edit = crud.approve_edit(db, edit, reviewer_id)
+    return {"id": edit.id, "status": edit.status}
+
+
+@app.post("/campaigns/{slug}/edits/{edit_id}/reject")
+def campaign_reject_edit(
+    slug: str,
+    edit_id: int,
+    body: RejectEditBody,
+    _member=Depends(require_campaign_member("dm")),
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    edit = crud.get_transcript_edit(db, edit_id)
+    if not edit or edit.campaign_id != campaign.id:
+        raise HTTPException(404, "Edit not found")
+    if edit.status != "pending":
+        raise HTTPException(400, f"Edit is already {edit.status}")
+    reviewer_id = current_user.id if current_user else 0
+    edit = crud.reject_edit(db, edit, reviewer_id, body.note)
+    return {"id": edit.id, "status": edit.status}
 
 
 # ─── Static frontend ──────────────────────────────────────────────────────────
