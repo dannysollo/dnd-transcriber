@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom'
 import './App.css'
 import SessionsPage from './pages/SessionsPage'
@@ -10,6 +10,7 @@ import LoginPage from './pages/LoginPage'
 import CampaignsPage from './pages/CampaignsPage'
 import CampaignSettingsPage from './pages/CampaignSettingsPage'
 import InvitePage from './pages/InvitePage'
+import EditQueuePage from './pages/EditQueuePage'
 import { useAuth, avatarUrl } from './AuthContext'
 import { useCampaign } from './CampaignContext'
 
@@ -25,7 +26,25 @@ export default function App() {
   const { user, isLoggedIn, authEnabled, loading } = useAuth()
   const { campaigns, activeCampaign, setActiveCampaign } = useCampaign()
   const [campaignDropdownOpen, setCampaignDropdownOpen] = useState(false)
+  const [pendingEditCount, setPendingEditCount] = useState(0)
   const navigate = useNavigate()
+
+  // Fetch pending edit count for DMs
+  useEffect(() => {
+    if (!activeCampaign || activeCampaign.role !== 'dm') {
+      setPendingEditCount(0)
+      return
+    }
+    const fetchCount = () => {
+      fetch(`/campaigns/${activeCampaign.slug}/edits?count=true`)
+        .then(r => r.ok ? r.json() : { count: 0 })
+        .then(data => setPendingEditCount(data.count ?? 0))
+        .catch(() => {})
+    }
+    fetchCount()
+    const interval = setInterval(fetchCount, 30000)
+    return () => clearInterval(interval)
+  }, [activeCampaign?.slug, activeCampaign?.role])
 
   const logout = async () => {
     await fetch('/auth/logout', { method: 'POST' })
@@ -137,6 +156,37 @@ export default function App() {
               <span>{label}</span>
             </NavLink>
           ))}
+          {activeCampaign?.role === 'dm' && (
+            <NavLink
+              to="/edit-queue"
+              style={({ isActive }) => ({
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                textDecoration: 'none',
+                transition: 'all 0.15s',
+                background: isActive ? 'rgba(124,108,252,0.15)' : 'transparent',
+                color: isActive ? '#a89cff' : '#94a3b8',
+                fontWeight: isActive ? 600 : 400,
+              })}
+            >
+              <span>📝</span>
+              <span style={{ flex: 1 }}>Edit Queue</span>
+              {pendingEditCount > 0 && (
+                <span style={{
+                  fontSize: '10px', fontWeight: 700,
+                  background: 'rgba(251,191,36,0.2)', color: '#fbbf24',
+                  border: '1px solid rgba(251,191,36,0.4)',
+                  borderRadius: '10px', padding: '1px 6px', minWidth: '18px', textAlign: 'center',
+                }}>
+                  {pendingEditCount}
+                </span>
+              )}
+            </NavLink>
+          )}
         </div>
 
         {/* User / auth section */}
@@ -199,6 +249,7 @@ export default function App() {
           <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/campaigns/:slug/settings" element={<CampaignSettingsPage />} />
           <Route path="/invite/:token" element={<InvitePage />} />
+          <Route path="/edit-queue" element={<EditQueuePage />} />
         </Routes>
       </main>
     </div>

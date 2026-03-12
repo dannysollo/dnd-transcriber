@@ -14,6 +14,48 @@
 | 8 | Settings page + dev launcher | ✅ Done |
 | **Multi-campaign Phase 1** | **Auth + DB foundation** | **✅ Done** |
 | **Multi-campaign Phase 2** | **File structure migration + campaign-scoped routes + frontend** | **✅ Done** |
+| **Multi-campaign Phase 3** | **Roles enforcement + edit approval queue** | **✅ Done** |
+
+---
+
+## Multi-campaign Phase 3 — Roles Enforcement + Edit Approval Queue ✅
+
+Branch: `feature/multi-campaign`
+
+### What was added
+
+**`db/models.py` — new `TranscriptEdit` model:**
+- Fields: id, campaign_id, session_name, user_id, line_number, original_text, proposed_text, status ("pending"|"approved"|"rejected"), submitted_at, reviewed_by, reviewed_at, review_note
+
+**`db/crud.py` — new CRUD ops:**
+- `create_transcript_edit`, `get_pending_edits`, `get_pending_edit_count`, `get_transcript_edit`, `approve_edit`, `reject_edit`
+
+**`server.py` — edit approval API:**
+- `PUT /campaigns/{slug}/sessions/{name}/transcript/line/{n}` — now allows `player+`; when `campaign.settings.require_edit_approval=true` and caller is not DM, creates a `TranscriptEdit` with `status=pending` and returns HTTP 202 instead of writing directly
+- `GET /campaigns/{slug}/edits` — list pending edits (dm+); `?count=true` returns `{count: N}`
+- `POST /campaigns/{slug}/edits/{id}/approve` — apply edit to transcript.md, mark approved (dm+)
+- `POST /campaigns/{slug}/edits/{id}/reject` — mark rejected with optional `review_note` (dm+)
+
+**`gui/src/CampaignContext.tsx` — extended `Campaign` interface:**
+- Added `settings?: CampaignSettings` (includes `require_edit_approval`)
+- Provider maps `settings` from `/campaigns` response
+
+**`gui/src/pages/SessionView.tsx` — edit approval UI:**
+- Imports `useCampaign` to read active campaign role + settings
+- `saveLine()` checks HTTP 202 response and marks line as pending (no local update)
+- Pending lines show amber "Submitted for review" chip
+- Edit mode banner shows "changes will be submitted for DM review" when player + approval required
+
+**`gui/src/pages/EditQueuePage.tsx` — new DM-only page:**
+- Lists all pending edits grouped by session
+- Shows diff (red original / green proposed), submitter, timestamp
+- Approve (green) / Reject (red) with optional rejection note input
+- Non-DMs redirected to home
+
+**`gui/src/App.tsx` — sidebar updates:**
+- Imports `EditQueuePage`, adds `/edit-queue` route
+- "Edit Queue" nav item visible only to DMs with active campaign
+- Amber badge showing pending edit count (polls every 30s)
 
 ---
 

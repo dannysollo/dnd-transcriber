@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useApiUrl } from '../CampaignContext'
+import { useApiUrl, useCampaign } from '../CampaignContext'
 import ReactMarkdown from 'react-markdown'
 
 // Speaker color palette
@@ -599,12 +599,14 @@ function TranscriptView({
   const activeLineRef = useRef<HTMLDivElement | null>(null)
   const targetLineRef = useRef<HTMLDivElement | null>(null)
   const [flashTimestamp, setFlashTimestamp] = useState<string | null>(null)
+  const { activeCampaign } = useCampaign()
   // Edit mode state
   const [editedLines, setEditedLines] = useState<string[]>([])
   const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null)
   const [editingValue, setEditingValue] = useState('')
   const [savingAll, setSavingAll] = useState(false)
   const [savingLine, setSavingLine] = useState(false)
+  const [pendingLines, setPendingLines] = useState<Set<number>>(new Set())
 
   // Initialize editedLines when entering edit mode
   useEffect(() => {
@@ -636,12 +638,17 @@ function TranscriptView({
     if (!sessionName) return
     setSavingLine(true)
     try {
-      await fetch(apiUrl(`/sessions/${sessionName}/transcript/line/${lineIdx + 1}`), {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/transcript/line/${lineIdx + 1}`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: value }),
       })
-      setEditedLines(prev => { const next = [...prev]; next[lineIdx] = value; return next })
+      if (r.status === 202) {
+        // Pending approval — mark line as pending, don't update local text
+        setPendingLines(prev => new Set([...prev, lineIdx]))
+      } else {
+        setEditedLines(prev => { const next = [...prev]; next[lineIdx] = value; return next })
+      }
     } finally {
       setSavingLine(false)
       setEditingLineIdx(null)
@@ -690,7 +697,11 @@ function TranscriptView({
           justifyContent: 'space-between',
           gap: '12px',
         }}>
-          <span>Edit mode — changes write directly to transcript.md. Re-merging will overwrite manual edits.</span>
+          <span>
+            {activeCampaign && activeCampaign.role !== 'dm' && activeCampaign.settings?.require_edit_approval
+              ? 'Edit mode — changes will be submitted for DM review before being applied.'
+              : 'Edit mode — changes write directly to transcript.md. Re-merging will overwrite manual edits.'}
+          </span>
           <button
             onClick={saveAll}
             disabled={savingAll}
@@ -714,6 +725,7 @@ function TranscriptView({
         {displayLines.map((rawLine, lineIdx) => {
           const m = rawLine.match(/^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$/)
           const isEditing = editingLineIdx === lineIdx
+          const isPending = pendingLines.has(lineIdx)
 
           return (
             <div
@@ -724,7 +736,7 @@ function TranscriptView({
                 padding: '3px 6px',
                 alignItems: 'flex-start',
                 borderRadius: '6px',
-                background: isEditing ? 'rgba(251,191,36,0.08)' : 'transparent',
+                background: isEditing ? 'rgba(251,191,36,0.08)' : isPending ? 'rgba(251,191,36,0.05)' : 'transparent',
               }}
             >
               {/* Line number */}
@@ -804,6 +816,17 @@ function TranscriptView({
                 >
                   {rawLine || '\u00a0'}
                 </div>
+              )}
+              {isPending && (
+                <span style={{
+                  flexShrink: 0, alignSelf: 'center',
+                  fontSize: '10px', fontWeight: 600,
+                  color: '#fbbf24', background: 'rgba(251,191,36,0.12)',
+                  border: '1px solid rgba(251,191,36,0.3)',
+                  borderRadius: '4px', padding: '1px 7px', whiteSpace: 'nowrap',
+                }}>
+                  Submitted for review
+                </span>
               )}
             </div>
           )

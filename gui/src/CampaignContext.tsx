@@ -1,10 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 
+export interface CampaignSettings {
+  require_edit_approval?: boolean
+  discord_webhook_url?: string | null
+  discord_channel_id?: string | null
+}
+
 export interface Campaign {
   id: number
   slug: string
   name: string
   role: string
+  settings?: CampaignSettings
 }
 
 interface CampaignContextType {
@@ -37,6 +44,7 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
           slug: c.slug,
           name: c.name,
           role: c.role ?? 'member',
+          settings: c.settings ?? {},
         }))
         setCampaigns(campaignList)
 
