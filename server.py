@@ -189,6 +189,197 @@ def get_wiki(name: str):
     return {"content": path.read_text(encoding="utf-8")}
 
 
+@app.get("/sessions/{name}/corrections-report")
+def corrections_report(name: str):
+    sessions_dir = get_sessions_dir()
+    session_dir = sessions_dir / name
+    transcript_path = session_dir / "transcript.md"
+
+    if not transcript_path.exists():
+        raise HTTPException(404, "Transcript not found")
+
+    config = load_config()
+    corrections = config.get("corrections") or {}
+    patterns = config.get("patterns") or []
+
+    from merge import merge_transcripts
+
+    # Raw text: merge without any corrections applied
+    raw_text = merge_transcripts(str(session_dir))
+    corrected_text = transcript_path.read_text(encoding="utf-8")
+
+    raw_lines = raw_text.splitlines()
+
+    # ── Corrections ──────────────────────────────────────────────────────────
+    corrections_applied = []
+    for wrong, right in corrections.items():
+        try:
+            pat = r"\b" + re.escape(wrong) + r"\b"
+            hits = re.findall(pat, raw_text, flags=re.IGNORECASE)
+            hit_count = len(hits)
+        except re.error:
+            hit_count = 0
+
+        examples = []
+        if hit_count > 0:
+            try:
+                corr_lines = re.sub(
+                    r"\b" + re.escape(wrong) + r"\b", right, raw_text, flags=re.IGNORECASE
+                ).splitlines()
+                for raw_line, corr_line in zip(raw_lines, corr_lines):
+                    if raw_line != corr_line and len(examples) < 3:
+                        # Trim long lines for display
+                        r_snip = raw_line[:120] if len(raw_line) > 120 else raw_line
+                        c_snip = corr_line[:120] if len(corr_line) > 120 else corr_line
+                        examples.append(f"{r_snip} → {c_snip}")
+            except re.error:
+                pass
+
+        corrections_applied.append({
+            "original": wrong,
+            "replacement": right,
+            "hit_count": hit_count,
+            "examples": examples,
+        })
+
+    corrections_applied.sort(key=lambda x: x["hit_count"], reverse=True)
+
+    # ── Patterns ─────────────────────────────────────────────────────────────
+    patterns_applied = []
+    for entry in patterns:
+        match_pat = entry.get("match", "")
+        replace = entry.get("replace", "")
+        try:
+            hits = re.findall(match_pat, raw_text)
+            hit_count = len(hits) if isinstance(hits[0], str) else len(hits) if hits else 0
+        except (re.error, IndexError, TypeError):
+            hit_count = 0
+
+        examples = []
+        if hit_count > 0:
+            try:
+                corr_lines = re.sub(match_pat, replace, raw_text).splitlines()
+                for raw_line, corr_line in zip(raw_lines, corr_lines):
+                    if raw_line != corr_line and len(examples) < 3:
+                        r_snip = raw_line[:120] if len(raw_line) > 120 else raw_line
+                        c_snip = corr_line[:120] if len(corr_line) > 120 else corr_line
+                        examples.append(f"{r_snip} → {c_snip}")
+            except re.error:
+                pass
+
+        patterns_applied.append({
+            "original": match_pat,
+            "replacement": replace,
+            "hit_count": hit_count,
+            "examples": examples,
+        })
+
+    patterns_applied.sort(key=lambda x: x["hit_count"], reverse=True)
+
+    # ── Hallucination detection ───────────────────────────────────────────────
+    HALLUCINATION_PHRASES = {
+        "thank you", "thanks for watching", "you", ".", "...", "bye", "bye bye",
+        "see you", "subscribe", "like and subscribe", "subtitles by", "transcribed by",
+        "www.", ".com",
+    }
+
+    # Load all speaker segments keyed by start time for duration checks
+    speakers_dir = session_dir / "speakers"
+    seg_by_start: dict[float, dict] = {}
+    if speakers_dir.exists():
+        for jf in speakers_dir.glob("*.json"):
+            try:
+                with open(jf, encoding="utf-8") as f:
+                    data = json.load(f)
+                for seg in data.get("segments", []):
+                    seg_by_start[float(seg["start"])] = seg
+            except Exception:
+                pass
+
+    line_re = re.compile(r'^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$')
+    corr_lines_list = corrected_text.splitlines()
+
+    # Count exact text occurrences for duplicate detection
+    text_counts: dict[str, int] = {}
+    for raw_line in corr_lines_list:
+        m = line_re.match(raw_line)
+        if m:
+            txt = m.group(3).strip()
+            text_counts[txt] = text_counts.get(txt, 0) + 1
+
+    hallucinations = []
+    for line_num, raw_line in enumerate(corr_lines_list, 1):
+        m = line_re.match(raw_line)
+        if not m:
+            continue
+        timestamp = m.group(1)
+        speaker = m.group(2).strip()
+        text = m.group(3).strip()
+        text_lower = text.lower().rstrip(".")
+
+        reason: str | None = None
+
+        # Known hallucination phrase match
+        if text_lower in HALLUCINATION_PHRASES or text.lower() in HALLUCINATION_PHRASES:
+            reason = "known whisper artifact"
+
+        # Repeated single-word pattern (e.g. "hello hello hello")
+        if reason is None:
+            words = text_lower.split()
+            if len(words) >= 3 and len(set(words)) == 1:
+                reason = "repeated word artifact"
+
+        # Short text + short segment duration
+        if reason is None and seg_by_start:
+            parts = timestamp.split(":")
+            try:
+                if len(parts) == 2:
+                    ts_sec = int(parts[0]) * 60 + int(parts[1])
+                elif len(parts) == 3:
+                    ts_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                else:
+                    ts_sec = -1
+            except ValueError:
+                ts_sec = -1
+
+            if ts_sec >= 0 and len(text.split()) < 4:
+                for seg_start, seg in seg_by_start.items():
+                    if abs(seg_start - ts_sec) < 5:
+                        duration = float(seg.get("end", seg_start)) - seg_start
+                        if duration < 2.0:
+                            reason = f"short segment ({duration:.1f}s, {len(text.split())} words)"
+                        break
+
+        # 3+ duplicate lines
+        if reason is None and text_counts.get(text, 0) >= 3:
+            reason = f"duplicate line ({text_counts[text]} occurrences)"
+
+        if reason:
+            hallucinations.append({
+                "line": line_num,
+                "timestamp": timestamp,
+                "speaker": speaker,
+                "text": text,
+                "reason": reason,
+            })
+
+    total_hits = (
+        sum(c["hit_count"] for c in corrections_applied)
+        + sum(p["hit_count"] for p in patterns_applied)
+    )
+
+    return {
+        "corrections_applied": corrections_applied,
+        "patterns_applied": patterns_applied,
+        "hallucinations": hallucinations,
+        "stats": {
+            "total_corrections": len(corrections_applied) + len(patterns_applied),
+            "total_hits": total_hits,
+            "hallucination_count": len(hallucinations),
+        },
+    }
+
+
 # ─── Delete session ───────────────────────────────────────────────────────────
 
 @app.delete("/sessions/{name}", status_code=204)

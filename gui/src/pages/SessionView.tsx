@@ -53,7 +53,35 @@ function parseTimestampToSeconds(ts: string): number {
   return 0
 }
 
-type Tab = 'transcript' | 'summary' | 'wiki'
+// ─── Types for Changes tab ────────────────────────────────────────────────────
+
+interface CorrectionEntry {
+  original: string
+  replacement: string
+  hit_count: number
+  examples: string[]
+}
+
+interface HallucinationEntry {
+  line: number
+  timestamp: string
+  speaker: string
+  text: string
+  reason: string
+}
+
+interface ChangesReport {
+  corrections_applied: CorrectionEntry[]
+  patterns_applied: CorrectionEntry[]
+  hallucinations: HallucinationEntry[]
+  stats: {
+    total_corrections: number
+    total_hits: number
+    hallucination_count: number
+  }
+}
+
+type Tab = 'transcript' | 'summary' | 'wiki' | 'changes'
 
 export default function SessionView() {
   const { name } = useParams<{ name: string }>()
@@ -70,6 +98,10 @@ export default function SessionView() {
   const [currentTime, setCurrentTime] = useState(0)
   const [isDragOver, setIsDragOver] = useState(false)
   const [uploadingAudio, setUploadingAudio] = useState(false)
+  const [changesReport, setChangesReport] = useState<ChangesReport | null>(null)
+  const [changesLoading, setChangesLoading] = useState(false)
+  const [changesLoaded, setChangesLoaded] = useState(false)
+  const [targetTimestamp, setTargetTimestamp] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const dragCounter = useRef(0)
   const speakerColors = new Map<string, string>()
@@ -97,10 +129,34 @@ export default function SessionView() {
     } catch (_) {}
   }
 
+  const loadChanges = async () => {
+    if (changesLoaded) return
+    setChangesLoading(true)
+    try {
+      const r = await fetch(`/sessions/${name}/corrections-report`)
+      if (r.ok) {
+        setChangesReport(await r.json())
+      } else {
+        setChangesReport(null)
+      }
+    } catch (_) {
+      setChangesReport(null)
+    } finally {
+      setChangesLoading(false)
+      setChangesLoaded(true)
+    }
+  }
+
   useEffect(() => {
     load()
     loadAudioFiles()
   }, [name])
+
+  useEffect(() => {
+    if (tab === 'changes') {
+      loadChanges()
+    }
+  }, [tab])
 
   // Window-level drag-and-drop
   useEffect(() => {
@@ -158,6 +214,9 @@ export default function SessionView() {
       const r = await fetch(`/sessions/${name}/merge`, { method: 'POST' })
       if (r.ok) {
         load()
+        // Invalidate changes report so it reloads next time
+        setChangesLoaded(false)
+        setChangesReport(null)
       } else {
         const err = await r.json()
         alert(err.detail || 'Merge failed')
@@ -174,10 +233,17 @@ export default function SessionView() {
     }
   }
 
+  const goToHallucination = (timestamp: string) => {
+    setSearch('')
+    setTargetTimestamp(timestamp)
+    setTab('transcript')
+  }
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'transcript', label: 'Transcript' },
     { id: 'summary', label: 'Summary' },
     { id: 'wiki', label: 'Wiki' },
+    { id: 'changes', label: 'Changes' },
   ]
 
   return (
@@ -369,11 +435,19 @@ export default function SessionView() {
             speakerColors={speakerColors}
             currentTime={audioFiles.length > 0 ? currentTime : undefined}
             onSeek={audioFiles.length > 0 ? seekTo : undefined}
+            targetTimestamp={targetTimestamp}
+            onTargetReached={() => setTargetTimestamp(null)}
           />
         ) : tab === 'summary' ? (
           <MarkdownView content={summary} emptyMsg="No summary yet. Run the pipeline to generate one." />
-        ) : (
+        ) : tab === 'wiki' ? (
           <MarkdownView content={wiki} emptyMsg="No wiki suggestions yet. Run the pipeline to generate them." />
+        ) : (
+          <ChangesView
+            report={changesReport}
+            loading={changesLoading}
+            onHallucinationClick={goToHallucination}
+          />
         )}
       </div>
     </div>
@@ -386,14 +460,36 @@ function TranscriptView({
   speakerColors,
   currentTime,
   onSeek,
+  targetTimestamp,
+  onTargetReached,
 }: {
   content: string | null
   search: string
   speakerColors: Map<string, string>
   currentTime?: number
   onSeek?: (seconds: number) => void
+  targetTimestamp?: string | null
+  onTargetReached?: () => void
 }) {
   const activeLineRef = useRef<HTMLDivElement | null>(null)
+  const targetLineRef = useRef<HTMLDivElement | null>(null)
+  const [flashTimestamp, setFlashTimestamp] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!targetTimestamp) return
+    // Small delay to let the DOM settle after tab switch
+    const timer = setTimeout(() => {
+      if (targetLineRef.current) {
+        targetLineRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        setFlashTimestamp(targetTimestamp)
+        setTimeout(() => {
+          setFlashTimestamp(null)
+          onTargetReached?.()
+        }, 2000)
+      }
+    }, 80)
+    return () => clearTimeout(timer)
+  }, [targetTimestamp])
 
   if (!content) {
     return (
@@ -450,6 +546,8 @@ function TranscriptView({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '820px' }}>
       {visible.map((line, i) => {
         const isActive = i === activeIdx
+        const isTarget = line.type === 'speech' && line.timestamp === targetTimestamp
+        const isFlash = line.type === 'speech' && line.timestamp === flashTimestamp
 
         if (line.type === 'heading') {
           return (
@@ -464,15 +562,23 @@ function TranscriptView({
           return (
             <div
               key={i}
-              ref={isActive ? el => { activeLineRef.current = el } : undefined}
+              ref={el => {
+                if (isActive) activeLineRef.current = el
+                if (isTarget) targetLineRef.current = el
+              }}
               style={{
                 display: 'flex',
                 gap: '12px',
                 padding: '5px 6px',
                 alignItems: 'flex-start',
                 borderRadius: '6px',
-                background: isActive ? 'rgba(124,108,252,0.1)' : 'transparent',
-                transition: 'background 0.2s',
+                background: isFlash
+                  ? 'rgba(251,191,36,0.15)'
+                  : isActive
+                  ? 'rgba(124,108,252,0.1)'
+                  : 'transparent',
+                outline: isFlash ? '1px solid rgba(251,191,36,0.4)' : 'none',
+                transition: 'background 0.4s, outline 0.4s',
               }}
             >
               {/* Timestamp — clickable if audio available */}
@@ -570,6 +676,277 @@ function MarkdownView({ content, emptyMsg }: { content: string | null; emptyMsg:
       >
         {content}
       </ReactMarkdown>
+    </div>
+  )
+}
+
+// ─── Changes tab ──────────────────────────────────────────────────────────────
+
+function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: string }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  if (items.length === 0) {
+    return (
+      <div style={{ color: '#475569', fontSize: '13px', fontStyle: 'italic' }}>
+        No {label.toLowerCase()} configured.
+      </div>
+    )
+  }
+
+  const toggle = (key: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      {items.map((item, i) => {
+        const key = `${item.original}::${i}`
+        const isOpen = expanded.has(key)
+        const dimmed = item.hit_count === 0
+        return (
+          <div key={key} style={{
+            borderRadius: '8px',
+            border: '1px solid #1e2130',
+            overflow: 'hidden',
+            opacity: dimmed ? 0.45 : 1,
+          }}>
+            <button
+              onClick={() => toggle(key)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                width: '100%',
+                background: 'transparent',
+                border: 'none',
+                cursor: item.examples.length > 0 ? 'pointer' : 'default',
+                padding: '8px 12px',
+                textAlign: 'left',
+              }}
+            >
+              {/* Arrow */}
+              <span style={{ color: '#475569', fontSize: '10px', flexShrink: 0, width: '10px' }}>
+                {item.examples.length > 0 ? (isOpen ? '▼' : '▶') : ' '}
+              </span>
+              {/* Pill */}
+              <span style={{
+                background: 'rgba(52,211,153,0.12)',
+                border: '1px solid rgba(52,211,153,0.25)',
+                color: '#34d399',
+                borderRadius: '999px',
+                padding: '2px 10px',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                fontWeight: 600,
+                flexShrink: 0,
+              }}>
+                {item.original} → {item.replacement}
+              </span>
+              {/* Hit count badge */}
+              <span style={{
+                background: item.hit_count > 0 ? 'rgba(52,211,153,0.15)' : '#1a1d27',
+                color: item.hit_count > 0 ? '#34d399' : '#475569',
+                borderRadius: '999px',
+                padding: '1px 8px',
+                fontSize: '11px',
+                fontWeight: 700,
+                flexShrink: 0,
+              }}>
+                {item.hit_count} {item.hit_count === 1 ? 'hit' : 'hits'}
+              </span>
+            </button>
+
+            {isOpen && item.examples.length > 0 && (
+              <div style={{
+                padding: '6px 12px 10px 32px',
+                borderTop: '1px solid #1a1d27',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+              }}>
+                {item.examples.map((ex, ei) => {
+                  const arrow = ex.indexOf(' → ')
+                  const before = arrow >= 0 ? ex.slice(0, arrow) : ex
+                  const after = arrow >= 0 ? ex.slice(arrow + 3) : ''
+                  return (
+                    <div key={ei} style={{ fontSize: '11px', fontFamily: 'monospace', color: '#94a3b8', lineHeight: 1.5 }}>
+                      <ExampleLine text={before} word={item.original} color="#f87171" />
+                      {after && (
+                        <>
+                          <span style={{ color: '#475569' }}> → </span>
+                          <ExampleLine text={after} word={item.replacement} color="#34d399" />
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ExampleLine({ text, word, color }: { text: string; word: string; color: string }) {
+  const re = new RegExp(`(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+  const parts = text.split(re)
+  return (
+    <>
+      {parts.map((part, i) =>
+        re.test(part) ? (
+          <mark key={i} style={{ background: `${color}25`, color, borderRadius: '2px', padding: '0 1px' }}>
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  )
+}
+
+function ChangesView({
+  report,
+  loading,
+  onHallucinationClick,
+}: {
+  report: ChangesReport | null
+  loading: boolean
+  onHallucinationClick: (timestamp: string) => void
+}) {
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#64748b', paddingTop: '60px', justifyContent: 'center' }}>
+        <span style={{ fontSize: '18px', animation: 'spin 1s linear infinite' }}>⟳</span>
+        Analyzing corrections...
+      </div>
+    )
+  }
+
+  if (!report) {
+    return (
+      <div style={{ color: '#64748b', textAlign: 'center', paddingTop: '60px' }}>
+        No transcript yet. Run the pipeline to generate one.
+      </div>
+    )
+  }
+
+  const { corrections_applied, patterns_applied, hallucinations, stats } = report
+
+  return (
+    <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+
+      {/* Stats bar */}
+      <div style={{
+        display: 'flex',
+        gap: '6px',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        background: '#0d1017',
+        border: '1px solid #1e2130',
+        borderRadius: '10px',
+        padding: '12px 16px',
+        fontSize: '13px',
+        color: '#94a3b8',
+      }}>
+        <span style={{ color: '#34d399', fontWeight: 700 }}>
+          {stats.total_corrections} correction{stats.total_corrections !== 1 ? 's' : ''} configured
+        </span>
+        <span style={{ color: '#475569' }}>·</span>
+        <span>
+          <span style={{ color: '#34d399', fontWeight: 700 }}>{stats.total_hits}</span> total hits
+        </span>
+        <span style={{ color: '#475569' }}>·</span>
+        <span>
+          <span style={{ color: stats.hallucination_count > 0 ? '#fbbf24' : '#64748b', fontWeight: 700 }}>
+            {stats.hallucination_count}
+          </span>{' '}
+          potential hallucination{stats.hallucination_count !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {/* Corrections Applied */}
+      <section>
+        <h3 style={{ margin: '0 0 10px', fontSize: '12px', fontWeight: 700, color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Corrections Applied
+        </h3>
+        <CorrectionList items={corrections_applied} label="Corrections" />
+      </section>
+
+      {/* Patterns Applied */}
+      <section>
+        <h3 style={{ margin: '0 0 10px', fontSize: '12px', fontWeight: 700, color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Patterns Applied
+        </h3>
+        <CorrectionList items={patterns_applied} label="Patterns" />
+      </section>
+
+      {/* Possible Hallucinations */}
+      <section>
+        <h3 style={{ margin: '0 0 10px', fontSize: '12px', fontWeight: 700, color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Possible Hallucinations
+        </h3>
+        {hallucinations.length === 0 ? (
+          <div style={{ color: '#475569', fontSize: '13px', fontStyle: 'italic' }}>
+            No suspicious lines detected.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {hallucinations.map((h, i) => (
+              <button
+                key={i}
+                onClick={() => onHallucinationClick(h.timestamp)}
+                title="Jump to this line in Transcript"
+                style={{
+                  display: 'flex',
+                  gap: '10px',
+                  alignItems: 'baseline',
+                  background: 'rgba(251,191,36,0.05)',
+                  border: '1px solid rgba(251,191,36,0.15)',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  width: '100%',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(251,191,36,0.1)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(251,191,36,0.05)')}
+              >
+                <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#fbbf24', flexShrink: 0 }}>
+                  {h.timestamp}
+                </span>
+                <span style={{ fontSize: '11px', color: '#94a3b8', flexShrink: 0 }}>
+                  {h.speaker}
+                </span>
+                <span style={{ fontSize: '13px', color: '#e2e8f0', flex: 1 }}>
+                  "{h.text}"
+                </span>
+                <span style={{
+                  background: 'rgba(251,191,36,0.15)',
+                  color: '#fbbf24',
+                  borderRadius: '999px',
+                  padding: '1px 8px',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                }}>
+                  {h.reason}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
     </div>
   )
 }
