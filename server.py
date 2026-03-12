@@ -58,17 +58,30 @@ ws_clients: list[WebSocket] = []
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def load_config() -> dict:
+def load_config(campaign_slug: Optional[str] = None) -> dict:
+    if campaign_slug:
+        path = BASE_DIR / "campaigns" / campaign_slug / "config.yaml"
+        if path.exists():
+            with open(path) as f:
+                return yaml.safe_load(f)
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f)
 
 
-def save_config(config: dict):
+def save_config(config: dict, campaign_slug: Optional[str] = None):
+    if campaign_slug:
+        path = BASE_DIR / "campaigns" / campaign_slug / "config.yaml"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as f:
+            yaml.dump(config, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        return
     with open(CONFIG_PATH, "w") as f:
         yaml.dump(config, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
 
-def get_sessions_dir() -> Path:
+def get_sessions_dir(campaign_slug: Optional[str] = None) -> Path:
+    if campaign_slug:
+        return BASE_DIR / "campaigns" / campaign_slug / "sessions"
     config = load_config()
     return BASE_DIR / config.get("sessions_dir", "sessions")
 
@@ -638,13 +651,13 @@ def import_corrections_from_wiki(name: str):
 
 # ─── Batch re-merge all sessions ──────────────────────────────────────────────
 
-def _merge_all_thread():
+def _merge_all_thread(campaign_slug: Optional[str] = None):
     global pipeline_state
     pipeline_state["running"] = True
     pipeline_state["log"] = []
 
-    sessions_dir = get_sessions_dir()
-    config = load_config()
+    sessions_dir = get_sessions_dir(campaign_slug)
+    config = load_config(campaign_slug)
 
     sessions_to_process = []
     for d in sorted(sessions_dir.iterdir()):
@@ -890,7 +903,8 @@ class PipelineRunBody(BaseModel):
     wiki_only: bool = False
 
 
-def _pipeline_thread(session: str, transcribe_only: bool, wiki_only: bool):
+def _pipeline_thread(session: str, transcribe_only: bool, wiki_only: bool,
+                     campaign_slug: Optional[str] = None):
     global pipeline_state
     pipeline_state["running"] = True
     pipeline_state["session"] = session
@@ -901,6 +915,8 @@ def _pipeline_thread(session: str, transcribe_only: bool, wiki_only: bool):
         cmd.append("--transcribe-only")
     if wiki_only:
         cmd.append("--wiki-only")
+    if campaign_slug:
+        cmd.extend(["--campaign", campaign_slug])
 
     try:
         proc = subprocess.Popen(
@@ -971,6 +987,16 @@ async def broadcast_logs():
 async def startup():
     init_db()
     asyncio.create_task(broadcast_logs())
+    # Auto-migrate flat sessions/ → campaigns/{slug}/sessions/ if needed
+    sessions_dir = BASE_DIR / "sessions"
+    campaigns_dir = BASE_DIR / "campaigns"
+    if sessions_dir.exists() and not campaigns_dir.exists():
+        print("Detected sessions/ without campaigns/ — running auto-migration...")
+        try:
+            from migrate import run_migration
+            run_migration(verbose=True)
+        except Exception as e:
+            print(f"Auto-migration warning: {e}")
 
 
 @app.websocket("/ws/progress")
