@@ -583,6 +583,204 @@ def merge_session(name: str):
         raise HTTPException(500, str(e))
 
 
+# ─── Import corrections from wiki suggestions ─────────────────────────────────
+
+@app.post("/sessions/{name}/import-corrections")
+def import_corrections_from_wiki(name: str):
+    sessions_dir = get_sessions_dir()
+    wiki_path = sessions_dir / name / "wiki_suggestions.md"
+    if not wiki_path.exists():
+        raise HTTPException(404, "wiki_suggestions.md not found")
+
+    content = wiki_path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+    in_section = False
+    found: list[tuple[str, str]] = []
+
+    for line in lines:
+        if re.match(r'^#+\s+.*[Pp]roper\s+[Nn]oun\s+[Cc]orrections', line):
+            in_section = True
+            continue
+        if in_section and re.match(r'^#', line):
+            break
+        if in_section:
+            # Match: - "wrong" → "Correct"  (arrow may be → or ->)
+            m = re.match(r'^-\s+"([^"]+)"\s+(?:→|->)\s+"([^"]+)"', line)
+            if m:
+                found.append((m.group(1), m.group(2)))
+
+    config = load_config()
+    corrections = dict(config.get("corrections") or {})
+
+    imported = []
+    skipped = []
+    for wrong, right in found:
+        if wrong in corrections:
+            skipped.append({"from": wrong, "to": right})
+        else:
+            corrections[wrong] = right
+            imported.append({"from": wrong, "to": right})
+
+    if imported:
+        config["corrections"] = corrections
+        save_config(config)
+
+    return {"imported": imported, "skipped": skipped}
+
+
+# ─── Batch re-merge all sessions ──────────────────────────────────────────────
+
+def _merge_all_thread():
+    global pipeline_state
+    pipeline_state["running"] = True
+    pipeline_state["log"] = []
+
+    sessions_dir = get_sessions_dir()
+    config = load_config()
+
+    sessions_to_process = []
+    for d in sorted(sessions_dir.iterdir()):
+        if d.is_dir() and not d.name.startswith("."):
+            speakers_dir = d / "speakers"
+            if speakers_dir.exists() and any(speakers_dir.glob("*.json")):
+                sessions_to_process.append(d.name)
+
+    log_queue.put(f"Re-merging {len(sessions_to_process)} session(s) with current corrections...")
+
+    processed = []
+    failed = []
+    for session_name in sessions_to_process:
+        log_queue.put(f"  [{session_name}] merging...")
+        try:
+            from merge import save_transcript
+            save_transcript(
+                str(sessions_dir / session_name),
+                corrections=config.get("corrections"),
+                patterns=config.get("patterns"),
+            )
+            processed.append(session_name)
+            log_queue.put(f"  ✓ {session_name}")
+        except Exception as e:
+            failed.append(session_name)
+            log_queue.put(f"  ✗ {session_name}: {e}")
+
+    log_queue.put("")
+    log_queue.put(f"Complete: {len(processed)} merged, {len(failed)} failed")
+    if failed:
+        log_queue.put(f"Failed sessions: {', '.join(failed)}")
+    log_queue.put("__EXIT__0")
+    pipeline_state["running"] = False
+
+
+@app.post("/merge/all")
+def merge_all():
+    if pipeline_state["running"]:
+        raise HTTPException(409, "Pipeline already running")
+    pipeline_state["running"] = True
+    pipeline_state["session"] = None
+    pipeline_state["log"] = []
+    t = threading.Thread(target=_merge_all_thread, daemon=True)
+    t.start()
+    return {"ok": True}
+
+
+# ─── Speakers ─────────────────────────────────────────────────────────────────
+
+@app.get("/sessions/{name}/speakers")
+def get_speakers(name: str):
+    sessions_dir = get_sessions_dir()
+    path = sessions_dir / name / "transcript.md"
+    if not path.exists():
+        raise HTTPException(404, "Transcript not found")
+
+    content = path.read_text(encoding="utf-8")
+    line_re = re.compile(r'^\*\*\[[^\]]+\] ([^:]+):\*\*')
+    speaker_counts: dict[str, int] = {}
+    for line in content.splitlines():
+        m = line_re.match(line)
+        if m:
+            speaker = m.group(1).strip()
+            speaker_counts[speaker] = speaker_counts.get(speaker, 0) + 1
+
+    speakers = [
+        {"name": spk, "line_count": cnt}
+        for spk, cnt in sorted(speaker_counts.items(), key=lambda x: -x[1])
+    ]
+    return {"speakers": speakers}
+
+
+class RenameSpeakerBody(BaseModel):
+    old_name: str
+    new_name: str
+
+
+@app.post("/sessions/{name}/rename-speaker")
+def rename_speaker(name: str, body: RenameSpeakerBody):
+    sessions_dir = get_sessions_dir()
+    path = sessions_dir / name / "transcript.md"
+    if not path.exists():
+        raise HTTPException(404, "Transcript not found")
+
+    content = path.read_text(encoding="utf-8")
+    old_escaped = re.escape(body.old_name)
+    pattern = r'(\*\*\[[^\]]+\] )' + old_escaped + r'(:\*\*)'
+    new_name_str = body.new_name
+    new_content, count = re.subn(
+        pattern,
+        lambda m: m.group(1) + new_name_str + m.group(2),
+        content,
+    )
+    path.write_text(new_content, encoding="utf-8")
+    return {"replacements": count}
+
+
+# ─── Transcript editing ────────────────────────────────────────────────────────
+
+class TranscriptContentBody(BaseModel):
+    content: str
+
+
+@app.put("/sessions/{name}/transcript")
+def put_transcript(name: str, body: TranscriptContentBody):
+    sessions_dir = get_sessions_dir()
+    session_dir = sessions_dir / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    path = session_dir / "transcript.md"
+    path.write_text(body.content, encoding="utf-8")
+    return {"lines": body.content.count("\n")}
+
+
+@app.get("/sessions/{name}/transcript/line/{line_number}")
+def get_transcript_line(name: str, line_number: int):
+    sessions_dir = get_sessions_dir()
+    path = sessions_dir / name / "transcript.md"
+    if not path.exists():
+        raise HTTPException(404, "Transcript not found")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if line_number < 1 or line_number > len(lines):
+        raise HTTPException(404, f"Line {line_number} not found (total: {len(lines)})")
+    return {"line": lines[line_number - 1], "line_number": line_number}
+
+
+class TranscriptLineBody(BaseModel):
+    content: str
+
+
+@app.put("/sessions/{name}/transcript/line/{line_number}")
+def put_transcript_line(name: str, line_number: int, body: TranscriptLineBody):
+    sessions_dir = get_sessions_dir()
+    path = sessions_dir / name / "transcript.md"
+    if not path.exists():
+        raise HTTPException(404, "Transcript not found")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if line_number < 1 or line_number > len(lines):
+        raise HTTPException(404, f"Line {line_number} not found (total: {len(lines)})")
+    lines[line_number - 1] = body.content
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return {"line_number": line_number, "content": body.content}
+
+
 # ─── Config ───────────────────────────────────────────────────────────────────
 
 @app.get("/config")

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface Pattern {
   match: string
@@ -31,6 +31,16 @@ export default function CorrectionsPage() {
 
   const [activeTab, setActiveTab] = useState<'corrections' | 'patterns'>('corrections')
 
+  // Re-merge all
+  const [sessionCount, setSessionCount] = useState<number | null>(null)
+  const [mergeAllRunning, setMergeAllRunning] = useState(false)
+  const [mergeAllLogs, setMergeAllLogs] = useState<string[]>([])
+  const [mergeAllDone, setMergeAllDone] = useState(false)
+  const [mergeAllExitCode, setMergeAllExitCode] = useState<number | null>(null)
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false)
+  const mergeLogRef = useRef<HTMLDivElement>(null)
+  const wsRef = useRef<WebSocket | null>(null)
+
   const load = async () => {
     setLoading(true)
     const [c, p] = await Promise.all([
@@ -43,6 +53,72 @@ export default function CorrectionsPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  // Fetch session count for Re-merge All button label
+  useEffect(() => {
+    fetch('/sessions').then(r => r.json()).then((sessions: Array<{ name: string; status: string }>) => {
+      const withTranscripts = sessions.filter(s => s.status === 'has_transcript' || s.status === 'complete' || s.status === 'transcribed')
+      setSessionCount(withTranscripts.length)
+    }).catch(() => {})
+  }, [])
+
+  // Auto-scroll merge logs
+  useEffect(() => {
+    if (mergeLogRef.current) mergeLogRef.current.scrollTop = mergeLogRef.current.scrollHeight
+  }, [mergeAllLogs])
+
+  const runMergeAll = () => {
+    setMergeAllLogs([])
+    setMergeAllDone(false)
+    setMergeAllExitCode(null)
+    setMergeAllRunning(true)
+    setShowMergeConfirm(false)
+
+    // Open WebSocket first, then trigger the merge
+    const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
+    const ws = new WebSocket(`${protocol}://${location.host}/ws/progress`)
+    wsRef.current = ws
+
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data)
+      if (msg.type === 'log') {
+        const line: string = msg.line
+        if (line.startsWith('__EXIT__')) {
+          const code = parseInt(line.replace('__EXIT__', ''))
+          setMergeAllExitCode(code)
+          setMergeAllRunning(false)
+          setMergeAllDone(true)
+          ws.close()
+        } else {
+          setMergeAllLogs(prev => [...prev, line])
+        }
+      }
+    }
+
+    ws.onopen = () => {
+      fetch('/merge/all', { method: 'POST' }).then(r => {
+        if (!r.ok) {
+          r.json().then(err => {
+            setMergeAllLogs(prev => [...prev, `Error: ${err.detail || 'Failed to start'}`])
+            setMergeAllRunning(false)
+            ws.close()
+          })
+        }
+      })
+    }
+
+    ws.onerror = () => {
+      setMergeAllRunning(false)
+      ws.close()
+    }
+  }
+
+  const getLineColor = (line: string) => {
+    if (line.startsWith('ERROR') || line.includes('✗') || line.includes('failed')) return '#f87171'
+    if (line.includes('✓') || line.includes('complete') || line.includes('Complete')) return '#4ade80'
+    if (line.startsWith('  ')) return '#94a3b8'
+    return '#cbd5e1'
+  }
 
   const saveCorrections = async (updated: Record<string, string>) => {
     setSaving(true)
@@ -288,6 +364,141 @@ export default function CorrectionsPage() {
               </div>
             </>
           )}
+        </div>
+
+        {/* Re-merge All section */}
+        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ borderTop: '1px solid #1e2130', paddingTop: '14px' }}>
+            {!showMergeConfirm ? (
+              <button
+                onClick={() => setShowMergeConfirm(true)}
+                disabled={mergeAllRunning}
+                style={{
+                  background: mergeAllRunning ? '#2a2d3a' : 'rgba(251,191,36,0.12)',
+                  border: `1px solid ${mergeAllRunning ? '#2a2d3a' : 'rgba(251,191,36,0.3)'}`,
+                  borderRadius: '8px',
+                  color: mergeAllRunning ? '#64748b' : '#fbbf24',
+                  padding: '8px 18px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: mergeAllRunning ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                {mergeAllRunning ? (
+                  <>
+                    <span style={{ width: 12, height: 12, border: '2px solid rgba(251,191,36,0.3)', borderTopColor: '#fbbf24', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                    Re-merging...
+                  </>
+                ) : (
+                  <>Re-merge All{sessionCount !== null ? ` (${sessionCount} sessions)` : ''}</>
+                )}
+              </button>
+            ) : (
+              <div style={{
+                background: 'rgba(251,191,36,0.08)',
+                border: '1px solid rgba(251,191,36,0.25)',
+                borderRadius: '10px',
+                padding: '14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+              }}>
+                <div style={{ fontSize: '13px', color: '#fbbf24' }}>
+                  Re-run merge on all {sessionCount !== null ? sessionCount : ''} sessions with current corrections?
+                </div>
+                <div style={{ fontSize: '12px', color: '#64748b' }}>
+                  This will overwrite transcript.md for every session that has speaker JSON files.
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={runMergeAll}
+                    style={{
+                      background: 'rgba(251,191,36,0.2)',
+                      border: '1px solid rgba(251,191,36,0.4)',
+                      borderRadius: '8px',
+                      color: '#fbbf24',
+                      padding: '7px 16px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    onClick={() => setShowMergeConfirm(false)}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #2a2d3a',
+                      borderRadius: '8px',
+                      color: '#64748b',
+                      padding: '7px 16px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Merge log output */}
+            {(mergeAllLogs.length > 0 || mergeAllRunning) && (
+              <div style={{
+                marginTop: '10px',
+                background: '#0d0f18',
+                border: '1px solid #1e2130',
+                borderRadius: '10px',
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  padding: '8px 12px',
+                  borderBottom: '1px solid #1e2130',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '11px',
+                  color: '#64748b',
+                  fontWeight: 600,
+                }}>
+                  Output
+                  {mergeAllRunning && (
+                    <span style={{ width: 10, height: 10, border: '2px solid rgba(124,108,252,0.3)', borderTopColor: '#7c6cfc', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                  )}
+                  {mergeAllDone && mergeAllExitCode !== null && (
+                    <span style={{ color: mergeAllExitCode === 0 ? '#4ade80' : '#f87171', fontWeight: 700 }}>
+                      {mergeAllExitCode === 0 ? '✓ Done' : `✗ Exit ${mergeAllExitCode}`}
+                    </span>
+                  )}
+                </div>
+                <div
+                  ref={mergeLogRef}
+                  style={{
+                    padding: '10px 12px',
+                    fontFamily: 'monospace',
+                    fontSize: '11px',
+                    lineHeight: 1.7,
+                    maxHeight: '220px',
+                    overflowY: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1px',
+                  }}
+                >
+                  {mergeAllLogs.map((line, i) => (
+                    <div key={i} style={{ color: getLineColor(line), whiteSpace: 'pre-wrap' }}>
+                      {line || '\u00a0'}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right: test panel */}

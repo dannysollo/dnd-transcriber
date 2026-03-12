@@ -139,6 +139,7 @@ export default function SessionView() {
   const [changesLoading, setChangesLoading] = useState(false)
   const [changesLoaded, setChangesLoaded] = useState(false)
   const [targetTimestamp, setTargetTimestamp] = useState<string | null>(null)
+  const [editMode, setEditMode] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
   const pendingSeekRef = useRef<number | null>(null)
   const dragCounter = useRef(0)
@@ -427,26 +428,51 @@ export default function SessionView() {
         ))}
 
         {tab === 'transcript' && (
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', padding: '8px 0' }}>
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search transcript..."
-              style={{
-                background: '#1a1d27',
-                border: '1px solid #2a2d3a',
-                borderRadius: '8px',
-                color: '#e2e8f0',
-                padding: '6px 12px',
-                fontSize: '12px',
-                width: '200px',
-                outline: 'none',
-              }}
-            />
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
+            {!editMode && (
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search transcript..."
+                style={{
+                  background: '#1a1d27',
+                  border: '1px solid #2a2d3a',
+                  borderRadius: '8px',
+                  color: '#e2e8f0',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  width: '200px',
+                  outline: 'none',
+                }}
+              />
+            )}
+            {transcript && (
+              <button
+                onClick={() => setEditMode(m => !m)}
+                style={{
+                  background: editMode ? 'rgba(251,191,36,0.15)' : 'transparent',
+                  border: `1px solid ${editMode ? 'rgba(251,191,36,0.4)' : '#2a2d3a'}`,
+                  borderRadius: '8px',
+                  color: editMode ? '#fbbf24' : '#64748b',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {editMode ? 'Exit Edit' : 'Edit Transcript'}
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      {/* Speakers panel — transcript tab only */}
+      {tab === 'transcript' && transcript && (
+        <SpeakersPanel sessionName={name!} onRename={() => { load(); setChangesLoaded(false); setChangesReport(null) }} />
+      )}
 
       {/* Audio player panel — transcript tab only */}
       {tab === 'transcript' && audioFiles.length > 0 && (
@@ -524,11 +550,14 @@ export default function SessionView() {
             onSeek={audioFiles.length > 0 ? seekAndSwitch : undefined}
             targetTimestamp={targetTimestamp}
             onTargetReached={() => setTargetTimestamp(null)}
+            sessionName={name!}
+            editMode={editMode}
+            onTranscriptChange={() => { load(); setChangesLoaded(false); setChangesReport(null) }}
           />
         ) : tab === 'summary' ? (
           <MarkdownView content={summary} emptyMsg="No summary yet. Run the pipeline to generate one." />
         ) : tab === 'wiki' ? (
-          <WikiView sessionName={name!} wikiMarkdown={wiki} />
+          <WikiView sessionName={name!} wikiMarkdown={wiki} onRemerge={doMerge} />
         ) : (
           <ChangesView
             report={changesReport}
@@ -550,6 +579,9 @@ function TranscriptView({
   onSeek,
   targetTimestamp,
   onTargetReached,
+  sessionName,
+  editMode,
+  onTranscriptChange,
 }: {
   content: string | null
   search: string
@@ -558,14 +590,33 @@ function TranscriptView({
   onSeek?: (seconds: number, speaker?: string) => void
   targetTimestamp?: string | null
   onTargetReached?: () => void
+  sessionName?: string
+  editMode?: boolean
+  onTranscriptChange?: () => void
 }) {
   const activeLineRef = useRef<HTMLDivElement | null>(null)
   const targetLineRef = useRef<HTMLDivElement | null>(null)
   const [flashTimestamp, setFlashTimestamp] = useState<string | null>(null)
+  // Edit mode state
+  const [editedLines, setEditedLines] = useState<string[]>([])
+  const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null)
+  const [editingValue, setEditingValue] = useState('')
+  const [savingAll, setSavingAll] = useState(false)
+  const [savingLine, setSavingLine] = useState(false)
+
+  // Initialize editedLines when entering edit mode
+  useEffect(() => {
+    if (editMode && content) {
+      setEditedLines(content.split('\n'))
+      setEditingLineIdx(null)
+    }
+    if (!editMode) {
+      setEditingLineIdx(null)
+    }
+  }, [editMode, content])
 
   useEffect(() => {
     if (!targetTimestamp) return
-    // Small delay to let the DOM settle after tab switch
     const timer = setTimeout(() => {
       if (targetLineRef.current) {
         targetLineRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' })
@@ -579,6 +630,37 @@ function TranscriptView({
     return () => clearTimeout(timer)
   }, [targetTimestamp])
 
+  const saveLine = async (lineIdx: number, value: string) => {
+    if (!sessionName) return
+    setSavingLine(true)
+    try {
+      await fetch(`/sessions/${sessionName}/transcript/line/${lineIdx + 1}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: value }),
+      })
+      setEditedLines(prev => { const next = [...prev]; next[lineIdx] = value; return next })
+    } finally {
+      setSavingLine(false)
+      setEditingLineIdx(null)
+    }
+  }
+
+  const saveAll = async () => {
+    if (!sessionName) return
+    setSavingAll(true)
+    try {
+      await fetch(`/sessions/${sessionName}/transcript`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editedLines.join('\n') }),
+      })
+      onTranscriptChange?.()
+    } finally {
+      setSavingAll(false)
+    }
+  }
+
   if (!content) {
     return (
       <div style={{ color: '#64748b', textAlign: 'center', paddingTop: '60px' }}>
@@ -587,6 +669,148 @@ function TranscriptView({
     )
   }
 
+  // ── Edit mode rendering ──────────────────────────────────────────────────
+  if (editMode) {
+    const displayLines = editedLines.length > 0 ? editedLines : content.split('\n')
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0', maxWidth: '820px' }}>
+        {/* Warning banner */}
+        <div style={{
+          background: 'rgba(251,191,36,0.1)',
+          border: '1px solid rgba(251,191,36,0.3)',
+          borderRadius: '8px',
+          padding: '10px 14px',
+          marginBottom: '12px',
+          fontSize: '12px',
+          color: '#fbbf24',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+        }}>
+          <span>Edit mode — changes write directly to transcript.md. Re-merging will overwrite manual edits.</span>
+          <button
+            onClick={saveAll}
+            disabled={savingAll}
+            style={{
+              background: savingAll ? '#2a2d3a' : 'rgba(251,191,36,0.2)',
+              border: '1px solid rgba(251,191,36,0.4)',
+              borderRadius: '6px',
+              color: savingAll ? '#64748b' : '#fbbf24',
+              padding: '5px 14px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: savingAll ? 'not-allowed' : 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            {savingAll ? 'Saving...' : 'Save All'}
+          </button>
+        </div>
+
+        {displayLines.map((rawLine, lineIdx) => {
+          const m = rawLine.match(/^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$/)
+          const isEditing = editingLineIdx === lineIdx
+
+          return (
+            <div
+              key={lineIdx}
+              style={{
+                display: 'flex',
+                gap: '8px',
+                padding: '3px 6px',
+                alignItems: 'flex-start',
+                borderRadius: '6px',
+                background: isEditing ? 'rgba(251,191,36,0.08)' : 'transparent',
+              }}
+            >
+              {/* Line number */}
+              <span style={{
+                fontSize: '10px',
+                color: '#2a2d3a',
+                fontFamily: 'monospace',
+                flexShrink: 0,
+                width: '36px',
+                textAlign: 'right',
+                paddingTop: '3px',
+                userSelect: 'none',
+              }}>
+                {lineIdx + 1}
+              </span>
+
+              {isEditing ? (
+                <input
+                  autoFocus
+                  value={editingValue}
+                  onChange={e => setEditingValue(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { saveLine(lineIdx, editingValue) }
+                    else if (e.key === 'Escape') { setEditingLineIdx(null) }
+                  }}
+                  onBlur={() => saveLine(lineIdx, editingValue)}
+                  disabled={savingLine}
+                  style={{
+                    flex: 1,
+                    background: '#13151f',
+                    border: '1px solid rgba(251,191,36,0.4)',
+                    borderRadius: '4px',
+                    color: '#e2e8f0',
+                    padding: '2px 8px',
+                    fontSize: '12px',
+                    fontFamily: 'monospace',
+                    outline: 'none',
+                  }}
+                />
+              ) : m ? (
+                <div
+                  onClick={() => { setEditingLineIdx(lineIdx); setEditingValue(rawLine) }}
+                  title="Click to edit"
+                  style={{
+                    display: 'flex',
+                    gap: '8px',
+                    alignItems: 'flex-start',
+                    flex: 1,
+                    cursor: 'text',
+                    borderRadius: '4px',
+                    padding: '2px 4px',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <span style={{ fontSize: '11px', color: '#475569', fontFamily: 'monospace', paddingTop: '2px', flexShrink: 0, width: '48px', textAlign: 'right' }}>
+                    {m[1]}
+                  </span>
+                  <span style={{ background: `${getSpeakerColor(m[2].trim(), speakerColors)}20`, color: getSpeakerColor(m[2].trim(), speakerColors), borderRadius: '4px', padding: '1px 8px', fontSize: '11px', fontWeight: 700, flexShrink: 0 }}>
+                    {m[2].trim()}
+                  </span>
+                  <span style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: 1.6 }}>{m[3]}</span>
+                </div>
+              ) : rawLine.startsWith('#') ? (
+                <div
+                  onClick={() => { setEditingLineIdx(lineIdx); setEditingValue(rawLine) }}
+                  style={{ flex: 1, cursor: 'text', fontSize: '14px', fontWeight: 700, color: '#e2e8f0', paddingTop: '2px' }}
+                >
+                  {rawLine.replace(/^#+\s*/, '')}
+                </div>
+              ) : rawLine.trim() === '' ? (
+                <div style={{ flex: 1, height: '8px' }} />
+              ) : (
+                <div
+                  onClick={() => { setEditingLineIdx(lineIdx); setEditingValue(rawLine) }}
+                  style={{ flex: 1, cursor: 'text', fontSize: '12px', color: '#64748b', paddingTop: '2px' }}
+                >
+                  {rawLine || '\u00a0'}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // ── Read mode rendering ──────────────────────────────────────────────────
   const lines = parseTranscript(content)
   const searchLower = search.toLowerCase()
 
@@ -1242,15 +1466,171 @@ function ExampleLine({ text, word, color }: { text: string; word: string; color:
   )
 }
 
+// ─── Speakers panel ───────────────────────────────────────────────────────────
+
+function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRename: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [speakers, setSpeakers] = useState<Array<{ name: string; line_count: number }>>([])
+  const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null)
+  const [newName, setNewName] = useState('')
+  const [renaming, setRenaming] = useState(false)
+  const [renameResult, setRenameResult] = useState<string | null>(null)
+
+  const loadSpeakers = async () => {
+    try {
+      const r = await fetch(`/sessions/${sessionName}/speakers`)
+      if (r.ok) setSpeakers((await r.json()).speakers)
+    } catch (_) {}
+  }
+
+  useEffect(() => { loadSpeakers() }, [sessionName])
+
+  const doRename = async (oldName: string) => {
+    if (!newName.trim() || newName.trim() === oldName) { setEditingSpeaker(null); return }
+    setRenaming(true)
+    setRenameResult(null)
+    try {
+      const r = await fetch(`/sessions/${sessionName}/rename-speaker`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ old_name: oldName, new_name: newName.trim() }),
+      })
+      if (r.ok) {
+        const data = await r.json()
+        setRenameResult(`Renamed ${data.replacements} occurrence${data.replacements !== 1 ? 's' : ''}`)
+        setEditingSpeaker(null)
+        setNewName('')
+        onRename()
+        loadSpeakers()
+      }
+    } finally {
+      setRenaming(false)
+    }
+  }
+
+  return (
+    <div style={{ borderBottom: '1px solid #1e2130', background: '#080a10', flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 28px',
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          width: '100%',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: '10px', color: '#475569', fontWeight: 700, letterSpacing: '0.08em' }}>SPEAKERS</span>
+        <span style={{ fontSize: '10px', color: '#475569' }}>{open ? '▼' : '▶'}</span>
+        {speakers.length > 0 && (
+          <span style={{ fontSize: '11px', color: '#64748b' }}>
+            {speakers.length} speaker{speakers.length !== 1 ? 's' : ''}
+          </span>
+        )}
+        {renameResult && <span style={{ fontSize: '11px', color: '#34d399', marginLeft: '8px' }}>{renameResult}</span>}
+      </button>
+
+      {open && (
+        <div style={{ padding: '0 28px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{
+            fontSize: '11px',
+            color: '#fbbf24',
+            background: 'rgba(251,191,36,0.08)',
+            border: '1px solid rgba(251,191,36,0.2)',
+            borderRadius: '6px',
+            padding: '6px 10px',
+            marginBottom: '4px',
+          }}>
+            This edits transcript.md directly — re-merging will overwrite speaker names.
+          </div>
+          {speakers.map(s => (
+            <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', color: getSpeakerColor(s.name, new Map()), fontWeight: 600, minWidth: '160px' }}>
+                {s.name}
+              </span>
+              <span style={{ fontSize: '11px', color: '#475569' }}>{s.line_count} line{s.line_count !== 1 ? 's' : ''}</span>
+              {editingSpeaker === s.name ? (
+                <>
+                  <input
+                    autoFocus
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') doRename(s.name)
+                      else if (e.key === 'Escape') { setEditingSpeaker(null); setNewName('') }
+                    }}
+                    placeholder="New name"
+                    style={{
+                      background: '#13151f',
+                      border: '1px solid #2a2d3a',
+                      borderRadius: '6px',
+                      color: '#e2e8f0',
+                      padding: '4px 8px',
+                      fontSize: '12px',
+                      outline: 'none',
+                      width: '160px',
+                    }}
+                  />
+                  <button
+                    onClick={() => doRename(s.name)}
+                    disabled={renaming}
+                    style={{ background: 'rgba(124,108,252,0.2)', border: '1px solid rgba(124,108,252,0.3)', borderRadius: '6px', color: '#a89cff', padding: '4px 10px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    {renaming ? '...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => { setEditingSpeaker(null); setNewName('') }}
+                    style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '13px' }}
+                  >
+                    ✕
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => { setEditingSpeaker(s.name); setNewName(s.name); setRenameResult(null) }}
+                  style={{ background: 'transparent', border: 'none', color: '#475569', cursor: 'pointer', fontSize: '13px', opacity: 0.7 }}
+                  title="Rename speaker"
+                >
+                  ✏️
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Wiki tab ─────────────────────────────────────────────────────────────────
 
-function WikiView({ sessionName, wikiMarkdown }: { sessionName: string; wikiMarkdown: string | null }) {
+function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: string; wikiMarkdown: string | null; onRemerge?: () => void }) {
   const [suggestions, setSuggestions] = useState<WikiSuggestion[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [appliedIds, setAppliedIds] = useState<Set<number>>(new Set())
   const [skippedIds, setSkippedIds] = useState<Set<number>>(new Set())
   const [applying, setApplying] = useState(false)
   const [applyOutput, setApplyOutput] = useState<string | null>(null)
+  // Import corrections
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ imported: Array<{from: string; to: string}>; skipped: Array<{from: string; to: string}> } | null>(null)
+
+  const hasProperNounCorrections = wikiMarkdown?.includes('Proper Noun Corrections') ?? false
+
+  const doImportCorrections = async () => {
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const r = await fetch(`/sessions/${sessionName}/import-corrections`, { method: 'POST' })
+      if (r.ok) setImportResult(await r.json())
+    } finally {
+      setImporting(false)
+    }
+  }
 
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -1360,6 +1740,76 @@ function WikiView({ sessionName, wikiMarkdown }: { sessionName: string; wikiMark
           {skippedIds.size > 0 && <span style={{ color: '#64748b' }}> · {skippedIds.size} skipped</span>}
         </span>
       </div>
+
+      {/* Import corrections section */}
+      {hasProperNounCorrections && (
+        <div style={{
+          background: '#0d1017',
+          border: '1px solid #1e2130',
+          borderRadius: '10px',
+          padding: '14px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+        }}>
+          <div style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            Proper Noun Corrections
+          </div>
+          <div style={{ fontSize: '12px', color: '#64748b' }}>
+            This wiki suggestion contains a "Proper Noun Corrections" section. Import the corrections into config.yaml.
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              onClick={doImportCorrections}
+              disabled={importing}
+              style={{
+                background: 'rgba(124,108,252,0.15)',
+                border: '1px solid rgba(124,108,252,0.3)',
+                borderRadius: '8px',
+                color: '#a89cff',
+                padding: '7px 16px',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: importing ? 'not-allowed' : 'pointer',
+                opacity: importing ? 0.5 : 1,
+              }}
+            >
+              {importing ? 'Importing...' : 'Import Corrections'}
+            </button>
+            {importResult && (
+              <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                {importResult.imported.length > 0 && (
+                  <span style={{ color: '#4ade80' }}>Imported {importResult.imported.length}</span>
+                )}
+                {importResult.imported.length > 0 && importResult.skipped.length > 0 && <span style={{ color: '#475569' }}>, </span>}
+                {importResult.skipped.length > 0 && (
+                  <span style={{ color: '#64748b' }}>{importResult.skipped.length} already existed</span>
+                )}
+                {importResult.imported.length === 0 && importResult.skipped.length === 0 && (
+                  <span style={{ color: '#64748b' }}>No corrections found</span>
+                )}
+              </span>
+            )}
+            {importResult && importResult.imported.length > 0 && onRemerge && (
+              <button
+                onClick={onRemerge}
+                style={{
+                  background: 'rgba(52,211,153,0.12)',
+                  border: '1px solid rgba(52,211,153,0.25)',
+                  borderRadius: '8px',
+                  color: '#34d399',
+                  padding: '7px 14px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Re-merge session
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Apply output */}
       {applyOutput && (
