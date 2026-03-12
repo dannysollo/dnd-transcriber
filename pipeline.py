@@ -65,10 +65,27 @@ def notify_claude(session_dir: Path, session_id: str):
 
 
 def run(session_name: str, config_path: str = "config.yaml",
-        transcribe_only: bool = False, wiki_only: bool = False):
+        transcribe_only: bool = False, wiki_only: bool = False,
+        campaign: str | None = None):
+    """Run the pipeline for a session.
+
+    When --campaign is given, load config from campaigns/{slug}/config.yaml
+    and resolve the session inside campaigns/{slug}/sessions/.
+    Backward compat: no --campaign = existing behavior.
+    """
+    # Campaign-aware path resolution
+    if campaign:
+        base = Path(__file__).parent
+        campaign_dir = base / "campaigns" / campaign
+        campaign_config = campaign_dir / "config.yaml"
+        if campaign_config.exists():
+            config_path = str(campaign_config)
+        sessions_dir = campaign_dir / "sessions"
+    else:
+        config = load_config(config_path)
+        sessions_dir = Path(config.get("sessions_dir", "sessions"))
 
     config = load_config(config_path)
-    sessions_dir = Path(config.get("sessions_dir", "sessions"))
     session_dir = ensure_session_dir(sessions_dir, session_name)
 
     raw_dir = session_dir / "raw"
@@ -136,6 +153,10 @@ if __name__ == "__main__":
                         help="Only run transcription (skip wiki suggestions)")
     parser.add_argument("--wiki-only", action="store_true",
                         help="Only run wiki suggestions (transcript already exists)")
+    parser.add_argument("--campaign", default=None,
+                        help="Campaign slug (e.g. as-above-so-below). Loads config from "
+                             "campaigns/{slug}/config.yaml and sessions from "
+                             "campaigns/{slug}/sessions/. Backward compat: omit for root sessions/.")
     args = parser.parse_args()
 
     run(
@@ -143,4 +164,5 @@ if __name__ == "__main__":
         config_path=args.config,
         transcribe_only=args.transcribe_only,
         wiki_only=args.wiki_only,
+        campaign=args.campaign,
     )
