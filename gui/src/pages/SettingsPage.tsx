@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
-import { useApiUrl } from '../CampaignContext'
+import { useApiUrl, useCampaign } from '../CampaignContext'
+import { useAuth } from '../AuthContext'
 
 
 export default function SettingsPage() {
   const apiUrl = useApiUrl()
+  const { loading: campaignLoading, activeCampaign } = useCampaign()
+  const { authEnabled } = useAuth()
   const [config, setConfig] = useState<Record<string, any> | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -25,7 +28,10 @@ export default function SettingsPage() {
     setVocabError(vdata.error || '')
   }
 
-  useEffect(() => { load() }, [apiUrl])
+  useEffect(() => {
+    if (campaignLoading) return
+    load()
+  }, [apiUrl, campaignLoading])
 
   const save = async () => {
     if (!config) return
@@ -81,6 +87,14 @@ export default function SettingsPage() {
     })
   }
 
+  if (campaignLoading) return <div style={{ padding: '32px', color: '#64748b' }}>Loading...</div>
+  if (authEnabled && !activeCampaign) {
+    return (
+      <div style={{ padding: '32px', color: '#64748b', fontSize: '14px' }}>
+        Select a campaign to view settings.
+      </div>
+    )
+  }
   if (loading) return <div style={{ padding: '32px', color: '#64748b' }}>Loading...</div>
   if (!config) return null
 

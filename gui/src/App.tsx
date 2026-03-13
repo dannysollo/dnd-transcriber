@@ -24,7 +24,7 @@ const navItems = [
 
 export default function App() {
   const { user, isLoggedIn, authEnabled, loading } = useAuth()
-  const { campaigns, activeCampaign, setActiveCampaign } = useCampaign()
+  const { campaigns, activeCampaign, setActiveCampaign, loading: campaignLoading } = useCampaign()
   const [campaignDropdownOpen, setCampaignDropdownOpen] = useState(false)
   const [pendingEditCount, setPendingEditCount] = useState(0)
   const navigate = useNavigate()
@@ -49,6 +49,12 @@ export default function App() {
   const logout = async () => {
     await fetch('/auth/logout', { method: 'POST' })
     window.location.reload()
+  }
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', height: '100vh', background: '#0f1117' }} />
+    )
   }
 
   return (
@@ -78,7 +84,7 @@ export default function App() {
         </div>
 
         {/* Campaign selector */}
-        {campaigns.length > 0 && (
+        {!campaignLoading && campaigns.length > 0 && (
           <div style={{ padding: '8px 12px', borderBottom: '1px solid #1e2130', position: 'relative' }}>
             <div
               onClick={() => setCampaignDropdownOpen(o => !o)}

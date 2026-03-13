@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { useApiUrl } from '../CampaignContext'
+import { useApiUrl, useCampaign } from '../CampaignContext'
+import { useAuth } from '../AuthContext'
 
 interface Pattern {
   match: string
@@ -8,6 +9,8 @@ interface Pattern {
 
 export default function CorrectionsPage() {
   const apiUrl = useApiUrl()
+  const { loading: campaignLoading, activeCampaign } = useCampaign()
+  const { authEnabled } = useAuth()
   const [corrections, setCorrections] = useState<Record<string, string>>({})
   const [patterns, setPatterns] = useState<Pattern[]>([])
   const [loading, setLoading] = useState(true)
@@ -54,7 +57,10 @@ export default function CorrectionsPage() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [apiUrl])
+  useEffect(() => {
+    if (campaignLoading) return
+    load()
+  }, [apiUrl, campaignLoading])
 
   // Fetch session count for Re-merge All button label
   useEffect(() => {
@@ -194,6 +200,18 @@ export default function CorrectionsPage() {
   }
 
   const sortedCorrections = Object.entries(corrections).sort(([a], [b]) => a.localeCompare(b))
+
+  if (campaignLoading) {
+    return <div style={{ padding: '32px', color: '#64748b' }}>Loading...</div>
+  }
+
+  if (authEnabled && !activeCampaign) {
+    return (
+      <div style={{ padding: '32px', color: '#64748b', fontSize: '14px' }}>
+        Select a campaign to view corrections.
+      </div>
+    )
+  }
 
   return (
     <div style={{ padding: '32px', maxWidth: '1100px' }}>

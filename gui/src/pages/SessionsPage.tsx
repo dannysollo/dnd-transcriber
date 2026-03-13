@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useApiUrl } from '../CampaignContext'
+import { useApiUrl, useCampaign } from '../CampaignContext'
+import { useAuth } from '../AuthContext'
 
 interface Session {
   name: string
@@ -32,6 +33,8 @@ export default function SessionsPage() {
   const dragCounters = useRef<Record<string, number>>({})
   const navigate = useNavigate()
   const apiUrl = useApiUrl()
+  const { isLoggedIn, authEnabled } = useAuth()
+  const { activeCampaign } = useCampaign()
 
   const load = async () => {
     setLoading(true)
@@ -170,30 +173,32 @@ export default function SessionsPage() {
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>Sessions</h1>
           <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>All recording sessions</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <input
-            type="text"
-            value={newName}
-            onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && createSession()}
-            placeholder="2026-03-15"
-            style={{
-              background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '8px',
-              color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', width: '160px', outline: 'none',
-            }}
-          />
-          <button
-            onClick={createSession}
-            disabled={creating || !newName.trim()}
-            style={{
-              background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
-              padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-              opacity: (creating || !newName.trim()) ? 0.5 : 1,
-            }}
-          >
-            + New
-          </button>
-        </div>
+        {(!authEnabled || (isLoggedIn && activeCampaign != null)) && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="text"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && createSession()}
+              placeholder="2026-03-15"
+              style={{
+                background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '8px',
+                color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', width: '160px', outline: 'none',
+              }}
+            />
+            <button
+              onClick={createSession}
+              disabled={creating || !newName.trim()}
+              style={{
+                background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
+                padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                opacity: (creating || !newName.trim()) ? 0.5 : 1,
+              }}
+            >
+              + New
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Hidden file input for uploads */}
