@@ -67,7 +67,9 @@ def load_config(campaign_slug: Optional[str] = None) -> dict:
         path = BASE_DIR / "campaigns" / campaign_slug / "config.yaml"
         if path.exists():
             with open(path) as f:
-                return yaml.safe_load(f)
+                return yaml.safe_load(f) or {}
+        # Campaign exists but has no config yet — return empty defaults, never fall back to global
+        return {}
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f)
 
@@ -1058,7 +1060,8 @@ async def auth_discord_callback(
     )
 
     jwt_token = create_access_token(user.id)
-    response = RedirectResponse(url="/")
+    frontend_url = os.getenv("FRONTEND_URL", "")
+    response = RedirectResponse(url=f"{frontend_url}/")
     response.set_cookie(
         key=COOKIE_NAME,
         value=jwt_token,
