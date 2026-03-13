@@ -2359,9 +2359,9 @@ def worker_report_error(
 
 @app.post("/campaigns/{slug}/worker/heartbeat")
 def worker_heartbeat(slug: str, db: Session = Depends(get_db), request: Request = None):
-    from datetime import timezone
+    from datetime import datetime as dt, timezone
     campaign = require_worker_key(slug)(request, db)
-    now = datetime.now(timezone.utc).isoformat()
+    now = dt.now(timezone.utc).isoformat()
     crud.update_campaign_settings(db, campaign, {"worker_last_seen": now})
     return {"ok": True}
 
