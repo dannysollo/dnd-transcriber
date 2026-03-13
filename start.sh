@@ -20,8 +20,11 @@ fi
 echo "Starting DnD Transcriber (dev)..."
 echo ""
 
-# Start backend — FRONTEND_URL tells OAuth where to redirect after login
+# Start backend — load .env if present, then override FRONTEND_URL for dev
 echo "[1/2] Starting FastAPI backend on http://localhost:8766 ..."
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  set -a; source "$SCRIPT_DIR/.env"; set +a
+fi
 FRONTEND_URL=http://localhost:5174 uvicorn server:app --host 0.0.0.0 --port 8766 --reload &
 BACKEND_PID=$!
 
