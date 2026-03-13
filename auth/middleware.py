@@ -55,6 +55,26 @@ def require_user(
     return user
 
 
+def require_worker_key(slug: str):
+    """
+    FastAPI dependency factory for worker API key authentication.
+    Returns a dependency that validates the Bearer token against campaign.settings.worker_api_key.
+    """
+    def _check(request: Request, db: Session = Depends(get_db)):
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing worker API key")
+        token = auth_header[7:]
+        campaign = crud.get_campaign_by_slug(db, slug)
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        stored_key = (campaign.settings or {}).get("worker_api_key")
+        if not stored_key or token != stored_key:
+            raise HTTPException(status_code=403, detail="Invalid worker API key")
+        return campaign
+    return _check
+
+
 def require_campaign_member(min_role: str = "spectator"):
     """
     FastAPI dependency factory. Returns a dependency that validates the user

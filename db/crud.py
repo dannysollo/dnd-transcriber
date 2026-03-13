@@ -7,7 +7,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from db.models import Campaign, CampaignInvite, CampaignMember, TranscriptEdit, User
+from db.models import Campaign, CampaignInvite, CampaignMember, TranscriptEdit, TranscriptionJob, User
 
 
 # ─── User ─────────────────────────────────────────────────────────────────────
@@ -92,6 +92,16 @@ def update_campaign(db: Session, campaign: Campaign, **kwargs) -> Campaign:
     for key, value in kwargs.items():
         if hasattr(campaign, key):
             setattr(campaign, key, value)
+    db.commit()
+    db.refresh(campaign)
+    return campaign
+
+
+def update_campaign_settings(db: Session, campaign: Campaign, settings_dict: dict) -> Campaign:
+    """Merge settings_dict into campaign.settings and commit."""
+    current = dict(campaign.settings or {})
+    current.update(settings_dict)
+    campaign.settings = current
     db.commit()
     db.refresh(campaign)
     return campaign
@@ -237,3 +247,80 @@ def reject_edit(db: Session, edit: TranscriptEdit, reviewer_id: int,
     db.commit()
     db.refresh(edit)
     return edit
+
+
+# ─── TranscriptionJob ─────────────────────────────────────────────────────────
+
+def create_transcription_job(db: Session, campaign_id: int, session_name: str,
+                              created_by: int) -> TranscriptionJob:
+    job = TranscriptionJob(
+        campaign_id=campaign_id,
+        session_name=session_name,
+        created_by=created_by,
+        created_at=datetime.utcnow(),
+        status="pending",
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def get_pending_jobs(db: Session, campaign_id: int) -> list:
+    return (
+        db.query(TranscriptionJob)
+        .filter(TranscriptionJob.campaign_id == campaign_id,
+                TranscriptionJob.status == "pending")
+        .all()
+    )
+
+
+def get_job(db: Session, campaign_id: int, session_name: str) -> Optional[TranscriptionJob]:
+    return (
+        db.query(TranscriptionJob)
+        .filter(TranscriptionJob.campaign_id == campaign_id,
+                TranscriptionJob.session_name == session_name)
+        .first()
+    )
+
+
+def claim_job(db: Session, job: TranscriptionJob) -> TranscriptionJob:
+    job.status = "claimed"
+    job.claimed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def complete_job(db: Session, job: TranscriptionJob) -> TranscriptionJob:
+    job.status = "done"
+    job.completed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def fail_job(db: Session, job: TranscriptionJob, error_msg: str) -> TranscriptionJob:
+    job.status = "error"
+    job.error_message = error_msg
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def reset_job(db: Session, job: TranscriptionJob) -> TranscriptionJob:
+    job.status = "pending"
+    job.claimed_at = None
+    job.error_message = None
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def get_all_jobs(db: Session, campaign_id: int) -> list:
+    return (
+        db.query(TranscriptionJob)
+        .filter(TranscriptionJob.campaign_id == campaign_id)
+        .order_by(TranscriptionJob.created_at.desc())
+        .all()
+    )

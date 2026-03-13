@@ -85,6 +85,24 @@ class CampaignInvite(Base):
     used_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[used_by])
 
 
+class TranscriptionJob(Base):
+    __tablename__ = "transcription_jobs"
+
+    id = Column(Integer, primary_key=True)
+    campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=False)
+    session_name = Column(String(256), nullable=False)
+    status = Column(String(16), nullable=False, default="pending")
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, nullable=False)
+    claimed_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "session_name", name="uq_job_campaign_session"),
+    )
+
+
 class TranscriptEdit(Base):
     __tablename__ = "transcript_edits"
 

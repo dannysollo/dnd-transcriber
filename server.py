@@ -25,10 +25,10 @@ from sqlalchemy.orm import Session
 
 from auth import discord as discord_auth
 from auth.jwt import COOKIE_NAME, create_access_token
-from auth.middleware import AUTH_ENABLED, get_current_user, require_campaign_member, require_user
+from auth.middleware import AUTH_ENABLED, get_current_user, require_campaign_member, require_user, require_worker_key
 from db import crud
 from db.database import get_db, init_db
-from db.models import TranscriptEdit, User
+from db.models import TranscriptEdit, TranscriptionJob, User
 
 APP_DIR = Path(__file__).parent
 CONFIG_PATH = APP_DIR / "config.yaml"
@@ -2191,6 +2191,179 @@ def campaign_reject_edit(
     reviewer_id = current_user.id if current_user else 0
     edit = crud.reject_edit(db, edit, reviewer_id, body.note)
     return {"id": edit.id, "status": edit.status}
+
+
+# ─── Worker / Transcription Jobs ──────────────────────────────────────────────
+
+def _job_dict(job: TranscriptionJob) -> dict:
+    return {
+        "session_name": job.session_name,
+        "status": job.status,
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "claimed_at": job.claimed_at.isoformat() if job.claimed_at else None,
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+        "error_message": job.error_message,
+    }
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/transcribe")
+def request_transcription(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("player")),
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    job = crud.get_job(db, campaign.id, name)
+    if job:
+        if job.status in ("done", "error"):
+            job = crud.reset_job(db, job)
+        else:
+            raise HTTPException(409, {"detail": "job already pending", "status": job.status})
+    else:
+        created_by = current_user.id if current_user else 0
+        job = crud.create_transcription_job(db, campaign.id, name, created_by)
+    return _job_dict(job)
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/transcribe")
+def get_transcription_status(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    job = crud.get_job(db, campaign.id, name)
+    return {"job": _job_dict(job) if job else None}
+
+
+@app.get("/campaigns/{slug}/worker/jobs/all")
+def get_all_jobs(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    jobs = crud.get_all_jobs(db, campaign.id)
+    return [_job_dict(j) for j in jobs]
+
+
+@app.post("/campaigns/{slug}/worker-key")
+def generate_worker_key(
+    slug: str,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    import secrets as _secrets
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    key = _secrets.token_urlsafe(32)
+    crud.update_campaign_settings(db, campaign, {"worker_api_key": key})
+    return {"api_key": key}
+
+
+@app.get("/campaigns/{slug}/worker-key")
+def get_worker_key(
+    slug: str,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    settings = campaign.settings or {}
+    key = settings.get("worker_api_key")
+    last_seen = settings.get("worker_last_seen")
+    return {"api_key": key, "last_seen": last_seen}
+
+
+# Worker-facing endpoints (API key auth)
+
+@app.get("/campaigns/{slug}/worker/jobs")
+def worker_list_pending_jobs(slug: str, db: Session = Depends(get_db), request: Request = None):
+    campaign = require_worker_key(slug)(request, db)
+    jobs = crud.get_pending_jobs(db, campaign.id)
+    return [_job_dict(j) for j in jobs]
+
+
+@app.post("/campaigns/{slug}/worker/jobs/{session_name}/claim")
+def worker_claim_job(slug: str, session_name: str, db: Session = Depends(get_db), request: Request = None):
+    campaign = require_worker_key(slug)(request, db)
+    job = crud.get_job(db, campaign.id, session_name)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.status != "pending":
+        raise HTTPException(409, f"Job is {job.status}, not pending")
+    job = crud.claim_job(db, job)
+    return _job_dict(job)
+
+
+class TranscriptUploadBody(BaseModel):
+    transcript: str
+
+
+@app.post("/campaigns/{slug}/worker/sessions/{session_name}/transcript")
+def worker_push_transcript(
+    slug: str, session_name: str, body: TranscriptUploadBody,
+    db: Session = Depends(get_db), request: Request = None,
+):
+    campaign = require_worker_key(slug)(request, db)
+    session_dir = BASE_DIR / "campaigns" / slug / "sessions" / session_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / "transcript.md").write_text(body.transcript, encoding="utf-8")
+    job = crud.get_job(db, campaign.id, session_name)
+    if job:
+        crud.complete_job(db, job)
+    return {"ok": True}
+
+
+@app.post("/campaigns/{slug}/worker/sessions/{session_name}/audio")
+async def worker_push_audio(
+    slug: str, session_name: str, file: UploadFile = File(...),
+    db: Session = Depends(get_db), request: Request = None,
+):
+    require_worker_key(slug)(request, db)
+    session_dir = BASE_DIR / "campaigns" / slug / "sessions" / session_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    dest = session_dir / f"merged_{file.filename}"
+    content = await file.read()
+    dest.write_bytes(content)
+    return {"ok": True}
+
+
+class WorkerErrorBody(BaseModel):
+    error: str
+
+
+@app.post("/campaigns/{slug}/worker/jobs/{session_name}/error")
+def worker_report_error(
+    slug: str, session_name: str, body: WorkerErrorBody,
+    db: Session = Depends(get_db), request: Request = None,
+):
+    campaign = require_worker_key(slug)(request, db)
+    job = crud.get_job(db, campaign.id, session_name)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    crud.fail_job(db, job, body.error)
+    return {"ok": True}
+
+
+@app.post("/campaigns/{slug}/worker/heartbeat")
+def worker_heartbeat(slug: str, db: Session = Depends(get_db), request: Request = None):
+    from datetime import timezone
+    campaign = require_worker_key(slug)(request, db)
+    now = datetime.now(timezone.utc).isoformat()
+    crud.update_campaign_settings(db, campaign, {"worker_last_seen": now})
+    return {"ok": True}
 
 
 # ─── Static frontend ──────────────────────────────────────────────────────────
