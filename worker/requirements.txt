@@ -4,3 +4,5 @@ torchaudio
 requests
 pyyaml
 tqdm
+soundfile
+silero-vad
