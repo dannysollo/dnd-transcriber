@@ -1,0 +1,25 @@
+app = "dnd-transcriber"
+primary_region = "ord"
+
+[build]
+
+[env]
+  AUTH_ENABLED = "true"
+  DATA_DIR = "/data"
+
+[http_service]
+  internal_port = 8765
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[[mounts]]
+  source = "transcriber_data"
+  destination = "/data"
+  initial_size = "5gb"
