@@ -210,7 +210,7 @@ export default function SessionView() {
     load()
     loadAudioFiles()
     loadPlayers()
-  }, [name])
+  }, [name, apiUrl])
 
   useEffect(() => {
     if (selectedAudio === '_merged') setMixingInProgress(true)
