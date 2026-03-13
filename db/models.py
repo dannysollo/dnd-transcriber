@@ -88,15 +88,15 @@ class CampaignInvite(Base):
 class TranscriptionJob(Base):
     __tablename__ = "transcription_jobs"
 
-    id = Column(Integer, primary_key=True)
-    campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=False)
-    session_name = Column(String(256), nullable=False)
-    status = Column(String(16), nullable=False, default="pending")
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, nullable=False)
-    claimed_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
-    error_message = Column(Text, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(Integer, ForeignKey("campaigns.id"), nullable=False)
+    session_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("campaign_id", "session_name", name="uq_job_campaign_session"),
