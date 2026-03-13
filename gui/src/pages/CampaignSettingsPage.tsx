@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 
@@ -42,7 +42,7 @@ export default function CampaignSettingsPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [invites, setInvites] = useState<Invite[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'settings' | 'members' | 'invites'>('settings')
+  const [tab, setTab] = useState<'settings' | 'members' | 'invites' | 'worker'>('settings')
 
   // Settings form state
   const [editName, setEditName] = useState('')
@@ -51,6 +51,13 @@ export default function CampaignSettingsPage() {
   const [webhookUrl, setWebhookUrl] = useState('')
   const [channelId, setChannelId] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Worker state
+  const [workerKey, setWorkerKey] = useState<string | null>(null)
+  const [workerLastSeen, setWorkerLastSeen] = useState<string | null>(null)
+  const [workerKeyVisible, setWorkerKeyVisible] = useState(false)
+  const [generatingKey, setGeneratingKey] = useState(false)
+  const [myRole, setMyRole] = useState<string | null>(null)
 
   // Invite form state
   const [inviteRole, setInviteRole] = useState('player')
@@ -75,14 +82,45 @@ export default function CampaignSettingsPage() {
         setWebhookUrl(c.settings?.discord_webhook_url ?? '')
         setChannelId(c.settings?.discord_channel_id ?? '')
       }
-      if (mResp.ok) setMembers(await mResp.json())
+      if (mResp.ok) {
+        const ms = await mResp.json()
+        setMembers(ms)
+        const me = ms.find((m: Member) => m.user_id === user?.id)
+        if (me) setMyRole(me.role)
+      }
       if (iResp.ok) setInvites(await iResp.json())
     } finally {
       setLoading(false)
     }
   }
 
+  const loadWorkerKey = async () => {
+    const r = await fetch(`/campaigns/${slug}/worker-key`)
+    if (r.ok) {
+      const data = await r.json()
+      setWorkerKey(data.api_key)
+      setWorkerLastSeen(data.last_seen)
+    }
+  }
+
+  const generateWorkerKey = async () => {
+    setGeneratingKey(true)
+    try {
+      const r = await fetch(`/campaigns/${slug}/worker-key`, { method: 'POST' })
+      if (r.ok) {
+        const data = await r.json()
+        setWorkerKey(data.api_key)
+        setWorkerKeyVisible(true)
+      } else {
+        alert('Failed to generate key')
+      }
+    } finally {
+      setGeneratingKey(false)
+    }
+  }
+
   useEffect(() => { if (slug) load() }, [slug])
+  useEffect(() => { if (slug && myRole === 'dm') loadWorkerKey() }, [slug, myRole])
 
   const saveSettings = async () => {
     if (!campaign) return
@@ -163,7 +201,7 @@ export default function CampaignSettingsPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid #1e2130', paddingBottom: '0' }}>
-        {(['settings', 'members', 'invites'] as const).map(t => (
+        {((['settings', 'members', 'invites'] as const).concat(myRole === 'dm' ? ['worker' as const] : [])).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -256,6 +294,60 @@ export default function CampaignSettingsPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'worker' && myRole === 'dm' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '540px' }}>
+          <div style={{ fontSize: '13px', color: '#94a3b8', lineHeight: '1.5' }}>
+            Install the worker package on the transcription machine, then paste this key into <code style={{ background: '#1a1d27', padding: '1px 5px', borderRadius: '4px' }}>worker.yaml</code>.
+          </div>
+          <div style={{ background: '#13151f', border: '1px solid #2a2d3a', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0' }}>Worker API Key</div>
+            {workerKey ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <code style={{
+                  flex: 1, background: '#0f1117', border: '1px solid #2a2d3a', borderRadius: '6px',
+                  padding: '8px 12px', fontSize: '12px', color: '#a89cff', fontFamily: 'monospace',
+                  overflowX: 'auto', whiteSpace: 'nowrap',
+                }}>
+                  {workerKeyVisible ? workerKey : '•'.repeat(32)}
+                </code>
+                <button
+                  onClick={() => setWorkerKeyVisible(v => !v)}
+                  style={{ background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '6px', color: '#64748b', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                >
+                  {workerKeyVisible ? 'Hide' : 'Show'}
+                </button>
+                <button
+                  onClick={() => navigator.clipboard.writeText(workerKey).then(() => alert('Key copied!'))}
+                  style={{ background: 'rgba(124,108,252,0.1)', border: '1px solid rgba(124,108,252,0.3)', borderRadius: '6px', color: '#a89cff', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                >
+                  Copy
+                </button>
+              </div>
+            ) : (
+              <div style={{ fontSize: '13px', color: '#64748b' }}>No key generated yet.</div>
+            )}
+            <button
+              onClick={generateWorkerKey}
+              disabled={generatingKey}
+              style={{
+                background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
+                padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                opacity: generatingKey ? 0.6 : 1, alignSelf: 'flex-start',
+              }}
+            >
+              {generatingKey ? 'Generating...' : workerKey ? 'Rotate Key' : 'Generate Key'}
+            </button>
+          </div>
+          <div style={{ fontSize: '12px', color: '#475569' }}>
+            Last worker heartbeat: {workerLastSeen ? (() => {
+              const ms = Date.now() - new Date(workerLastSeen).getTime()
+              const mins = Math.floor(ms / 60000)
+              return mins < 1 ? 'just now' : `${mins} minute${mins === 1 ? '' : 's'} ago`
+            })() : 'Never'}
+          </div>
         </div>
       )}
 

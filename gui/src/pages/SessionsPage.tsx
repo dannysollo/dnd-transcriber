@@ -11,6 +11,13 @@ interface Session {
   has_wiki: boolean
 }
 
+interface TranscriptionJob {
+  session_name: string
+  status: string
+  created_at: string | null
+  error_message: string | null
+}
+
 const statusColors: Record<string, { bg: string; text: string; label: string }> = {
   complete:       { bg: 'rgba(34,197,94,0.15)',   text: '#4ade80', label: 'Complete' },
   has_transcript: { bg: 'rgba(124,108,252,0.15)', text: '#a78bfa', label: 'Has transcript' },
@@ -29,6 +36,8 @@ export default function SessionsPage() {
   const [uploadingFor, setUploadingFor] = useState<string | null>(null)
   const [dragOverSession, setDragOverSession] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [jobMap, setJobMap] = useState<Record<string, TranscriptionJob>>({})
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragCounters = useRef<Record<string, number>>({})
   const navigate = useNavigate()
@@ -36,17 +45,64 @@ export default function SessionsPage() {
   const { isLoggedIn, authEnabled } = useAuth()
   const { activeCampaign } = useCampaign()
 
+  const loadJobs = async () => {
+    if (!activeCampaign) return
+    const r = await fetch(apiUrl(`/worker/jobs/all`))
+    if (r.ok) {
+      const jobs: TranscriptionJob[] = await r.json()
+      const map: Record<string, TranscriptionJob> = {}
+      for (const j of jobs) map[j.session_name] = j
+      setJobMap(map)
+    }
+  }
+
   const load = async () => {
     setLoading(true)
     try {
       const r = await fetch(apiUrl('/sessions'))
       setSessions(await r.json())
+      await loadJobs()
     } finally {
       setLoading(false)
     }
   }
 
+  // Poll every 15s while any job is pending or claimed
+  useEffect(() => {
+    const hasActive = Object.values(jobMap).some(j => j.status === 'pending' || j.status === 'claimed')
+    if (hasActive) {
+      if (!pollTimerRef.current) {
+        pollTimerRef.current = setInterval(loadJobs, 15000)
+      }
+    } else {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+    }
+    return () => {}
+  }, [jobMap])
+
+  useEffect(() => {
+    return () => { if (pollTimerRef.current) clearInterval(pollTimerRef.current) }
+  }, [])
+
   useEffect(() => { load() }, [apiUrl])
+
+  const requestTranscription = async (sessionName: string) => {
+    const r = await fetch(apiUrl(`/sessions/${sessionName}/transcribe`), { method: 'POST' })
+    if (r.status === 409) {
+      const data = await r.json()
+      alert(`Job already queued (status: ${data.status ?? data.detail?.status ?? 'pending'})`)
+      return
+    }
+    if (r.ok) {
+      const job = await r.json()
+      setJobMap(prev => ({ ...prev, [sessionName]: job }))
+    } else {
+      alert('Failed to queue transcription')
+    }
+  }
 
   const createSession = async () => {
     if (!newName.trim()) return
@@ -273,6 +329,8 @@ export default function SessionsPage() {
               )
             }
 
+            const job = jobMap[s.name]
+
             return (
               <div
                 key={s.name}
@@ -341,8 +399,19 @@ export default function SessionsPage() {
                   {sc.label}
                 </div>
 
+                {/* Job status badge */}
+                {job && <JobStatusBadge job={job} />}
+
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: '6px' }}>
+                  {(!authEnabled || isLoggedIn) && (
+                    <ActionBtn
+                      title="Queue transcription"
+                      onClick={() => requestTranscription(s.name)}
+                    >
+                      🎙️
+                    </ActionBtn>
+                  )}
                   <ActionBtn
                     title="Upload audio files"
                     onClick={() => {
@@ -387,6 +456,30 @@ function Badge({ label }: { label: string }) {
     }}>
       {label}
     </span>
+  )
+}
+
+const JOB_BADGE: Record<string, { bg: string; text: string; label: string }> = {
+  pending:   { bg: 'rgba(251,191,36,0.15)',  text: '#fbbf24', label: '⏳ Queued' },
+  claimed:   { bg: 'rgba(59,130,246,0.15)',  text: '#60a5fa', label: '🔄 Transcribing' },
+  done:      { bg: 'rgba(34,197,94,0.15)',   text: '#4ade80', label: '✅ Done' },
+  error:     { bg: 'rgba(248,113,113,0.15)', text: '#f87171', label: '❌ Error' },
+}
+
+function JobStatusBadge({ job }: { job: TranscriptionJob }) {
+  const b = JOB_BADGE[job.status]
+  if (!b) return null
+  return (
+    <div
+      title={job.status === 'error' ? (job.error_message ?? undefined) : undefined}
+      style={{
+        background: b.bg, color: b.text, borderRadius: '20px',
+        padding: '3px 10px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
+        cursor: job.status === 'error' ? 'help' : 'default',
+      }}
+    >
+      {b.label}
+    </div>
   )
 }
 
