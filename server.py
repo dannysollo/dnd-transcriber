@@ -30,8 +30,12 @@ from db import crud
 from db.database import get_db, init_db
 from db.models import TranscriptEdit, User
 
-CONFIG_PATH = Path(__file__).parent / "config.yaml"
-BASE_DIR = Path(__file__).parent
+APP_DIR = Path(__file__).parent
+CONFIG_PATH = APP_DIR / "config.yaml"
+DATA_DIR = Path(os.getenv("DATA_DIR", str(APP_DIR)))
+# DATA_DIR: where campaigns/, sessions/, and the DB live.
+# Defaults to APP_DIR (dev), override to /data (production/fly.io)
+BASE_DIR = Path(os.getenv("DATA_DIR", str(APP_DIR)))
 
 app = FastAPI(title="DnD Transcriber", version="1.0.0")
 
@@ -2188,6 +2192,6 @@ def campaign_reject_edit(
 
 # ─── Static frontend ──────────────────────────────────────────────────────────
 
-gui_dist = BASE_DIR / "gui" / "dist"
+gui_dist = APP_DIR / "gui" / "dist"
 if gui_dist.exists():
     app.mount("/", StaticFiles(directory=str(gui_dist), html=True), name="static")

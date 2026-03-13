@@ -596,6 +596,7 @@ function TranscriptView({
   editMode?: boolean
   onTranscriptChange?: () => void
 }) {
+  const apiUrl = useApiUrl()
   const activeLineRef = useRef<HTMLDivElement | null>(null)
   const targetLineRef = useRef<HTMLDivElement | null>(null)
   const [flashTimestamp, setFlashTimestamp] = useState<string | null>(null)
@@ -1077,6 +1078,7 @@ type DisplayItem =
   | { type: 'separator'; skipped: number }
 
 function DiffViewer({ sessionName }: { sessionName: string }) {
+  const apiUrl = useApiUrl()
   const [showDiff, setShowDiff] = useState(false)
   const [changedLinesOnly, setChangedLinesOnly] = useState(false)
   const [rawContent, setRawContent] = useState<string | null>(null)
@@ -1494,6 +1496,7 @@ function ExampleLine({ text, word, color }: { text: string; word: string; color:
 // ─── Speakers panel ───────────────────────────────────────────────────────────
 
 function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRename: () => void }) {
+  const apiUrl = useApiUrl()
   const [open, setOpen] = useState(false)
   const [speakers, setSpeakers] = useState<Array<{ name: string; line_count: number }>>([])
   const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null)
@@ -1634,6 +1637,7 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
 // ─── Wiki tab ─────────────────────────────────────────────────────────────────
 
 function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: string; wikiMarkdown: string | null; onRemerge?: () => void }) {
+  const apiUrl = useApiUrl()
   const [suggestions, setSuggestions] = useState<WikiSuggestion[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [appliedIds, setAppliedIds] = useState<Set<number>>(new Set())

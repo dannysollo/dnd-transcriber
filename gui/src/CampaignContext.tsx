@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 
 export interface CampaignSettings {
   require_edit_approval?: boolean
@@ -98,10 +98,10 @@ export function useCampaign() {
  */
 export function useApiUrl() {
   const { activeCampaign } = useCampaign()
-  return (path: string) => {
+  return useCallback((path: string) => {
     if (activeCampaign) {
       return `/campaigns/${activeCampaign.slug}${path}`
     }
     return path
-  }
+  }, [activeCampaign?.slug])
 }
