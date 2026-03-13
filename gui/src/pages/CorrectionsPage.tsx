@@ -10,7 +10,7 @@ interface Pattern {
 export default function CorrectionsPage() {
   const apiUrl = useApiUrl()
   const { loading: campaignLoading, activeCampaign } = useCampaign()
-  const { authEnabled } = useAuth()
+  const { authEnabled, isLoggedIn } = useAuth()
   const [corrections, setCorrections] = useState<Record<string, string>>({})
   const [patterns, setPatterns] = useState<Pattern[]>([])
   const [loading, setLoading] = useState(true)
@@ -205,7 +205,7 @@ export default function CorrectionsPage() {
     return <div style={{ padding: '32px', color: '#64748b' }}>Loading...</div>
   }
 
-  if (authEnabled && !activeCampaign) {
+  if (authEnabled && (!isLoggedIn || !activeCampaign)) {
     return (
       <div style={{ padding: '32px', color: '#64748b', fontSize: '14px' }}>
         Select a campaign to view corrections.

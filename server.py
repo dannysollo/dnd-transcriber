@@ -1091,7 +1091,7 @@ def auth_me(user: Optional[User] = Depends(get_current_user)):
 @app.post("/auth/logout")
 def auth_logout(response: Response):
     """Clear the JWT cookie."""
-    response.delete_cookie(key=COOKIE_NAME)
+    response.delete_cookie(key=COOKIE_NAME, httponly=True, samesite="lax")
     return {"ok": True}
 
 

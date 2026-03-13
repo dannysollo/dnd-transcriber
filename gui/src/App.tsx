@@ -51,7 +51,7 @@ export default function App() {
     window.location.reload()
   }
 
-  if (loading) {
+  if (loading || campaignLoading) {
     return (
       <div style={{ display: 'flex', height: '100vh', background: '#0f1117' }} />
     )
