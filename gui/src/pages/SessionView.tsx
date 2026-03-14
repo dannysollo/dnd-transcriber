@@ -141,7 +141,7 @@ export default function SessionView() {
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
   const [selectedAudio, setSelectedAudio] = useState<string>('')
   const [players, setPlayers] = useState<Player[]>([])
-  const [mixingInProgress, setMixingInProgress] = useState(false)
+  const [, setMixingInProgress] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [isDragOver, setIsDragOver] = useState(false)
   const [uploadingAudio, setUploadingAudio] = useState(false)

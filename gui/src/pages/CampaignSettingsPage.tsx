@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 
@@ -201,7 +201,7 @@ export default function CampaignSettingsPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid #1e2130', paddingBottom: '0' }}>
-        {((['settings', 'members', 'invites'] as const).concat(myRole === 'dm' ? ['worker' as const] : [])).map(t => (
+        {(['settings', 'members', 'invites', ...(myRole === 'dm' ? ['worker'] : [])] as ('settings' | 'members' | 'invites' | 'worker')[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
