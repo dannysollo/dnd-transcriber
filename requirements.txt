@@ -1,17 +1,20 @@
-openai-whisper
-anthropic
-pyyaml
-silero-vad
-torchaudio
-soundfile
-# torch is installed separately (see README — CUDA version matters)
+# Server-side dependencies only — no ML/GPU packages (those live in worker/requirements.txt)
+
+# Web framework
 fastapi
 uvicorn[standard]
 websockets
 python-multipart
-# Auth + DB
+
+# Database
 sqlalchemy
+
+# Auth
 authlib
 httpx
 python-jose[cryptography]
 passlib
+
+# Utilities
+pyyaml
+anthropic
