@@ -17,7 +17,6 @@ import { useCampaign } from './CampaignContext'
 const navItems = [
   { to: '/', label: 'Sessions', icon: '📜' },
   { to: '/campaigns', label: 'Campaigns', icon: '⚔️' },
-  { to: '/pipeline', label: 'Pipeline', icon: '⚙️' },
   { to: '/corrections', label: 'Corrections', icon: '✏️' },
   { to: '/settings', label: 'Settings', icon: '🔧' },
 ]

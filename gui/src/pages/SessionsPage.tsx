@@ -104,6 +104,21 @@ export default function SessionsPage() {
     }
   }
 
+  const requestWikiSummary = async (sessionName: string) => {
+    const r = await fetch(apiUrl('/pipeline/run'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session: sessionName, transcribe_only: false, wiki_only: true }),
+    })
+    if (r.status === 409) {
+      alert('Pipeline is already running — wait for it to finish.')
+      return
+    }
+    if (!r.ok) {
+      alert('Failed to start wiki summary generation')
+    }
+  }
+
   const createSession = async () => {
     if (!newName.trim()) return
     setCreating(true)
@@ -410,6 +425,14 @@ export default function SessionsPage() {
                       onClick={() => requestTranscription(s.name)}
                     >
                       🎙️
+                    </ActionBtn>
+                  )}
+                  {(!authEnabled || isLoggedIn) && s.has_transcript && (
+                    <ActionBtn
+                      title="Generate wiki summary"
+                      onClick={() => requestWikiSummary(s.name)}
+                    >
+                      📖
                     </ActionBtn>
                   )}
                   <ActionBtn
