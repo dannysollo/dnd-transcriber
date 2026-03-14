@@ -8,7 +8,8 @@ import yaml
 
 REQUIRED_FIELDS = ["server_url", "campaign_slug", "api_key", "audio_dir"]
 DEFAULTS = {
-    "whisper_model": "turbo",
+    # whisper_model intentionally NOT defaulted here — campaign config controls it.
+    # Set whisper_model in worker.yaml only to override the campaign setting (e.g. weaker GPU).
     "poll_interval": 30,
 }
 
