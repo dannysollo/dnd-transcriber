@@ -57,11 +57,19 @@ interface ParsedLine {
 function parseTranscript(md: string): ParsedLine[] {
   const lines: ParsedLine[] = []
   for (const raw of md.split('\n')) {
-    // Match: **[00:00] Speaker Name:** text
+    // Match: **[00:00] Speaker Name:** text  (with speaker)
     const m = raw.match(/^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$/)
     if (m) {
       lines.push({ type: 'speech', raw, timestamp: m[1], speaker: m[2].trim(), text: m[3] })
-    } else if (raw.startsWith('#')) {
+      continue
+    }
+    // Match: **[00:00]** text  (no speaker — worker mixed-audio format)
+    const m2 = raw.match(/^\*\*\[([^\]]+)\]\*\* (.*)$/)
+    if (m2) {
+      lines.push({ type: 'speech', raw, timestamp: m2[1], speaker: undefined, text: m2[2] })
+      continue
+    }
+    if (raw.startsWith('#')) {
       lines.push({ type: 'heading', raw })
     } else {
       lines.push({ type: 'other', raw })
@@ -895,7 +903,7 @@ function TranscriptView({
           )
         }
         if (line.type === 'speech') {
-          const color = getSpeakerColor(line.speaker!, speakerColors)
+          const color = line.speaker ? getSpeakerColor(line.speaker, speakerColors) : '#64748b'
           const tsSeconds = line.timestamp ? parseTimestampToSeconds(line.timestamp) : null
           return (
             <div
@@ -955,20 +963,22 @@ function TranscriptView({
                   {line.timestamp}
                 </span>
               )}
-              {/* Speaker chip */}
-              <span style={{
-                background: `${color}20`,
-                color,
-                borderRadius: '4px',
-                padding: '1px 8px',
-                fontSize: '11px',
-                fontWeight: 700,
-                flexShrink: 0,
-                alignSelf: 'flex-start',
-                marginTop: '1px',
-              }}>
-                {line.speaker}
-              </span>
+              {/* Speaker chip — only shown when speaker is known */}
+              {line.speaker && (
+                <span style={{
+                  background: `${color}20`,
+                  color,
+                  borderRadius: '4px',
+                  padding: '1px 8px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  flexShrink: 0,
+                  alignSelf: 'flex-start',
+                  marginTop: '1px',
+                }}>
+                  {line.speaker}
+                </span>
+              )}
               {/* Text */}
               <span style={{ fontSize: '13px', color: isActive ? '#e2e8f0' : '#cbd5e1', lineHeight: 1.6 }}>
                 {highlight(line.text || '')}
