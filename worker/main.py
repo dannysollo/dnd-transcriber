@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from client import WorkerClient
 from config import load_config
 from audio import find_audio_files, merge_audio_files
-from transcribe import apply_vad, load_whisper_model, run_transcription
+from transcribe import load_whisper_model, transcribe_session
 
 
 def main():
@@ -86,40 +86,28 @@ def main():
                     if whisper_model is None:
                         whisper_model = load_whisper_model(config["whisper_model"])
 
-                    # Merge audio
-                    with tempfile.NamedTemporaryFile(suffix="_merged.flac", delete=False) as tmp_merged:
-                        merged_path = tmp_merged.name
-
-                    print(f"  Merging {len(audio_files)} track(s)...")
-                    merge_audio_files(audio_files, merged_path)
-
-                    # Apply VAD
-                    with tempfile.NamedTemporaryFile(suffix="_vad.wav", delete=False) as tmp_vad:
-                        vad_path = tmp_vad.name
-
-                    print(f"  Applying VAD...")
-                    clean_path = apply_vad(merged_path, vad_path)
-
-                    # Transcribe
-                    print(f"  Transcribing...")
-                    transcript = run_transcription(whisper_model, clean_path, config)
+                    # Transcribe each speaker track individually, merge by timestamp
+                    transcript = transcribe_session(session_dir, whisper_model, config)
 
                     # Push transcript
                     print(f"  Pushing transcript...")
                     client.push_transcript(session_name, transcript)
 
-                    # Push merged audio
+                    # Merge audio tracks and push for web playback
+                    with tempfile.NamedTemporaryFile(suffix="_merged.flac", delete=False) as tmp_merged:
+                        merged_path = tmp_merged.name
+                    print(f"  Merging audio for web playback...")
+                    merge_audio_files(audio_files, merged_path)
                     print(f"  Pushing audio...")
                     client.push_audio(session_name, merged_path)
 
                     print(f"  [DONE] {session_name}")
 
-                    # Cleanup temp files
-                    for p in [merged_path, vad_path]:
-                        try:
-                            Path(p).unlink(missing_ok=True)
-                        except Exception:
-                            pass
+                    # Cleanup merged audio temp file (speaker JSONs kept in session_dir/speakers/)
+                    try:
+                        Path(merged_path).unlink(missing_ok=True)
+                    except Exception:
+                        pass
 
                 except Exception as e:
                     error_msg = traceback.format_exc()

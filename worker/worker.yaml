@@ -1,0 +1,6 @@
+server_url: http://localhost:8766
+campaign_slug: as-above-so-below
+api_key: s56y34jgY4mR7CSKC_XTbYnTK7JZ3QyqydPIPNjK52E
+audio_dir: /mnt/c/Users/dgome/Desktop/worker_test
+whisper_model: turbo
+poll_interval: 30
