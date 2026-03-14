@@ -103,7 +103,7 @@ def main():
                     client.push_transcript(session_name, transcript)
 
                     # Merge audio tracks and push for web playback
-                    with tempfile.NamedTemporaryFile(suffix="_merged.flac", delete=False) as tmp_merged:
+                    with tempfile.NamedTemporaryFile(suffix="_merged.mp3", delete=False) as tmp_merged:
                         merged_path = tmp_merged.name
                     print(f"  Merging audio for web playback...")
                     merge_audio_files(audio_files, merged_path)

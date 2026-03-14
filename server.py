@@ -1895,27 +1895,23 @@ def campaign_get_audio_files(
     name: str,
     _member=Depends(require_campaign_member("spectator")),
 ):
-    raw_dir = get_sessions_dir(slug) / name / "raw"
-    if not raw_dir.exists():
-        return {"files": []}
-    audio_files = [
-        f for f in sorted(raw_dir.iterdir())
-        if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS and f.name != "_merged.mp3"
-    ]
-    result = []
-    if len(audio_files) >= 2:
-        result.append({
-            "filename": "_merged",
-            "label": "All tracks (merged)",
-            "url": f"/campaigns/{slug}/sessions/{name}/audio/merged",
-        })
-    for f in audio_files:
-        result.append({
-            "filename": f.name,
-            "label": f.name,
-            "url": f"/campaigns/{slug}/sessions/{name}/audio/{f.name}",
-        })
-    return {"files": result}
+    session_dir = get_sessions_dir(slug) / name
+    merged = session_dir / "merged.mp3"
+    if merged.exists():
+        return {"files": [{"filename": "merged.mp3", "label": "Session audio", "url": f"/campaigns/{slug}/sessions/{name}/merged-audio"}]}
+    return {"files": []}
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/merged-audio")
+def campaign_get_merged_audio(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    path = get_sessions_dir(slug) / name / "merged.mp3"
+    if not path.exists():
+        raise HTTPException(404, "No merged audio available")
+    return FileResponse(str(path), media_type="audio/mpeg")
 
 
 @app.get("/campaigns/{slug}/sessions/{name}/audio/merged")
@@ -2334,7 +2330,8 @@ async def worker_push_audio(
     require_worker_key(slug)(request, db)
     session_dir = BASE_DIR / "campaigns" / slug / "sessions" / session_name
     session_dir.mkdir(parents=True, exist_ok=True)
-    dest = session_dir / f"merged_{file.filename}"
+    # Always store as merged.mp3 regardless of uploaded filename
+    dest = session_dir / "merged.mp3"
     content = await file.read()
     dest.write_bytes(content)
     return {"ok": True}

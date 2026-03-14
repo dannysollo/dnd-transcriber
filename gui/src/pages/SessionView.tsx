@@ -495,47 +495,21 @@ export default function SessionView() {
           flexDirection: 'column',
           gap: '8px',
         }}>
-          {/* File selector */}
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Audio label */}
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <span style={{ fontSize: '10px', color: '#475569', fontWeight: 700, letterSpacing: '0.08em' }}>
               AUDIO
             </span>
-            {audioFiles.map(f => (
-              <button
-                key={f.filename}
-                onClick={() => setSelectedAudio(f.filename)}
-                style={{
-                  background: selectedAudio === f.filename ? 'rgba(124,108,252,0.2)' : 'transparent',
-                  border: `1px solid ${selectedAudio === f.filename ? '#7c6cfc' : '#2a2d3a'}`,
-                  borderRadius: '4px',
-                  color: selectedAudio === f.filename ? '#a78bfa' : '#64748b',
-                  padding: '2px 8px',
-                  fontSize: '11px',
-                  cursor: 'pointer',
-                  maxWidth: '220px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-                title={f.label}
-              >
-                {f.filename === '_merged' && mixingInProgress ? `${f.label} (mixing...)` : f.label}
-              </button>
-            ))}
+            <span style={{ fontSize: '11px', color: '#64748b' }}>Session recording (merged)</span>
           </div>
           {selectedAudio && (
             <audio
               ref={audioRef}
               key={selectedAudio}
-              src={
-                selectedAudio === '_merged'
-                  ? `/sessions/${encodeURIComponent(name!)}/audio/merged`
-                  : `/sessions/${encodeURIComponent(name!)}/audio/${encodeURIComponent(selectedAudio)}`
-              }
+              src={apiUrl(`/sessions/${encodeURIComponent(name!)}/merged-audio`)}
               controls
               onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
               onLoadedMetadata={() => {
-                setMixingInProgress(false)
                 if (pendingSeekRef.current !== null) {
                   seekTo(pendingSeekRef.current)
                   pendingSeekRef.current = null
