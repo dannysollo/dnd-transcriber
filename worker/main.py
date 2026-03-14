@@ -37,7 +37,7 @@ def main():
     print(f"  Server:   {config['server_url']}")
     print(f"  Campaign: {config['campaign_slug']}")
     print(f"  Audio:    {config['audio_dir']}")
-    print(f"  Model:    {config['whisper_model']}")
+    print(f"  Model:    {config.get('whisper_model', '(from campaign settings)')}")
     print(f"  Poll:     every {config['poll_interval']}s")
     print("=" * 60)
 
