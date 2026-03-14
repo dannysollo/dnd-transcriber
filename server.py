@@ -2366,6 +2366,21 @@ def worker_heartbeat(slug: str, db: Session = Depends(get_db), request: Request 
     return {"ok": True}
 
 
+@app.get("/campaigns/{slug}/worker/config")
+def worker_get_config(slug: str, db: Session = Depends(get_db), request: Request = None):
+    """Return campaign config (players, corrections, vocab prompt, vad setting) for the worker."""
+    require_worker_key(slug)(request, db)
+    config = load_config(slug)
+    return {
+        "players": config.get("players", {}),
+        "corrections": config.get("corrections", {}),
+        "patterns": config.get("patterns", []),
+        "vocab_prompt": config.get("vocab_prompt", ""),
+        "vad": config.get("vad", True),
+        "whisper_model": config.get("whisper_model", "turbo"),
+    }
+
+
 # ─── Static frontend ──────────────────────────────────────────────────────────
 
 gui_dist = APP_DIR / "gui" / "dist"

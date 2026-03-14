@@ -82,12 +82,21 @@ def main():
                     client.claim_job(session_name)
                     print(f"  Claimed job.")
 
-                    # Lazy-load Whisper model
-                    if whisper_model is None:
-                        whisper_model = load_whisper_model(config["whisper_model"])
+                    # Fetch campaign config (players, vocab, vad) from server
+                    campaign_config = client.get_campaign_config()
+                    # Local config overrides: whisper_model, poll_interval (worker-specific)
+                    job_config = {**campaign_config, **{
+                        k: config[k] for k in ("whisper_model",) if k in config
+                    }}
+
+                    # Lazy-load Whisper model (reload if model name changed)
+                    model_name = job_config.get("whisper_model", "turbo")
+                    if whisper_model is None or getattr(whisper_model, "_model_name", None) != model_name:
+                        whisper_model = load_whisper_model(model_name)
+                        whisper_model._model_name = model_name
 
                     # Transcribe each speaker track individually, merge by timestamp
-                    transcript = transcribe_session(session_dir, whisper_model, config)
+                    transcript = transcribe_session(session_dir, whisper_model, job_config)
 
                     # Push transcript
                     print(f"  Pushing transcript...")

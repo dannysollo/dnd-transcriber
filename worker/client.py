@@ -65,3 +65,9 @@ class WorkerClient:
             timeout=30,
         )
         r.raise_for_status()
+
+    def get_campaign_config(self) -> dict:
+        """Fetch campaign config (players, vocab, vad, etc.) from the server."""
+        r = requests.get(self._url("/worker/config"), headers=self.headers, timeout=30)
+        r.raise_for_status()
+        return r.json()
