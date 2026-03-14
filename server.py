@@ -2215,7 +2215,7 @@ def request_transcription(
         raise HTTPException(404, "Campaign not found")
     job = crud.get_job(db, campaign.id, name)
     if job:
-        if job.status in ("done", "error"):
+        if job.status in ("done", "error", "claimed"):
             job = crud.reset_job(db, job)
         else:
             raise HTTPException(409, {"detail": "job already pending", "status": job.status})

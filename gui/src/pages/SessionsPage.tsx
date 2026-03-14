@@ -421,10 +421,10 @@ export default function SessionsPage() {
                 <div style={{ display: 'flex', gap: '6px' }}>
                   {(!authEnabled || isLoggedIn) && (
                     <ActionBtn
-                      title="Queue transcription"
+                      title={job && job.status === 'claimed' ? 'Reset stuck job and re-queue' : 'Queue transcription'}
                       onClick={() => requestTranscription(s.name)}
                     >
-                      🎙️
+                      {job && job.status === 'claimed' ? '🔁' : '🎙️'}
                     </ActionBtn>
                   )}
                   {(!authEnabled || isLoggedIn) && s.has_transcript && (
