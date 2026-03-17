@@ -1,25 +1,23 @@
-app = "dnd-transcriber"
-primary_region = "ord"
+# fly.toml app configuration file generated for dnd-transcriber on 2026-03-17T16:49:06Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'dnd-transcriber'
+primary_region = 'iad'
 
 [build]
-
-[env]
-  AUTH_ENABLED = "true"
-  DATA_DIR = "/data"
 
 [http_service]
   internal_port = 8765
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
+  processes = ['app']
 
 [[vm]]
-  memory = "512mb"
-  cpu_kind = "shared"
+  memory = '1gb'
+  cpu_kind = 'shared'
   cpus = 1
-
-[[mounts]]
-  source = "transcriber_data"
-  destination = "/data"
-  initial_size = "5gb"
+  memory_mb = 1024
