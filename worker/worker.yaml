@@ -1,4 +1,4 @@
-server_url: http://localhost:8766
+server_url: https://dnd-transcriber.fly.dev
 campaign_slug: as-above-so-below
 api_key: s56y34jgY4mR7CSKC_XTbYnTK7JZ3QyqydPIPNjK52E
 audio_dir: /mnt/c/Users/dgome/Desktop/worker_test

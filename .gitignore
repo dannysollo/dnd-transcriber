@@ -5,10 +5,8 @@ __pycache__/
 .DS_Store
 
 # Heavy session files — keep local only
-sessions/**/raw/
-sessions/**/speakers/
-campaigns/**/raw/
-campaigns/**/speakers/
+sessions/
+campaigns/
 
 # Database
 *.db

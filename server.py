@@ -526,10 +526,10 @@ def get_audio_files(name: str):
         return {"files": []}
     audio_files = [
         f for f in sorted(raw_dir.iterdir())
-        if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS and f.name != "_merged.mp3"
+        if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS 
     ]
     result = []
-    if len(audio_files) >= 2:
+    if len(audio_files) >= 1:
         result.append({
             "filename": "_merged",
             "label": "All tracks (merged)",
@@ -2378,8 +2378,21 @@ def worker_get_config(slug: str, db: Session = Depends(get_db), request: Request
     }
 
 
-# ─── Static frontend ──────────────────────────────────────────────────────────
+# ─── Static frontend (SPA catch-all) ─────────────────────────────────────────
+# Serves built React app. Any path not matched by API routes returns index.html
+# so that client-side routing (e.g. /sessions/foo, /campaigns/bar) works on reload.
 
 gui_dist = APP_DIR / "gui" / "dist"
+
 if gui_dist.exists():
-    app.mount("/", StaticFiles(directory=str(gui_dist), html=True), name="static")
+    # Mount static assets (JS/CSS/images) under /assets explicitly
+    app.mount("/assets", StaticFiles(directory=str(gui_dist / "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_spa(full_path: str):
+        # Serve exact file if it exists (favicon, manifest, etc.)
+        candidate = gui_dist / full_path
+        if candidate.is_file():
+            return FileResponse(str(candidate))
+        # Fall back to index.html for all client-side routes
+        return FileResponse(str(gui_dist / "index.html"))

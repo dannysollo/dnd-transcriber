@@ -11,6 +11,7 @@ import CampaignsPage from './pages/CampaignsPage'
 import CampaignSettingsPage from './pages/CampaignSettingsPage'
 import InvitePage from './pages/InvitePage'
 import EditQueuePage from './pages/EditQueuePage'
+import LandingPage from './pages/LandingPage'
 import { useAuth, avatarUrl } from './AuthContext'
 import { useCampaign } from './CampaignContext'
 
@@ -54,6 +55,10 @@ export default function App() {
     return (
       <div style={{ display: 'flex', height: '100vh', background: '#0f1117' }} />
     )
+  }
+
+  if (authEnabled && !isLoggedIn) {
+    return <LandingPage />
   }
 
   return (
