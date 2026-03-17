@@ -427,7 +427,7 @@ export default function SessionsPage() {
                       {job && job.status === 'claimed' ? '🔁' : '🎙️'}
                     </ActionBtn>
                   )}
-                  {(!authEnabled || isLoggedIn) && s.has_transcript && (
+                  {(!authEnabled || isLoggedIn) && s.has_transcript && (!authEnabled || activeCampaign?.role === 'dm') && (
                     <ActionBtn
                       title="Generate wiki summary"
                       onClick={() => requestWikiSummary(s.name)}

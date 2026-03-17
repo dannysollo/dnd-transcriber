@@ -42,7 +42,7 @@ export default function InvitePage() {
       const r = await fetch(`/invites/${token}/use`, { method: 'POST' })
       if (r.ok) {
         setJoined(true)
-        setTimeout(() => navigate('/campaigns'), 1500)
+        setTimeout(() => { window.location.href = '/campaigns' }, 1500)
       } else {
         const data = await r.json()
         setError(data.detail || 'Failed to join campaign')
@@ -105,16 +105,20 @@ export default function InvitePage() {
                     <div style={{ fontSize: '12px', color: '#64748b' }}>
                       You need to log in to accept this invite.
                     </div>
-                    <a
-                      href={`/auth/discord?next=/invite/${token}`}
+                    <button
+                      onClick={() => {
+                        localStorage.setItem('pendingInviteToken', token ?? '')
+                        window.location.href = '/auth/discord'
+                      }}
                       style={{
                         display: 'flex', alignItems: 'center', gap: '8px',
                         background: '#5865f2', color: '#fff', borderRadius: '10px',
-                        padding: '10px 20px', textDecoration: 'none', fontWeight: 600, fontSize: '13px',
+                        padding: '10px 20px', border: 'none', cursor: 'pointer',
+                        fontWeight: 600, fontSize: '13px',
                       }}
                     >
                       Login with Discord to Join
-                    </a>
+                    </button>
                   </>
                 ) : (
                   <>

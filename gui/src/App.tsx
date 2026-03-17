@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom'
 import './App.css'
 import SessionsPage from './pages/SessionsPage'
@@ -51,6 +51,17 @@ export default function App() {
     window.location.reload()
   }
 
+  // After login, check if there's a pending invite to redirect to
+  React.useEffect(() => {
+    if (isLoggedIn) {
+      const pendingToken = localStorage.getItem('pendingInviteToken')
+      if (pendingToken) {
+        localStorage.removeItem('pendingInviteToken')
+        navigate(`/invite/${pendingToken}`)
+      }
+    }
+  }, [isLoggedIn])
+
   if (loading || campaignLoading) {
     return (
       <div style={{ display: 'flex', height: '100vh', background: '#0f1117' }} />
@@ -58,7 +69,10 @@ export default function App() {
   }
 
   if (authEnabled && !isLoggedIn) {
-    return <LandingPage />
+    // Allow invite pages to render even when logged out
+    if (!window.location.pathname.startsWith('/invite/')) {
+      return <LandingPage />
+    }
   }
 
   return (

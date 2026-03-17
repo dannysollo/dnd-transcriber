@@ -271,17 +271,18 @@ export default function CampaignSettingsPage() {
               <select
                 value={m.role}
                 onChange={e => changeRole(m.user_id, e.target.value)}
-                disabled={m.user_id === user?.id}
+                disabled={m.user_id === user?.id || myRole !== 'dm'}
                 style={{
                   background: '#0f1117', border: '1px solid #2a2d3a', borderRadius: '6px',
                   color: '#94a3b8', padding: '4px 8px', fontSize: '12px',
+                  opacity: myRole !== 'dm' ? 0.5 : 1,
                 }}
               >
                 <option value="spectator">Spectator</option>
                 <option value="player">Player</option>
                 <option value="dm">DM</option>
               </select>
-              {m.user_id !== user?.id && (
+              {m.user_id !== user?.id && myRole === 'dm' && (
                 <button
                   onClick={() => removeMember(m.user_id)}
                   style={{
