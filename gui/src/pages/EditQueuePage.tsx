@@ -132,7 +132,9 @@ export default function EditQueuePage() {
                   >
                     {/* Header */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontSize: '11px', color: '#475569' }}>Line {edit.line_number}</span>
+                      <span style={{ fontSize: '11px', color: '#475569' }}>
+                        {edit.line_number === -2 ? '📋 Summary edit' : edit.line_number === -3 ? '📖 Wiki edit' : `Line ${edit.line_number}`}
+                      </span>
                       <span style={{ fontSize: '11px', color: '#475569' }}>·</span>
                       <span style={{ fontSize: '11px', color: '#64748b' }}>
                         by <strong style={{ color: '#94a3b8' }}>{edit.submitter_username ?? 'unknown'}</strong>

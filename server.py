@@ -1598,6 +1598,81 @@ def campaign_get_wiki(
     raise HTTPException(404, "Wiki not found")
 
 
+@app.put("/campaigns/{slug}/sessions/{name}/summary")
+def campaign_put_summary(
+    slug: str,
+    name: str,
+    body: TranscriptLineBody,
+    member=Depends(require_campaign_member("player")),
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    path = get_sessions_dir(slug) / name / "summary.md"
+    if not path.exists():
+        raise HTTPException(404, "Summary not found")
+    is_dm = (not AUTH_ENABLED) or (member is not None and member.role == "dm")
+    needs_approval = False
+    if AUTH_ENABLED and not is_dm:
+        campaign = crud.get_campaign_by_slug(db, slug)
+        if campaign and campaign.settings.get("require_edit_approval"):
+            needs_approval = True
+    if needs_approval and current_user is not None:
+        campaign = crud.get_campaign_by_slug(db, slug)
+        edit = crud.create_transcript_edit(
+            db,
+            campaign_id=campaign.id,
+            session_name=name,
+            user_id=current_user.id,
+            line_number=-2,  # sentinel: -2 = full summary replacement
+            original_text=path.read_text(encoding="utf-8"),
+            proposed_text=body.content,
+        )
+        return JSONResponse(status_code=202, content={"status": "pending", "edit_id": edit.id})
+    path.write_text(body.content, encoding="utf-8")
+    return {"status": "applied"}
+
+
+@app.put("/campaigns/{slug}/sessions/{name}/wiki")
+def campaign_put_wiki(
+    slug: str,
+    name: str,
+    body: TranscriptLineBody,
+    member=Depends(require_campaign_member("player")),
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session_dir = get_sessions_dir(slug) / name
+    # Determine which file exists
+    path = None
+    for filename in ("wiki_suggestions.md", "wiki.md"):
+        candidate = session_dir / filename
+        if candidate.exists():
+            path = candidate
+            break
+    if path is None:
+        raise HTTPException(404, "Wiki not found")
+    is_dm = (not AUTH_ENABLED) or (member is not None and member.role == "dm")
+    needs_approval = False
+    if AUTH_ENABLED and not is_dm:
+        campaign = crud.get_campaign_by_slug(db, slug)
+        if campaign and campaign.settings.get("require_edit_approval"):
+            needs_approval = True
+    if needs_approval and current_user is not None:
+        campaign = crud.get_campaign_by_slug(db, slug)
+        edit = crud.create_transcript_edit(
+            db,
+            campaign_id=campaign.id,
+            session_name=name,
+            user_id=current_user.id,
+            line_number=-3,  # sentinel: -3 = full wiki replacement
+            original_text=path.read_text(encoding="utf-8"),
+            proposed_text=body.content,
+        )
+        return JSONResponse(status_code=202, content={"status": "pending", "edit_id": edit.id})
+    path.write_text(body.content, encoding="utf-8")
+    return {"status": "applied"}
+
+
 @app.get("/campaigns/{slug}/sessions/{name}/wiki-suggestions-parsed")
 def campaign_get_wiki_suggestions_parsed(
     slug: str,
@@ -2152,15 +2227,33 @@ def campaign_approve_edit(
     if edit.status != "pending":
         raise HTTPException(400, f"Edit is already {edit.status}")
 
-    # Apply the edit to transcript.md
-    path = get_sessions_dir(slug) / edit.session_name / "transcript.md"
-    if not path.exists():
-        raise HTTPException(404, "Transcript not found")
-    lines = path.read_text(encoding="utf-8").splitlines()
+    # Apply the edit — dispatch on line_number sentinel
+    session_dir = get_sessions_dir(slug) / edit.session_name
     n = edit.line_number
-    if 1 <= n <= len(lines):
-        lines[n - 1] = edit.proposed_text
-        path.write_text("\n".join(lines), encoding="utf-8")
+    if n == -2:
+        # Full summary replacement
+        path = session_dir / "summary.md"
+        if path.exists():
+            path.write_text(edit.proposed_text, encoding="utf-8")
+    elif n == -3:
+        # Full wiki replacement (write to whichever file exists)
+        path = None
+        for filename in ("wiki_suggestions.md", "wiki.md"):
+            candidate = session_dir / filename
+            if candidate.exists():
+                path = candidate
+                break
+        if path:
+            path.write_text(edit.proposed_text, encoding="utf-8")
+    else:
+        # Transcript line edit
+        path = session_dir / "transcript.md"
+        if not path.exists():
+            raise HTTPException(404, "Transcript not found")
+        lines = path.read_text(encoding="utf-8").splitlines()
+        if 1 <= n <= len(lines):
+            lines[n - 1] = edit.proposed_text
+            path.write_text("\n".join(lines), encoding="utf-8")
 
     reviewer_id = current_user.id if current_user else 0
     edit = crud.approve_edit(db, edit, reviewer_id)

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
+import { useAuth } from '../AuthContext'
 import ReactMarkdown from 'react-markdown'
 
 // Speaker color palette
@@ -539,7 +540,13 @@ export default function SessionView() {
             onTranscriptChange={() => { load(); setChangesLoaded(false); setChangesReport(null) }}
           />
         ) : tab === 'summary' ? (
-          <MarkdownView content={summary} emptyMsg="No summary yet. Run the pipeline to generate one." />
+          <MarkdownEditView
+            content={summary}
+            emptyMsg="No summary yet. Run the pipeline to generate one."
+            sessionName={name!}
+            endpoint="summary"
+            onSaved={load}
+          />
         ) : tab === 'wiki' ? (
           <WikiView sessionName={name!} wikiMarkdown={wiki} onRemerge={doMerge} />
         ) : (
@@ -978,12 +985,7 @@ function MarkdownView({ content, emptyMsg }: { content: string | null; emptyMsg:
     )
   }
   return (
-    <div style={{
-      maxWidth: '820px',
-      color: '#cbd5e1',
-      fontSize: '14px',
-      lineHeight: 1.7,
-    }}>
+    <div style={{ maxWidth: '820px', color: '#cbd5e1', fontSize: '14px', lineHeight: 1.7 }}>
       <ReactMarkdown
         components={{
           h1: ({ children }) => <h1 style={{ color: '#e2e8f0', fontSize: '20px', marginBottom: '12px' }}>{children}</h1>,
@@ -1001,6 +1003,142 @@ function MarkdownView({ content, emptyMsg }: { content: string | null; emptyMsg:
       >
         {content}
       </ReactMarkdown>
+    </div>
+  )
+}
+
+function MarkdownEditView({
+  content,
+  emptyMsg,
+  sessionName,
+  endpoint,
+  onSaved,
+}: {
+  content: string | null
+  emptyMsg: string
+  sessionName: string
+  endpoint: 'summary' | 'wiki'
+  onSaved?: () => void
+}) {
+  const apiUrl = useApiUrl()
+  const { authEnabled } = useAuth()
+  const { activeCampaign } = useCampaign()
+  const [editMode, setEditMode] = useState(false)
+  const [editValue, setEditValue] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [pendingApproval, setPendingApproval] = useState(false)
+
+  const isDm = !authEnabled || activeCampaign?.role === 'dm'
+  const requiresApproval = authEnabled && !isDm && activeCampaign?.settings?.require_edit_approval
+
+  const enterEdit = () => {
+    setEditValue(content ?? '')
+    setPendingApproval(false)
+    setEditMode(true)
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/${endpoint}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editValue }),
+      })
+      if (r.status === 202) {
+        setPendingApproval(true)
+        setEditMode(false)
+      } else if (r.ok) {
+        setEditMode(false)
+        onSaved?.()
+      } else {
+        const data = await r.json().catch(() => ({}))
+        alert(`Failed to save: ${data.detail || r.status}`)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!content && !editMode) {
+    return (
+      <div style={{ color: '#64748b', textAlign: 'center', paddingTop: '60px' }}>
+        {emptyMsg}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth: '820px' }}>
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+        {pendingApproval && (
+          <span style={{
+            fontSize: '11px', fontWeight: 600, color: '#fbbf24',
+            background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)',
+            borderRadius: '6px', padding: '3px 10px',
+          }}>
+            Submitted for DM review
+          </span>
+        )}
+        <div style={{ flex: 1 }} />
+        {!editMode ? (
+          <button
+            onClick={enterEdit}
+            style={{
+              background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '8px',
+              color: '#64748b', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            ✏️ Edit {endpoint === 'summary' ? 'Summary' : 'Wiki'}
+          </button>
+        ) : (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <span style={{ fontSize: '11px', color: requiresApproval ? '#fbbf24' : '#64748b', alignSelf: 'center' }}>
+              {requiresApproval ? 'Changes will be submitted for DM review' : 'Changes save directly'}
+            </span>
+            <button
+              onClick={() => setEditMode(false)}
+              style={{
+                background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '6px',
+                color: '#64748b', padding: '5px 12px', fontSize: '12px', cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={save}
+              disabled={saving}
+              style={{
+                background: requiresApproval ? 'rgba(251,191,36,0.15)' : 'rgba(52,211,153,0.15)',
+                border: `1px solid ${requiresApproval ? 'rgba(251,191,36,0.4)' : 'rgba(52,211,153,0.4)'}`,
+                borderRadius: '6px',
+                color: requiresApproval ? '#fbbf24' : '#34d399',
+                padding: '5px 14px', fontSize: '12px', fontWeight: 700,
+                cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
+              }}
+            >
+              {saving ? 'Saving…' : requiresApproval ? 'Submit for Review' : 'Save'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {editMode ? (
+        <textarea
+          value={editValue}
+          onChange={e => setEditValue(e.target.value)}
+          style={{
+            width: '100%', minHeight: '500px', background: '#13151f',
+            border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px',
+            color: '#e2e8f0', padding: '16px', fontSize: '13px',
+            fontFamily: 'monospace', lineHeight: 1.6, resize: 'vertical',
+            outline: 'none', boxSizing: 'border-box',
+          }}
+        />
+      ) : (
+        <MarkdownView content={content} emptyMsg={emptyMsg} />
+      )}
     </div>
   )
 }
