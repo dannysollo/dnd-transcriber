@@ -11,53 +11,82 @@
 
 /* Mobile: sidebar becomes a bottom tab bar */
 @media (max-width: 768px) {
+  /* Use dvh (dynamic viewport height) to account for mobile browser chrome */
+  #root {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
   .app-shell {
     flex-direction: column-reverse !important;
+    height: 100dvh !important;
+    overflow: hidden !important;
   }
+
   .app-sidebar {
     width: 100% !important;
     height: auto !important;
     flex-direction: row !important;
     border-right: none !important;
     border-top: 1px solid #1e2130 !important;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: hidden !important;
     flex-shrink: 0 !important;
     padding: 0 !important;
+    /* Safe area padding for phones with home indicator */
+    padding-bottom: env(safe-area-inset-bottom, 0) !important;
   }
+
   .sidebar-logo { display: none !important; }
   .sidebar-campaign { display: none !important; }
+
   .sidebar-nav {
     flex-direction: row !important;
     flex: 1;
     gap: 0 !important;
     padding: 0 !important;
-    overflow-x: auto;
+    overflow: hidden !important;
   }
+
   .sidebar-nav a, .sidebar-nav-item {
     flex-direction: column !important;
     gap: 2px !important;
-    padding: 8px 12px !important;
+    padding: 8px 4px !important;
     font-size: 10px !important;
-    min-width: 56px;
+    min-width: 0 !important;
     text-align: center;
     border-radius: 0 !important;
     flex: 1;
     justify-content: center;
     align-items: center;
+    overflow: hidden;
   }
+
+  .sidebar-nav a span:first-child {
+    font-size: 18px !important;
+  }
+
   .sidebar-nav a span:last-child, .sidebar-nav-item span:last-child {
-    font-size: 10px !important;
+    font-size: 9px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
   }
+
   .sidebar-user { display: none !important; }
+
   .app-main {
-    flex: 1 !important;
-    overflow: auto;
-    min-height: 0;
+    flex: 1 1 0 !important;
+    overflow: auto !important;
+    min-height: 0 !important;
+    /* Needed so content doesn't push the nav bar off screen */
+    height: 0 !important;
   }
+
   .mobile-campaign-bar {
     display: block !important;
   }
+
   .session-content {
     padding: 12px !important;
   }
