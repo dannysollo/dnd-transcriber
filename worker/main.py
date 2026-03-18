@@ -1,15 +1,25 @@
 """
 worker/main.py — DnD Transcriber worker daemon.
 
+Runs both the transcription poll loop and the Craig Watcher in a single process.
+The Discord client owns the async event loop; the poll loop runs in a background thread.
+
 Usage:
     python worker/main.py
     python worker/main.py --config /path/to/worker.yaml
+
+Craig Watcher is enabled automatically when `discord_token` is present in worker.yaml.
 """
 import argparse
+import asyncio
+import io
+import re
 import sys
 import tempfile
+import threading
 import time
 import traceback
+import zipfile
 from pathlib import Path
 
 # Allow running as `python worker/main.py` from repo root
@@ -20,16 +30,293 @@ from config import load_config
 from audio import find_audio_files, merge_audio_files
 from transcribe import load_whisper_model, transcribe_session
 
+import requests
+
+# ─── Craig Watcher constants ──────────────────────────────────────────────────
+
+CRAIG_USER_ID = 272937604339466240
+
+
+# ─── Poll loop (runs in a background thread) ─────────────────────────────────
+
+def poll_loop(config: dict, stop_event: threading.Event):
+    """Synchronous transcription poll loop — runs in a background thread."""
+    client = WorkerClient(config)
+    whisper_model = None
+    heartbeat_counter = 0
+
+    try:
+        client.heartbeat()
+        print("[worker] Heartbeat sent.")
+    except Exception as e:
+        print(f"[worker] Warning: initial heartbeat failed: {e}")
+
+    while not stop_event.is_set():
+        try:
+            jobs = client.get_pending_jobs()
+        except Exception as e:
+            print(f"[worker] Error fetching jobs: {e}")
+            stop_event.wait(config["poll_interval"])
+            continue
+
+        for job in jobs:
+            if stop_event.is_set():
+                break
+            session_name = job["session_name"]
+            session_dir = Path(config["audio_dir"]) / session_name
+
+            if not session_dir.exists():
+                print(f"[worker] [SKIP] Session dir not found: {session_dir}")
+                continue
+
+            audio_files = find_audio_files(session_dir)
+            if not audio_files:
+                print(f"[worker] [SKIP] No audio files in {session_dir}")
+                continue
+
+            print(f"\n[worker] [JOB] {session_name} — {len(audio_files)} audio file(s)")
+
+            try:
+                client.claim_job(session_name)
+                print(f"[worker]   Claimed job.")
+
+                campaign_config = client.get_campaign_config()
+                job_config = {**campaign_config, **{
+                    k: config[k] for k in ("whisper_model",) if k in config
+                }}
+
+                model_name = job_config.get("whisper_model", "turbo")
+                if whisper_model is None or getattr(whisper_model, "_model_name", None) != model_name:
+                    whisper_model = load_whisper_model(model_name)
+                    whisper_model._model_name = model_name
+
+                transcript = transcribe_session(session_dir, whisper_model, job_config)
+
+                print(f"[worker]   Pushing transcript...")
+                client.push_transcript(session_name, transcript)
+
+                with tempfile.NamedTemporaryFile(suffix="_merged.mp3", delete=False) as tmp:
+                    merged_path = tmp.name
+                print(f"[worker]   Merging audio...")
+                merge_audio_files(audio_files, merged_path)
+                print(f"[worker]   Pushing audio...")
+                client.push_audio(session_name, merged_path)
+                Path(merged_path).unlink(missing_ok=True)
+
+                print(f"[worker]   [DONE] {session_name}")
+
+            except Exception as e:
+                print(f"[worker]   [ERROR] {session_name}: {e}")
+                print(traceback.format_exc())
+                try:
+                    client.report_error(session_name, str(e))
+                except Exception as report_err:
+                    print(f"[worker]   Failed to report error: {report_err}")
+
+        heartbeat_counter += 1
+        if heartbeat_counter >= 5:
+            try:
+                client.heartbeat()
+            except Exception as e:
+                print(f"[worker] Heartbeat failed: {e}")
+            heartbeat_counter = 0
+
+        stop_event.wait(config["poll_interval"])
+
+    print("[worker] Poll loop stopped.")
+
+
+# ─── Craig Watcher helpers ────────────────────────────────────────────────────
+
+def extract_craig_url(message) -> str | None:
+    """Extract download URL from Craig's DM button components or message content."""
+    for component in message.components:
+        children = getattr(component, "children", [component])
+        for child in children:
+            url = getattr(child, "url", None)
+            if url and ("craig.horse/rec/" in url or "craig.chat/rec/" in url):
+                return url
+
+    patterns = [
+        r"https://craig\.horse/rec/[A-Za-z0-9]+\?key=[A-Za-z0-9]+",
+        r"https://craig\.chat/rec/[A-Za-z0-9]+\?key=[A-Za-z0-9]+",
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, message.content or "")
+        if m:
+            return m.group(0)
+        for embed in message.embeds:
+            text = (embed.description or "") + (embed.title or "")
+            m = re.search(pattern, text)
+            if m:
+                return m.group(0)
+    return None
+
+
+def extract_recording_id(message) -> str | None:
+    """Extract Recording ID from Craig's DM text."""
+    m = re.search(r"\*\*Recording ID:\*\*\s*`([A-Za-z0-9]+)`", message.content or "")
+    if m:
+        return m.group(1)
+    url = extract_craig_url(message)
+    if url:
+        m = re.search(r"/rec/([A-Za-z0-9]+)", url)
+        if m:
+            return m.group(1)
+    return None
+
+
+def extract_guild_id(message) -> str | None:
+    m = re.search(r"\((\d{17,20})\)", message.content or "")
+    return m.group(1) if m else None
+
+
+def make_session_name(config: dict, recording_id: str, message) -> str:
+    fmt = config.get("session_name_format", "{date}")
+    from datetime import datetime, timezone
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    channel_match = re.search(r"\*\*Channel:\*\*.*?\(([^)]+)\)\s*\(", message.content or "")
+    channel_raw = channel_match.group(1).strip() if channel_match else "session"
+    channel_name = re.sub(r"[^a-zA-Z0-9_-]", "-", channel_raw)[:30].strip("-")
+    return (fmt
+            .replace("{date}", date_str)
+            .replace("{channel}", channel_name)
+            .replace("{recording_id}", recording_id))
+
+
+def download_and_queue(config: dict, url: str, session_name: str):
+    """Download Craig zip, extract FLACs, create session, queue job."""
+    audio_dir = Path(config["audio_dir"]) / session_name
+    audio_dir.mkdir(parents=True, exist_ok=True)
+
+    # Build FLAC zip download URL
+    # Craig's download page URL has ?key=... — append format/container params
+    if "?" in url:
+        dl_url = url + "&format=flac&container=zip"
+    else:
+        dl_url = url + "?format=flac&container=zip"
+
+    print(f"[craig] Downloading: {dl_url}")
+    r = requests.get(dl_url, timeout=300, stream=True)
+    if r.status_code == 404:
+        raise RuntimeError("Recording not found or expired (404).")
+    if r.status_code == 403:
+        raise RuntimeError("Access denied — invalid key (403).")
+    r.raise_for_status()
+
+    content_type = r.headers.get("content-type", "")
+    if "zip" not in content_type and "octet-stream" not in content_type:
+        raise RuntimeError(f"Unexpected content type: {content_type} — link may be expired or format unsupported.")
+
+    extracted = []
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        for name in zf.namelist():
+            if name.lower().endswith((".flac", ".ogg", ".wav", ".m4a", ".mp3")):
+                out_path = audio_dir / Path(name).name
+                with zf.open(name) as src, open(out_path, "wb") as dst:
+                    dst.write(src.read())
+                extracted.append(out_path)
+                print(f"[craig]   Extracted: {out_path.name}")
+
+    if not extracted:
+        raise RuntimeError("ZIP contained no audio files.")
+
+    # Create session + queue transcription
+    base = config["server_url"]
+    slug = config["campaign_slug"]
+    headers = {"Authorization": f"Bearer {config['api_key']}", "Content-Type": "application/json"}
+
+    r = requests.post(f"{base}/campaigns/{slug}/sessions", headers=headers,
+                      json={"name": session_name}, timeout=30)
+    if r.status_code == 201:
+        print(f"[craig]   Created session: {session_name}")
+    elif r.status_code == 400:
+        print(f"[craig]   Session already exists: {session_name}")
+    else:
+        r.raise_for_status()
+
+    r = requests.post(f"{base}/campaigns/{slug}/sessions/{session_name}/transcribe",
+                      headers=headers, timeout=30)
+    if r.status_code == 409:
+        print(f"[craig]   Transcription already queued.")
+    elif r.ok:
+        print(f"[craig]   Transcription job queued.")
+    else:
+        print(f"[craig]   Warning: failed to queue transcription: {r.status_code}")
+
+
+# ─── Discord client (Craig Watcher) ──────────────────────────────────────────
+
+def build_discord_client(config: dict, stop_event: threading.Event):
+    try:
+        import discord
+    except ImportError:
+        print("[craig] discord.py-self not installed — Craig Watcher disabled.")
+        print("[craig] Run: pip install discord.py-self")
+        return None
+
+    guild_filter = set(config.get("craig_channel_filter") or [])
+
+    intents = discord.Intents.default()
+    intents.message_content = True
+    intents.dm_messages = True
+    client = discord.Client(intents=intents)
+
+    @client.event
+    async def on_ready():
+        print(f"[craig] Watcher ready. Logged in as {client.user}")
+        print(f"[craig] Watching for DMs from Craig (ID: {CRAIG_USER_ID})")
+        if guild_filter:
+            print(f"[craig] Guild filter: {guild_filter}")
+
+    @client.event
+    async def on_message(message):
+        if not isinstance(message.channel, discord.DMChannel):
+            return
+        if message.author.id != CRAIG_USER_ID:
+            return
+
+        print(f"\n[craig] DM received at {message.created_at.strftime('%H:%M:%S')} UTC")
+
+        if guild_filter:
+            guild_id = extract_guild_id(message)
+            if guild_id and guild_id not in guild_filter:
+                print(f"[craig] Skipping — guild {guild_id} not in filter.")
+                return
+
+        recording_id = extract_recording_id(message)
+        if not recording_id:
+            print("[craig] Could not extract recording ID — skipping.")
+            return
+
+        url = extract_craig_url(message)
+        if not url:
+            print("[craig] Could not find download URL in message components.")
+            print("[craig] Tip: ensure Craig can send interactive components in DMs.")
+            return
+
+        session_name = make_session_name(config, recording_id, message)
+        print(f"[craig] Recording ID: {recording_id} → session: {session_name}")
+
+        try:
+            await asyncio.to_thread(download_and_queue, config, url, session_name)
+            print(f"[craig] ✓ Done — '{session_name}' queued for transcription.")
+        except Exception as e:
+            print(f"[craig] ERROR: {e}")
+
+    return client
+
+
+# ─── Entry point ─────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="DnD Transcriber Worker")
     parser.add_argument(
         "--config",
         default=str(Path(__file__).parent / "worker.yaml"),
-        help="Path to worker.yaml (default: worker.yaml in this directory)",
+        help="Path to worker.yaml",
     )
     args = parser.parse_args()
-
     config = load_config(args.config)
 
     print("=" * 60)
@@ -39,107 +326,44 @@ def main():
     print(f"  Audio:    {config['audio_dir']}")
     print(f"  Model:    {config.get('whisper_model', '(from campaign settings)')}")
     print(f"  Poll:     every {config['poll_interval']}s")
+    craig_enabled = bool(config.get("discord_token"))
+    print(f"  Craig Watcher: {'enabled' if craig_enabled else 'disabled (no discord_token)'}")
     print("=" * 60)
 
-    client = WorkerClient(config)
-    whisper_model = None  # lazy-load on first use
+    stop_event = threading.Event()
 
-    # Initial heartbeat
-    try:
-        client.heartbeat()
-        print("Heartbeat sent.")
-    except Exception as e:
-        print(f"Warning: heartbeat failed: {e}")
+    # Start poll loop in background thread
+    poll_thread = threading.Thread(target=poll_loop, args=(config, stop_event), daemon=True)
+    poll_thread.start()
 
-    heartbeat_counter = 0
-
-    try:
-        while True:
+    if craig_enabled:
+        # Discord client owns the main thread's event loop
+        discord_client = build_discord_client(config, stop_event)
+        if discord_client:
             try:
-                jobs = client.get_pending_jobs()
-            except Exception as e:
-                print(f"Error fetching jobs: {e}")
-                time.sleep(config["poll_interval"])
-                continue
+                discord_client.run(config["discord_token"])
+            except KeyboardInterrupt:
+                pass
+            finally:
+                stop_event.set()
+        else:
+            # discord.py-self not installed — just run poll loop in foreground
+            _run_poll_only(stop_event)
+    else:
+        # No Discord token — run poll loop in foreground
+        _run_poll_only(stop_event)
 
-            for job in jobs:
-                session_name = job["session_name"]
-                session_dir = Path(config["audio_dir"]) / session_name
+    poll_thread.join(timeout=5)
+    print("Worker stopped.")
 
-                if not session_dir.exists():
-                    print(f"[SKIP] Session dir not found: {session_dir}")
-                    continue
 
-                audio_files = find_audio_files(session_dir)
-                if not audio_files:
-                    print(f"[SKIP] No audio files in {session_dir}")
-                    continue
-
-                print(f"\n[JOB] {session_name} — {len(audio_files)} audio file(s)")
-
-                try:
-                    # Claim the job
-                    client.claim_job(session_name)
-                    print(f"  Claimed job.")
-
-                    # Fetch campaign config (players, vocab, vad) from server
-                    campaign_config = client.get_campaign_config()
-                    # Local config overrides: whisper_model, poll_interval (worker-specific)
-                    job_config = {**campaign_config, **{
-                        k: config[k] for k in ("whisper_model",) if k in config
-                    }}
-
-                    # Lazy-load Whisper model (reload if model name changed)
-                    model_name = job_config.get("whisper_model", "turbo")
-                    if whisper_model is None or getattr(whisper_model, "_model_name", None) != model_name:
-                        whisper_model = load_whisper_model(model_name)
-                        whisper_model._model_name = model_name
-
-                    # Transcribe each speaker track individually, merge by timestamp
-                    transcript = transcribe_session(session_dir, whisper_model, job_config)
-
-                    # Push transcript
-                    print(f"  Pushing transcript...")
-                    client.push_transcript(session_name, transcript)
-
-                    # Merge audio tracks and push for web playback
-                    with tempfile.NamedTemporaryFile(suffix="_merged.mp3", delete=False) as tmp_merged:
-                        merged_path = tmp_merged.name
-                    print(f"  Merging audio for web playback...")
-                    merge_audio_files(audio_files, merged_path)
-                    print(f"  Pushing audio...")
-                    client.push_audio(session_name, merged_path)
-
-                    print(f"  [DONE] {session_name}")
-
-                    # Cleanup merged audio temp file (speaker JSONs kept in session_dir/speakers/)
-                    try:
-                        Path(merged_path).unlink(missing_ok=True)
-                    except Exception:
-                        pass
-
-                except Exception as e:
-                    error_msg = traceback.format_exc()
-                    print(f"  [ERROR] {session_name}: {e}")
-                    print(error_msg)
-                    try:
-                        client.report_error(session_name, str(e))
-                    except Exception as report_err:
-                        print(f"  Failed to report error: {report_err}")
-                    continue
-
-            heartbeat_counter += 1
-            if heartbeat_counter >= 5:
-                try:
-                    client.heartbeat()
-                except Exception as e:
-                    print(f"Heartbeat failed: {e}")
-                heartbeat_counter = 0
-
-            time.sleep(config["poll_interval"])
-
+def _run_poll_only(stop_event: threading.Event):
+    """Block the main thread until Ctrl+C when Craig Watcher is disabled."""
+    try:
+        while not stop_event.is_set():
+            time.sleep(1)
     except KeyboardInterrupt:
-        print("\nWorker stopped.")
+        stop_event.set()
 
 
 if __name__ == "__main__":

@@ -120,20 +120,14 @@ To find your Discord token: open Discord in the browser → DevTools → Network
 
 ### Running
 
-Run the watcher alongside the main worker (in a separate terminal):
+The Craig Watcher is built into `main.py` — just run the worker as normal:
 
 ```bash
 source venv/bin/activate
-python craig_watcher.py
+python main.py
 ```
 
-Or run both at once:
-
-```bash
-source venv/bin/activate
-python main.py &
-python craig_watcher.py
-```
+If `discord_token` is set in `worker.yaml`, the watcher starts automatically alongside the transcription poll loop in the same process.
 
 ### Session naming
 
