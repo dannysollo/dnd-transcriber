@@ -103,6 +103,26 @@ class TranscriptionJob(Base):
     )
 
 
+class SessionShare(Base):
+    __tablename__ = "session_shares"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    campaign_id: Mapped[int] = mapped_column(Integer, ForeignKey("campaigns.id"), nullable=False)
+    session_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    token: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True,
+                                       default=lambda: secrets.token_urlsafe(24))
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # which content to expose
+    show_transcript: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    show_summary: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    show_wiki: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    campaign: Mapped["Campaign"] = relationship("Campaign")
+    creator: Mapped["User"] = relationship("User", foreign_keys=[created_by])
+
+
 class TranscriptEdit(Base):
     __tablename__ = "transcript_edits"
 

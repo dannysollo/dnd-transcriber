@@ -7,7 +7,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from db.models import Campaign, CampaignInvite, CampaignMember, TranscriptEdit, TranscriptionJob, User
+from db.models import Campaign, CampaignInvite, CampaignMember, SessionShare, TranscriptEdit, TranscriptionJob, User
 
 
 # ─── User ─────────────────────────────────────────────────────────────────────
@@ -324,3 +324,48 @@ def get_all_jobs(db: Session, campaign_id: int) -> list:
         .order_by(TranscriptionJob.created_at.desc())
         .all()
     )
+
+
+# ─── Session Shares ───────────────────────────────────────────────────────────
+
+def create_session_share(
+    db: Session,
+    campaign_id: int,
+    session_name: str,
+    created_by: int,
+    show_transcript: bool = True,
+    show_summary: bool = True,
+    show_wiki: bool = True,
+    expires_at=None,
+) -> SessionShare:
+    share = SessionShare(
+        campaign_id=campaign_id,
+        session_name=session_name,
+        created_by=created_by,
+        show_transcript=show_transcript,
+        show_summary=show_summary,
+        show_wiki=show_wiki,
+        expires_at=expires_at,
+    )
+    db.add(share)
+    db.commit()
+    db.refresh(share)
+    return share
+
+
+def get_share_by_token(db: Session, token: str) -> Optional[SessionShare]:
+    return db.query(SessionShare).filter(SessionShare.token == token).first()
+
+
+def get_session_shares(db: Session, campaign_id: int, session_name: str) -> list[SessionShare]:
+    return (
+        db.query(SessionShare)
+        .filter(SessionShare.campaign_id == campaign_id, SessionShare.session_name == session_name)
+        .order_by(SessionShare.created_at.desc())
+        .all()
+    )
+
+
+def delete_share(db: Session, share: SessionShare):
+    db.delete(share)
+    db.commit()

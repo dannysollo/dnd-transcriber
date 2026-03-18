@@ -13,6 +13,7 @@ import InvitePage from './pages/InvitePage'
 import EditQueuePage from './pages/EditQueuePage'
 import LandingPage from './pages/LandingPage'
 import SearchPage from './pages/SearchPage'
+import ShareView from './pages/ShareView'
 import { useAuth, avatarUrl } from './AuthContext'
 import { useCampaign } from './CampaignContext'
 
@@ -63,6 +64,15 @@ export default function App() {
       }
     }
   }, [isLoggedIn])
+
+  // Share links are fully public — render outside the auth shell
+  if (window.location.pathname.startsWith('/share/')) {
+    return (
+      <Routes>
+        <Route path="/share/:token" element={<ShareView />} />
+      </Routes>
+    )
+  }
 
   if (loading || campaignLoading) {
     return (

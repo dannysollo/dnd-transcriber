@@ -2,6 +2,7 @@
 server.py — FastAPI backend for the DnD Transcriber GUI
 """
 import asyncio
+from datetime import datetime
 import io
 import json
 import os
@@ -29,7 +30,7 @@ from auth.jwt import COOKIE_NAME, create_access_token
 from auth.middleware import AUTH_ENABLED, get_current_user, require_campaign_member, require_user, require_worker_key
 from db import crud
 from db.database import get_db, init_db
-from db.models import TranscriptEdit, TranscriptionJob, User
+from db.models import SessionShare, TranscriptEdit, TranscriptionJob, User
 
 APP_DIR = Path(__file__).parent
 CONFIG_PATH = APP_DIR / "config.yaml"
@@ -1387,6 +1388,39 @@ def get_invite_info(token: str, db: Session = Depends(get_db)):
     }
 
 
+# ─── Public share endpoint ────────────────────────────────────────────────────
+
+@app.get("/share/{token}")
+def get_shared_session(token: str, db: Session = Depends(get_db)):
+    """Public read-only view of a shared session — no auth required."""
+    share = crud.get_share_by_token(db, token)
+    if not share:
+        raise HTTPException(404, "Share link not found or expired")
+
+    # Check expiry
+    if share.expires_at and share.expires_at < datetime.utcnow():
+        raise HTTPException(410, "This share link has expired")
+
+    session_dir = get_sessions_dir(share.campaign.slug) / share.session_name
+
+    def read_file(filename: str) -> str | None:
+        p = session_dir / filename
+        return p.read_text(encoding="utf-8") if p.exists() else None
+
+    return {
+        "session_name": share.session_name,
+        "campaign_name": share.campaign.name,
+        "show_transcript": share.show_transcript,
+        "show_summary": share.show_summary,
+        "show_wiki": share.show_wiki,
+        "transcript": read_file("transcript.md") if share.show_transcript else None,
+        "summary": read_file("summary.md") if share.show_summary else None,
+        "wiki": read_file("wiki.md") if share.show_wiki else None,
+        "created_at": share.created_at.isoformat(),
+        "expires_at": share.expires_at.isoformat() if share.expires_at else None,
+    }
+
+
 # ─── Campaign-scoped routes ───────────────────────────────────────────────────
 # All /sessions/*, /config/*, /pipeline/run, /merge/all mirrored under
 # /campaigns/{slug}/ with membership auth enforcement.
@@ -2548,6 +2582,99 @@ def worker_get_config(slug: str, db: Session = Depends(get_db), request: Request
         "vad": config.get("vad", True),
         "whisper_model": config.get("whisper_model", "turbo"),
     }
+
+
+# ─── Session sharing ──────────────────────────────────────────────────────────
+
+class CreateShareBody(BaseModel):
+    show_transcript: bool = True
+    show_summary: bool = True
+    show_wiki: bool = True
+    expires_hours: Optional[int] = None  # None = never expires
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/shares", status_code=201)
+def create_share(
+    slug: str,
+    name: str,
+    body: CreateShareBody,
+    member=Depends(require_campaign_member("dm")),
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+
+    expires_at = None
+    if body.expires_hours:
+        from datetime import timedelta
+        expires_at = datetime.utcnow() + timedelta(hours=body.expires_hours)
+
+    user_id = current_user.id if current_user else member.user_id if member else 0
+    share = crud.create_session_share(
+        db,
+        campaign_id=campaign.id,
+        session_name=name,
+        created_by=user_id,
+        show_transcript=body.show_transcript,
+        show_summary=body.show_summary,
+        show_wiki=body.show_wiki,
+        expires_at=expires_at,
+    )
+    return {
+        "token": share.token,
+        "url": f"/share/{share.token}",
+        "created_at": share.created_at.isoformat(),
+        "expires_at": share.expires_at.isoformat() if share.expires_at else None,
+        "show_transcript": share.show_transcript,
+        "show_summary": share.show_summary,
+        "show_wiki": share.show_wiki,
+    }
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/shares")
+def list_shares(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    shares = crud.get_session_shares(db, campaign.id, name)
+    now = datetime.utcnow()
+    return [
+        {
+            "token": s.token,
+            "url": f"/share/{s.token}",
+            "created_at": s.created_at.isoformat(),
+            "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+            "expired": bool(s.expires_at and s.expires_at < now),
+            "show_transcript": s.show_transcript,
+            "show_summary": s.show_summary,
+            "show_wiki": s.show_wiki,
+        }
+        for s in shares
+    ]
+
+
+@app.delete("/campaigns/{slug}/sessions/{name}/shares/{token}", status_code=204)
+def delete_share(
+    slug: str,
+    name: str,
+    token: str,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    share = crud.get_share_by_token(db, token)
+    if not share or share.session_name != name:
+        raise HTTPException(404, "Share not found")
+    crud.delete_share(db, share)
 
 
 # ─── Static frontend (SPA catch-all) ─────────────────────────────────────────

@@ -151,6 +151,13 @@ export default function SessionView() {
   const [changesLoaded, setChangesLoaded] = useState(false)
   const [targetTimestamp, setTargetTimestamp] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
+  const [shareModalOpen, setShareModalOpen] = useState(false)
+  const [shareToken, setShareToken] = useState<string | null>(null)
+  const [shareCreating, setShareCreating] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
+  const [shareShowTranscript, setShareShowTranscript] = useState(true)
+  const [shareShowSummary, setShareShowSummary] = useState(true)
+  const [shareShowWiki, setShareShowWiki] = useState(true)
   const audioRef = useRef<HTMLAudioElement>(null)
   const pendingSeekRef = useRef<number | null>(null)
   const dragCounter = useRef(0)
@@ -392,6 +399,22 @@ export default function SessionView() {
         <div style={{ flex: 1 }} />
 
         <button
+          onClick={() => { setShareModalOpen(true); setShareToken(null); setShareCopied(false) }}
+          style={{
+            background: 'rgba(96,165,250,0.12)',
+            border: '1px solid rgba(96,165,250,0.25)',
+            borderRadius: '8px',
+            color: '#93c5fd',
+            padding: '6px 14px',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          🔗 Share
+        </button>
+
+        <button
           onClick={doMerge}
           disabled={merging}
           style={{
@@ -409,6 +432,114 @@ export default function SessionView() {
           {merging ? 'Merging...' : 'Re-merge'}
         </button>
       </div>
+
+      {/* Share modal */}
+      {shareModalOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+            zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setShareModalOpen(false) }}
+        >
+          <div style={{
+            background: '#1a1d27', border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 14, padding: 28, width: 420, maxWidth: '90vw',
+          }}>
+            <h3 style={{ margin: '0 0 16px', color: '#e2e8f0', fontSize: 16, fontWeight: 700 }}>
+              🔗 Share Session
+            </h3>
+
+            {!shareToken ? (
+              <>
+                <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 16px' }}>
+                  Generate a read-only public link. No login required to view.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                  {([
+                    ['show_transcript', 'Transcript', shareShowTranscript, setShareShowTranscript],
+                    ['show_summary', 'Summary', shareShowSummary, setShareShowSummary],
+                    ['show_wiki', 'Wiki', shareShowWiki, setShareShowWiki],
+                  ] as const).map(([, label, val, set]) => (
+                    <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', color: '#cbd5e1', fontSize: 14 }}>
+                      <input
+                        type="checkbox"
+                        checked={val}
+                        onChange={e => (set as (v: boolean) => void)(e.target.checked)}
+                        style={{ width: 16, height: 16, accentColor: '#7c6cfc' }}
+                      />
+                      Include {label}
+                    </label>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => setShareModalOpen(false)}
+                    style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: 13 }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={shareCreating}
+                    onClick={async () => {
+                      setShareCreating(true)
+                      try {
+                        const r = await fetch(apiUrl(`/sessions/${name}/shares`), {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ show_transcript: shareShowTranscript, show_summary: shareShowSummary, show_wiki: shareShowWiki }),
+                        })
+                        if (!r.ok) throw new Error('Failed')
+                        const data = await r.json()
+                        setShareToken(data.token)
+                      } finally {
+                        setShareCreating(false)
+                      }
+                    }}
+                    style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#7c6cfc', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13, opacity: shareCreating ? 0.6 : 1 }}
+                  >
+                    {shareCreating ? 'Creating…' : 'Generate Link'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 12px' }}>Share this link — anyone with it can view the session (no login needed):</p>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+                  <input
+                    readOnly
+                    value={`${window.location.origin}/share/${shareToken}`}
+                    style={{
+                      flex: 1, padding: '8px 12px', borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)',
+                      color: '#e2e8f0', fontSize: 13, fontFamily: 'monospace',
+                    }}
+                    onClick={e => (e.target as HTMLInputElement).select()}
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/share/${shareToken}`)
+                      setShareCopied(true)
+                      setTimeout(() => setShareCopied(false), 2000)
+                    }}
+                    style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: shareCopied ? '#22c55e' : '#7c6cfc', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13, transition: 'background 0.2s' }}
+                  >
+                    {shareCopied ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => setShareModalOpen(false)}
+                    style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: 13 }}
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{
