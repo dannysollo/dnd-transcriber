@@ -1,0 +1,8 @@
+openai-whisper
+torch
+torchaudio
+requests
+pyyaml
+tqdm
+soundfile
+silero-vad

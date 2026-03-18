@@ -5,8 +5,13 @@ __pycache__/
 .DS_Store
 
 # Heavy session files — keep local only
-sessions/**/raw/
-sessions/**/speakers/
+sessions/
+campaigns/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
 
 # Temp files
 *.wav
@@ -15,3 +20,4 @@ sessions/**/speakers/
 # Whisper model cache
 ~/.cache/whisper/
 vocab.txt
+.env

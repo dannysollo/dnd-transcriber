@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useApiUrl, useCampaign } from '../CampaignContext'
+import { useAuth } from '../AuthContext'
 
 interface Session {
   name: string
@@ -7,6 +9,13 @@ interface Session {
   has_transcript: boolean
   has_summary: boolean
   has_wiki: boolean
+}
+
+interface TranscriptionJob {
+  session_name: string
+  status: string
+  created_at: string | null
+  error_message: string | null
 }
 
 const statusColors: Record<string, { bg: string; text: string; label: string }> = {
@@ -27,27 +36,94 @@ export default function SessionsPage() {
   const [uploadingFor, setUploadingFor] = useState<string | null>(null)
   const [dragOverSession, setDragOverSession] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [jobMap, setJobMap] = useState<Record<string, TranscriptionJob>>({})
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragCounters = useRef<Record<string, number>>({})
   const navigate = useNavigate()
+  const apiUrl = useApiUrl()
+  const { isLoggedIn, authEnabled } = useAuth()
+  const { activeCampaign } = useCampaign()
+
+  const loadJobs = async () => {
+    if (!activeCampaign) return
+    const r = await fetch(apiUrl(`/worker/jobs/all`))
+    if (r.ok) {
+      const jobs: TranscriptionJob[] = await r.json()
+      const map: Record<string, TranscriptionJob> = {}
+      for (const j of jobs) map[j.session_name] = j
+      setJobMap(map)
+    }
+  }
 
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/sessions')
+      const r = await fetch(apiUrl('/sessions'))
       setSessions(await r.json())
+      await loadJobs()
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { load() }, [])
+  // Poll every 15s while any job is pending or claimed
+  useEffect(() => {
+    const hasActive = Object.values(jobMap).some(j => j.status === 'pending' || j.status === 'claimed')
+    if (hasActive) {
+      if (!pollTimerRef.current) {
+        pollTimerRef.current = setInterval(loadJobs, 15000)
+      }
+    } else {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+    }
+    return () => {}
+  }, [jobMap])
+
+  useEffect(() => {
+    return () => { if (pollTimerRef.current) clearInterval(pollTimerRef.current) }
+  }, [])
+
+  useEffect(() => { load() }, [apiUrl])
+
+  const requestTranscription = async (sessionName: string) => {
+    const r = await fetch(apiUrl(`/sessions/${sessionName}/transcribe`), { method: 'POST' })
+    if (r.status === 409) {
+      const data = await r.json()
+      alert(`Job already queued (status: ${data.status ?? data.detail?.status ?? 'pending'})`)
+      return
+    }
+    if (r.ok) {
+      const job = await r.json()
+      setJobMap(prev => ({ ...prev, [sessionName]: job }))
+    } else {
+      alert('Failed to queue transcription')
+    }
+  }
+
+  const requestWikiSummary = async (sessionName: string) => {
+    const r = await fetch(apiUrl('/pipeline/run'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session: sessionName, transcribe_only: false, wiki_only: true }),
+    })
+    if (r.status === 409) {
+      alert('Pipeline is already running — wait for it to finish.')
+      return
+    }
+    if (!r.ok) {
+      alert('Failed to start wiki summary generation')
+    }
+  }
 
   const createSession = async () => {
     if (!newName.trim()) return
     setCreating(true)
     try {
-      const r = await fetch('/sessions', {
+      const r = await fetch(apiUrl('/sessions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName.trim() }),
@@ -69,7 +145,7 @@ export default function SessionsPage() {
       setRenamingSession(null)
       return
     }
-    const r = await fetch(`/sessions/${oldName}`, {
+    const r = await fetch(apiUrl(`/sessions/${oldName}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ new_name: newNameVal.trim() }),
@@ -88,7 +164,7 @@ export default function SessionsPage() {
     setUploadingFor(sessionName)
     const form = new FormData()
     for (const f of Array.from(files)) form.append('files', f)
-    const r = await fetch(`/sessions/${sessionName}/upload`, { method: 'POST', body: form })
+    const r = await fetch(apiUrl(`/sessions/${sessionName}/upload`), { method: 'POST', body: form })
     setUploadingFor(null)
     if (r.ok) {
       load()
@@ -101,7 +177,7 @@ export default function SessionsPage() {
     setUploadingFor(sessionName)
     const form = new FormData()
     files.forEach(f => form.append('files', f))
-    const r = await fetch(`/sessions/${sessionName}/upload`, { method: 'POST', body: form })
+    const r = await fetch(apiUrl(`/sessions/${sessionName}/upload`), { method: 'POST', body: form })
     setUploadingFor(null)
     if (r.ok) load()
     else alert('Upload failed')
@@ -111,14 +187,14 @@ export default function SessionsPage() {
     setUploadingFor(sessionName)
     const form = new FormData()
     form.append('file', file)
-    const r = await fetch(`/sessions/${sessionName}/import-zip`, { method: 'POST', body: form })
+    const r = await fetch(apiUrl(`/sessions/${sessionName}/import-zip`), { method: 'POST', body: form })
     setUploadingFor(null)
     if (r.ok) load()
     else alert('Zip import failed')
   }
 
   const deleteSession = async (name: string) => {
-    const r = await fetch(`/sessions/${name}`, { method: 'DELETE' })
+    const r = await fetch(apiUrl(`/sessions/${name}`), { method: 'DELETE' })
     if (r.ok) {
       setConfirmDelete(null)
       load()
@@ -168,30 +244,32 @@ export default function SessionsPage() {
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>Sessions</h1>
           <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>All recording sessions</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <input
-            type="text"
-            value={newName}
-            onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && createSession()}
-            placeholder="2026-03-15"
-            style={{
-              background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '8px',
-              color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', width: '160px', outline: 'none',
-            }}
-          />
-          <button
-            onClick={createSession}
-            disabled={creating || !newName.trim()}
-            style={{
-              background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
-              padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-              opacity: (creating || !newName.trim()) ? 0.5 : 1,
-            }}
-          >
-            + New
-          </button>
-        </div>
+        {(!authEnabled || (isLoggedIn && activeCampaign != null)) && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="text"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && createSession()}
+              placeholder="2026-03-15"
+              style={{
+                background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '8px',
+                color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', width: '160px', outline: 'none',
+              }}
+            />
+            <button
+              onClick={createSession}
+              disabled={creating || !newName.trim()}
+              style={{
+                background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
+                padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                opacity: (creating || !newName.trim()) ? 0.5 : 1,
+              }}
+            >
+              + New
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Hidden file input for uploads */}
@@ -266,6 +344,8 @@ export default function SessionsPage() {
               )
             }
 
+            const job = jobMap[s.name]
+
             return (
               <div
                 key={s.name}
@@ -334,8 +414,27 @@ export default function SessionsPage() {
                   {sc.label}
                 </div>
 
+                {/* Job status badge */}
+                {job && <JobStatusBadge job={job} />}
+
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: '6px' }}>
+                  {(!authEnabled || isLoggedIn) && (
+                    <ActionBtn
+                      title={job && job.status === 'claimed' ? 'Reset stuck job and re-queue' : 'Queue transcription'}
+                      onClick={() => requestTranscription(s.name)}
+                    >
+                      {job && job.status === 'claimed' ? '🔁' : '🎙️'}
+                    </ActionBtn>
+                  )}
+                  {(!authEnabled || isLoggedIn) && s.has_transcript && (!authEnabled || activeCampaign?.role === 'dm') && (
+                    <ActionBtn
+                      title="Generate wiki summary"
+                      onClick={() => requestWikiSummary(s.name)}
+                    >
+                      📖
+                    </ActionBtn>
+                  )}
                   <ActionBtn
                     title="Upload audio files"
                     onClick={() => {
@@ -380,6 +479,30 @@ function Badge({ label }: { label: string }) {
     }}>
       {label}
     </span>
+  )
+}
+
+const JOB_BADGE: Record<string, { bg: string; text: string; label: string }> = {
+  pending:   { bg: 'rgba(251,191,36,0.15)',  text: '#fbbf24', label: '⏳ Queued' },
+  claimed:   { bg: 'rgba(59,130,246,0.15)',  text: '#60a5fa', label: '🔄 Transcribing' },
+  done:      { bg: 'rgba(34,197,94,0.15)',   text: '#4ade80', label: '✅ Done' },
+  error:     { bg: 'rgba(248,113,113,0.15)', text: '#f87171', label: '❌ Error' },
+}
+
+function JobStatusBadge({ job }: { job: TranscriptionJob }) {
+  const b = JOB_BADGE[job.status]
+  if (!b) return null
+  return (
+    <div
+      title={job.status === 'error' ? (job.error_message ?? undefined) : undefined}
+      style={{
+        background: b.bg, color: b.text, borderRadius: '20px',
+        padding: '3px 10px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
+        cursor: job.status === 'error' ? 'help' : 'default',
+      }}
+    >
+      {b.label}
+    </div>
   )
 }
 

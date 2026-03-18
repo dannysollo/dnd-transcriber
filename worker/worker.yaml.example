@@ -1,0 +1,6 @@
+server_url: https://your-dnd-transcriber.fly.dev
+campaign_slug: your-campaign-slug
+api_key: paste-key-from-campaign-settings
+audio_dir: /path/to/craig/audio/output
+poll_interval: 30
+# whisper_model: turbo  # Uncomment to override the campaign's model setting (e.g. if your GPU is weaker)

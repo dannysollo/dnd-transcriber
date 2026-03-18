@@ -1,5 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useApiUrl, useCampaign } from '../CampaignContext'
+import { useAuth } from '../AuthContext'
 import ReactMarkdown from 'react-markdown'
 
 // Speaker color palette
@@ -56,11 +58,19 @@ interface ParsedLine {
 function parseTranscript(md: string): ParsedLine[] {
   const lines: ParsedLine[] = []
   for (const raw of md.split('\n')) {
-    // Match: **[00:00] Speaker Name:** text
+    // Match: **[00:00] Speaker Name:** text  (with speaker)
     const m = raw.match(/^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$/)
     if (m) {
       lines.push({ type: 'speech', raw, timestamp: m[1], speaker: m[2].trim(), text: m[3] })
-    } else if (raw.startsWith('#')) {
+      continue
+    }
+    // Match: **[00:00]** text  (no speaker — worker mixed-audio format)
+    const m2 = raw.match(/^\*\*\[([^\]]+)\]\*\* (.*)$/)
+    if (m2) {
+      lines.push({ type: 'speech', raw, timestamp: m2[1], speaker: undefined, text: m2[2] })
+      continue
+    }
+    if (raw.startsWith('#')) {
       lines.push({ type: 'heading', raw })
     } else {
       lines.push({ type: 'other', raw })
@@ -121,6 +131,7 @@ type Tab = 'transcript' | 'summary' | 'wiki' | 'changes'
 export default function SessionView() {
   const { name } = useParams<{ name: string }>()
   const navigate = useNavigate()
+  const apiUrl = useApiUrl()
   const [tab, setTab] = useState<Tab>('transcript')
   const [transcript, setTranscript] = useState<string | null>(null)
   const [summary, setSummary] = useState<string | null>(null)
@@ -131,7 +142,7 @@ export default function SessionView() {
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
   const [selectedAudio, setSelectedAudio] = useState<string>('')
   const [players, setPlayers] = useState<Player[]>([])
-  const [mixingInProgress, setMixingInProgress] = useState(false)
+  const [, setMixingInProgress] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [isDragOver, setIsDragOver] = useState(false)
   const [uploadingAudio, setUploadingAudio] = useState(false)
@@ -148,9 +159,9 @@ export default function SessionView() {
   const load = async () => {
     setLoading(true)
     const [t, s, w] = await Promise.allSettled([
-      fetch(`/sessions/${name}/transcript`).then(r => r.ok ? r.json() : null),
-      fetch(`/sessions/${name}/summary`).then(r => r.ok ? r.json() : null),
-      fetch(`/sessions/${name}/wiki`).then(r => r.ok ? r.json() : null),
+      fetch(apiUrl(`/sessions/${name}/transcript`)).then(r => r.ok ? r.json() : null),
+      fetch(apiUrl(`/sessions/${name}/summary`)).then(r => r.ok ? r.json() : null),
+      fetch(apiUrl(`/sessions/${name}/wiki`)).then(r => r.ok ? r.json() : null),
     ])
     setTranscript(t.status === 'fulfilled' && t.value ? t.value.content : null)
     setSummary(s.status === 'fulfilled' && s.value ? s.value.content : null)
@@ -160,7 +171,7 @@ export default function SessionView() {
 
   const loadAudioFiles = async () => {
     try {
-      const r = await fetch(`/sessions/${name}/audio-files`)
+      const r = await fetch(apiUrl(`/sessions/${name}/audio-files`))
       const data = await r.json()
       const files: AudioFile[] = data.files || []
       setAudioFiles(files)
@@ -170,7 +181,7 @@ export default function SessionView() {
 
   const loadPlayers = async () => {
     try {
-      const r = await fetch('/config')
+      const r = await fetch(apiUrl('/config'))
       if (r.ok) {
         const config = await r.json()
         const playersObj = config.players || {}
@@ -190,7 +201,7 @@ export default function SessionView() {
     if (changesLoaded) return
     setChangesLoading(true)
     try {
-      const r = await fetch(`/sessions/${name}/corrections-report`)
+      const r = await fetch(apiUrl(`/sessions/${name}/corrections-report`))
       if (r.ok) {
         setChangesReport(await r.json())
       } else {
@@ -208,7 +219,7 @@ export default function SessionView() {
     load()
     loadAudioFiles()
     loadPlayers()
-  }, [name])
+  }, [name, apiUrl])
 
   useEffect(() => {
     if (selectedAudio === '_merged') setMixingInProgress(true)
@@ -247,14 +258,14 @@ export default function SessionView() {
         setUploadingAudio(true)
         const form = new FormData()
         form.append('file', zipFiles[0])
-        await fetch(`/sessions/${name}/import-zip`, { method: 'POST', body: form })
+        await fetch(apiUrl(`/sessions/${name}/import-zip`), { method: 'POST', body: form })
         setUploadingAudio(false)
         await loadAudioFiles()
       } else if (audioDropped.length > 0) {
         setUploadingAudio(true)
         const form = new FormData()
         audioDropped.forEach(f => form.append('files', f))
-        await fetch(`/sessions/${name}/upload`, { method: 'POST', body: form })
+        await fetch(apiUrl(`/sessions/${name}/upload`), { method: 'POST', body: form })
         setUploadingAudio(false)
         await loadAudioFiles()
       }
@@ -274,7 +285,7 @@ export default function SessionView() {
   const doMerge = async () => {
     setMerging(true)
     try {
-      const r = await fetch(`/sessions/${name}/merge`, { method: 'POST' })
+      const r = await fetch(apiUrl(`/sessions/${name}/merge`), { method: 'POST' })
       if (r.ok) {
         load()
         // Invalidate changes report so it reloads next time
@@ -485,47 +496,21 @@ export default function SessionView() {
           flexDirection: 'column',
           gap: '8px',
         }}>
-          {/* File selector */}
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Audio label */}
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <span style={{ fontSize: '10px', color: '#475569', fontWeight: 700, letterSpacing: '0.08em' }}>
               AUDIO
             </span>
-            {audioFiles.map(f => (
-              <button
-                key={f.filename}
-                onClick={() => setSelectedAudio(f.filename)}
-                style={{
-                  background: selectedAudio === f.filename ? 'rgba(124,108,252,0.2)' : 'transparent',
-                  border: `1px solid ${selectedAudio === f.filename ? '#7c6cfc' : '#2a2d3a'}`,
-                  borderRadius: '4px',
-                  color: selectedAudio === f.filename ? '#a78bfa' : '#64748b',
-                  padding: '2px 8px',
-                  fontSize: '11px',
-                  cursor: 'pointer',
-                  maxWidth: '220px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-                title={f.label}
-              >
-                {f.filename === '_merged' && mixingInProgress ? `${f.label} (mixing...)` : f.label}
-              </button>
-            ))}
+            <span style={{ fontSize: '11px', color: '#64748b' }}>Session recording (merged)</span>
           </div>
           {selectedAudio && (
             <audio
               ref={audioRef}
               key={selectedAudio}
-              src={
-                selectedAudio === '_merged'
-                  ? `/sessions/${encodeURIComponent(name!)}/audio/merged`
-                  : `/sessions/${encodeURIComponent(name!)}/audio/${encodeURIComponent(selectedAudio)}`
-              }
+              src={apiUrl(`/sessions/${encodeURIComponent(name!)}/merged-audio`)}
               controls
               onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
               onLoadedMetadata={() => {
-                setMixingInProgress(false)
                 if (pendingSeekRef.current !== null) {
                   seekTo(pendingSeekRef.current)
                   pendingSeekRef.current = null
@@ -538,7 +523,7 @@ export default function SessionView() {
       )}
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '24px 28px' }}>
+      <div className="session-content" style={{ flex: 1, overflow: 'auto', padding: '24px 28px' }}>
         {loading ? (
           <div style={{ color: '#64748b' }}>Loading...</div>
         ) : tab === 'transcript' ? (
@@ -555,9 +540,15 @@ export default function SessionView() {
             onTranscriptChange={() => { load(); setChangesLoaded(false); setChangesReport(null) }}
           />
         ) : tab === 'summary' ? (
-          <MarkdownView content={summary} emptyMsg="No summary yet. Run the pipeline to generate one." />
+          <MarkdownEditView
+            content={summary}
+            emptyMsg="No summary yet. Run the pipeline to generate one."
+            sessionName={name!}
+            endpoint="summary"
+            onSaved={load}
+          />
         ) : tab === 'wiki' ? (
-          <WikiView sessionName={name!} wikiMarkdown={wiki} onRemerge={doMerge} />
+          <WikiView sessionName={name!} wikiMarkdown={wiki} onRemerge={doMerge} onWikiSaved={load} />
         ) : (
           <ChangesView
             report={changesReport}
@@ -594,15 +585,46 @@ function TranscriptView({
   editMode?: boolean
   onTranscriptChange?: () => void
 }) {
+  const apiUrl = useApiUrl()
   const activeLineRef = useRef<HTMLDivElement | null>(null)
   const targetLineRef = useRef<HTMLDivElement | null>(null)
   const [flashTimestamp, setFlashTimestamp] = useState<string | null>(null)
+  const { activeCampaign } = useCampaign()
   // Edit mode state
   const [editedLines, setEditedLines] = useState<string[]>([])
   const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null)
   const [editingValue, setEditingValue] = useState('')
   const [savingAll, setSavingAll] = useState(false)
   const [savingLine, setSavingLine] = useState(false)
+  const [pendingLines, setPendingLines] = useState<Set<number>>(new Set())
+  // activeIdx is computed during render; we use a ref to scroll without triggering re-renders
+
+
+  // Compute parsed lines + activeIdx via useMemo so they're stable for the useEffect below
+  const parsedLines = useMemo(() => (content ? parseTranscript(content) : []), [content])
+  const searchLower = search.toLowerCase()
+  const visibleLines = useMemo(
+    () => parsedLines.filter(line => !search || line.raw.toLowerCase().includes(searchLower)),
+    [parsedLines, search, searchLower]
+  )
+  const activeIdx = useMemo(() => {
+    if (currentTime === undefined) return -1
+    let idx = -1
+    for (let i = 0; i < visibleLines.length; i++) {
+      const line = visibleLines[i]
+      if (line.type === 'speech' && line.timestamp) {
+        if (parseTimestampToSeconds(line.timestamp) <= currentTime) idx = i
+      }
+    }
+    return idx
+  }, [visibleLines, currentTime])
+
+  // Scroll active line into view (must be at top level — not after an early return)
+  useEffect(() => {
+    const el = activeLineRef.current
+    if (!el) return
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [activeIdx])
 
   // Initialize editedLines when entering edit mode
   useEffect(() => {
@@ -634,12 +656,17 @@ function TranscriptView({
     if (!sessionName) return
     setSavingLine(true)
     try {
-      await fetch(`/sessions/${sessionName}/transcript/line/${lineIdx + 1}`, {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/transcript/line/${lineIdx + 1}`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: value }),
       })
-      setEditedLines(prev => { const next = [...prev]; next[lineIdx] = value; return next })
+      if (r.status === 202) {
+        // Pending approval — mark line as pending, don't update local text
+        setPendingLines(prev => new Set([...prev, lineIdx]))
+      } else {
+        setEditedLines(prev => { const next = [...prev]; next[lineIdx] = value; return next })
+      }
     } finally {
       setSavingLine(false)
       setEditingLineIdx(null)
@@ -650,7 +677,7 @@ function TranscriptView({
     if (!sessionName) return
     setSavingAll(true)
     try {
-      await fetch(`/sessions/${sessionName}/transcript`, {
+      await fetch(apiUrl(`/sessions/${sessionName}/transcript`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: editedLines.join('\n') }),
@@ -688,7 +715,11 @@ function TranscriptView({
           justifyContent: 'space-between',
           gap: '12px',
         }}>
-          <span>Edit mode — changes write directly to transcript.md. Re-merging will overwrite manual edits.</span>
+          <span>
+            {activeCampaign && activeCampaign.role !== 'dm' && activeCampaign.settings?.require_edit_approval
+              ? 'Edit mode — changes will be submitted for DM review before being applied.'
+              : 'Edit mode — changes write directly to transcript.md. Re-merging will overwrite manual edits.'}
+          </span>
           <button
             onClick={saveAll}
             disabled={savingAll}
@@ -712,6 +743,7 @@ function TranscriptView({
         {displayLines.map((rawLine, lineIdx) => {
           const m = rawLine.match(/^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$/)
           const isEditing = editingLineIdx === lineIdx
+          const isPending = pendingLines.has(lineIdx)
 
           return (
             <div
@@ -722,7 +754,7 @@ function TranscriptView({
                 padding: '3px 6px',
                 alignItems: 'flex-start',
                 borderRadius: '6px',
-                background: isEditing ? 'rgba(251,191,36,0.08)' : 'transparent',
+                background: isEditing ? 'rgba(251,191,36,0.08)' : isPending ? 'rgba(251,191,36,0.05)' : 'transparent',
               }}
             >
               {/* Line number */}
@@ -803,6 +835,17 @@ function TranscriptView({
                   {rawLine || '\u00a0'}
                 </div>
               )}
+              {isPending && (
+                <span style={{
+                  flexShrink: 0, alignSelf: 'center',
+                  fontSize: '10px', fontWeight: 600,
+                  color: '#fbbf24', background: 'rgba(251,191,36,0.12)',
+                  border: '1px solid rgba(251,191,36,0.3)',
+                  borderRadius: '4px', padding: '1px 7px', whiteSpace: 'nowrap',
+                }}>
+                  Submitted for review
+                </span>
+              )}
             </div>
           )
         })}
@@ -811,33 +854,8 @@ function TranscriptView({
   }
 
   // ── Read mode rendering ──────────────────────────────────────────────────
-  const lines = parseTranscript(content)
-  const searchLower = search.toLowerCase()
-
-  const visible = lines.filter(line => {
-    if (!search) return true
-    return line.raw.toLowerCase().includes(searchLower)
-  })
-
-  // Find active line index (last speech line with timestamp <= currentTime)
-  let activeIdx = -1
-  if (currentTime !== undefined) {
-    for (let i = 0; i < visible.length; i++) {
-      const line = visible[i]
-      if (line.type === 'speech' && line.timestamp) {
-        if (parseTimestampToSeconds(line.timestamp) <= currentTime) {
-          activeIdx = i
-        }
-      }
-    }
-  }
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    const el = activeLineRef.current
-    if (!el) return
-    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [activeIdx])
+  // (parsedLines, visibleLines, activeIdx are computed via useMemo above)
+  const visible = visibleLines
 
   const highlight = (text: string) => {
     if (!search) return text
@@ -869,7 +887,7 @@ function TranscriptView({
           )
         }
         if (line.type === 'speech') {
-          const color = getSpeakerColor(line.speaker!, speakerColors)
+          const color = line.speaker ? getSpeakerColor(line.speaker, speakerColors) : '#64748b'
           const tsSeconds = line.timestamp ? parseTimestampToSeconds(line.timestamp) : null
           return (
             <div
@@ -929,20 +947,22 @@ function TranscriptView({
                   {line.timestamp}
                 </span>
               )}
-              {/* Speaker chip */}
-              <span style={{
-                background: `${color}20`,
-                color,
-                borderRadius: '4px',
-                padding: '1px 8px',
-                fontSize: '11px',
-                fontWeight: 700,
-                flexShrink: 0,
-                alignSelf: 'flex-start',
-                marginTop: '1px',
-              }}>
-                {line.speaker}
-              </span>
+              {/* Speaker chip — only shown when speaker is known */}
+              {line.speaker && (
+                <span style={{
+                  background: `${color}20`,
+                  color,
+                  borderRadius: '4px',
+                  padding: '1px 8px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  flexShrink: 0,
+                  alignSelf: 'flex-start',
+                  marginTop: '1px',
+                }}>
+                  {line.speaker}
+                </span>
+              )}
               {/* Text */}
               <span style={{ fontSize: '13px', color: isActive ? '#e2e8f0' : '#cbd5e1', lineHeight: 1.6 }}>
                 {highlight(line.text || '')}
@@ -965,12 +985,7 @@ function MarkdownView({ content, emptyMsg }: { content: string | null; emptyMsg:
     )
   }
   return (
-    <div style={{
-      maxWidth: '820px',
-      color: '#cbd5e1',
-      fontSize: '14px',
-      lineHeight: 1.7,
-    }}>
+    <div style={{ maxWidth: '820px', color: '#cbd5e1', fontSize: '14px', lineHeight: 1.7 }}>
       <ReactMarkdown
         components={{
           h1: ({ children }) => <h1 style={{ color: '#e2e8f0', fontSize: '20px', marginBottom: '12px' }}>{children}</h1>,
@@ -988,6 +1003,142 @@ function MarkdownView({ content, emptyMsg }: { content: string | null; emptyMsg:
       >
         {content}
       </ReactMarkdown>
+    </div>
+  )
+}
+
+function MarkdownEditView({
+  content,
+  emptyMsg,
+  sessionName,
+  endpoint,
+  onSaved,
+}: {
+  content: string | null
+  emptyMsg: string
+  sessionName: string
+  endpoint: 'summary' | 'wiki'
+  onSaved?: () => void
+}) {
+  const apiUrl = useApiUrl()
+  const { authEnabled } = useAuth()
+  const { activeCampaign } = useCampaign()
+  const [editMode, setEditMode] = useState(false)
+  const [editValue, setEditValue] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [pendingApproval, setPendingApproval] = useState(false)
+
+  const isDm = !authEnabled || activeCampaign?.role === 'dm'
+  const requiresApproval = authEnabled && !isDm && activeCampaign?.settings?.require_edit_approval
+
+  const enterEdit = () => {
+    setEditValue(content ?? '')
+    setPendingApproval(false)
+    setEditMode(true)
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/${endpoint}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editValue }),
+      })
+      if (r.status === 202) {
+        setPendingApproval(true)
+        setEditMode(false)
+      } else if (r.ok) {
+        setEditMode(false)
+        onSaved?.()
+      } else {
+        const data = await r.json().catch(() => ({}))
+        alert(`Failed to save: ${data.detail || r.status}`)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!content && !editMode) {
+    return (
+      <div style={{ color: '#64748b', textAlign: 'center', paddingTop: '60px' }}>
+        {emptyMsg}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth: '820px' }}>
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+        {pendingApproval && (
+          <span style={{
+            fontSize: '11px', fontWeight: 600, color: '#fbbf24',
+            background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)',
+            borderRadius: '6px', padding: '3px 10px',
+          }}>
+            Submitted for DM review
+          </span>
+        )}
+        <div style={{ flex: 1 }} />
+        {!editMode ? (
+          <button
+            onClick={enterEdit}
+            style={{
+              background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '8px',
+              color: '#64748b', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            ✏️ Edit {endpoint === 'summary' ? 'Summary' : 'Wiki'}
+          </button>
+        ) : (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <span style={{ fontSize: '11px', color: requiresApproval ? '#fbbf24' : '#64748b', alignSelf: 'center' }}>
+              {requiresApproval ? 'Changes will be submitted for DM review' : 'Changes save directly'}
+            </span>
+            <button
+              onClick={() => setEditMode(false)}
+              style={{
+                background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '6px',
+                color: '#64748b', padding: '5px 12px', fontSize: '12px', cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={save}
+              disabled={saving}
+              style={{
+                background: requiresApproval ? 'rgba(251,191,36,0.15)' : 'rgba(52,211,153,0.15)',
+                border: `1px solid ${requiresApproval ? 'rgba(251,191,36,0.4)' : 'rgba(52,211,153,0.4)'}`,
+                borderRadius: '6px',
+                color: requiresApproval ? '#fbbf24' : '#34d399',
+                padding: '5px 14px', fontSize: '12px', fontWeight: 700,
+                cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
+              }}
+            >
+              {saving ? 'Saving…' : requiresApproval ? 'Submit for Review' : 'Save'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {editMode ? (
+        <textarea
+          value={editValue}
+          onChange={e => setEditValue(e.target.value)}
+          style={{
+            width: '100%', minHeight: '500px', background: '#13151f',
+            border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px',
+            color: '#e2e8f0', padding: '16px', fontSize: '13px',
+            fontFamily: 'monospace', lineHeight: 1.6, resize: 'vertical',
+            outline: 'none', boxSizing: 'border-box',
+          }}
+        />
+      ) : (
+        <MarkdownView content={content} emptyMsg={emptyMsg} />
+      )}
     </div>
   )
 }
@@ -1052,6 +1203,7 @@ type DisplayItem =
   | { type: 'separator'; skipped: number }
 
 function DiffViewer({ sessionName }: { sessionName: string }) {
+  const apiUrl = useApiUrl()
   const [showDiff, setShowDiff] = useState(false)
   const [changedLinesOnly, setChangedLinesOnly] = useState(false)
   const [rawContent, setRawContent] = useState<string | null>(null)
@@ -1066,8 +1218,8 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
     setDiffLoading(true)
     try {
       const [rawRes, corrRes] = await Promise.allSettled([
-        fetch(`/sessions/${sessionName}/raw-transcript`).then(r => r.ok ? r.json() : null),
-        fetch(`/sessions/${sessionName}/transcript`).then(r => r.ok ? r.json() : null),
+        fetch(apiUrl(`/sessions/${sessionName}/raw-transcript`)).then(r => r.ok ? r.json() : null),
+        fetch(apiUrl(`/sessions/${sessionName}/transcript`)).then(r => r.ok ? r.json() : null),
       ])
       setRawContent(rawRes.status === 'fulfilled' && rawRes.value ? rawRes.value.content : '')
       setCorrContent(corrRes.status === 'fulfilled' && corrRes.value ? corrRes.value.content : '')
@@ -1469,6 +1621,7 @@ function ExampleLine({ text, word, color }: { text: string; word: string; color:
 // ─── Speakers panel ───────────────────────────────────────────────────────────
 
 function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRename: () => void }) {
+  const apiUrl = useApiUrl()
   const [open, setOpen] = useState(false)
   const [speakers, setSpeakers] = useState<Array<{ name: string; line_count: number }>>([])
   const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null)
@@ -1478,7 +1631,7 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
 
   const loadSpeakers = async () => {
     try {
-      const r = await fetch(`/sessions/${sessionName}/speakers`)
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/speakers`))
       if (r.ok) setSpeakers((await r.json()).speakers)
     } catch (_) {}
   }
@@ -1490,7 +1643,7 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
     setRenaming(true)
     setRenameResult(null)
     try {
-      const r = await fetch(`/sessions/${sessionName}/rename-speaker`, {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/rename-speaker`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ old_name: oldName, new_name: newName.trim() }),
@@ -1608,7 +1761,14 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
 
 // ─── Wiki tab ─────────────────────────────────────────────────────────────────
 
-function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: string; wikiMarkdown: string | null; onRemerge?: () => void }) {
+function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessionName: string; wikiMarkdown: string | null; onRemerge?: () => void; onWikiSaved?: () => void }) {
+  const apiUrl = useApiUrl()
+  const { authEnabled } = useAuth()
+  const { activeCampaign } = useCampaign()
+  const [wikiEditMode, setWikiEditMode] = useState(false)
+  const [wikiEditValue, setWikiEditValue] = useState('')
+  const [wikiSaving, setWikiSaving] = useState(false)
+  const [wikiPending, setWikiPending] = useState(false)
   const [suggestions, setSuggestions] = useState<WikiSuggestion[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [appliedIds, setAppliedIds] = useState<Set<number>>(new Set())
@@ -1625,7 +1785,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: strin
     setImporting(true)
     setImportResult(null)
     try {
-      const r = await fetch(`/sessions/${sessionName}/import-corrections`, { method: 'POST' })
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/import-corrections`), { method: 'POST' })
       if (r.ok) setImportResult(await r.json())
     } finally {
       setImporting(false)
@@ -1636,7 +1796,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: strin
     const fetchSuggestions = async () => {
       setLoading(true)
       try {
-        const r = await fetch(`/sessions/${sessionName}/wiki-suggestions-parsed`)
+        const r = await fetch(apiUrl(`/sessions/${sessionName}/wiki-suggestions-parsed`))
         setSuggestions(r.ok ? await r.json() : null)
       } catch (_) {
         setSuggestions(null)
@@ -1651,7 +1811,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: strin
     setApplying(true)
     setApplyOutput(null)
     try {
-      const r = await fetch(`/sessions/${sessionName}/apply-wiki`, {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/apply-wiki`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode, ids }),
@@ -1680,18 +1840,111 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: strin
     })
   }
 
+  const isDm = !authEnabled || activeCampaign?.role === 'dm'
+  const requiresApproval = authEnabled && !isDm && activeCampaign?.settings?.require_edit_approval
+
+  const saveWikiEdit = async () => {
+    setWikiSaving(true)
+    try {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/wiki`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: wikiEditValue }),
+      })
+      if (r.status === 202) {
+        setWikiPending(true)
+        setWikiEditMode(false)
+      } else if (r.ok) {
+        setWikiEditMode(false)
+        onWikiSaved?.()
+      } else {
+        const data = await r.json().catch(() => ({}))
+        alert(`Failed to save: ${data.detail || r.status}`)
+      }
+    } finally {
+      setWikiSaving(false)
+    }
+  }
+
+  // Wiki edit toolbar (shown above both the suggestions panel and the markdown fallback)
+  const wikiEditToolbar = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+      {wikiPending && (
+        <span style={{
+          fontSize: '11px', fontWeight: 600, color: '#fbbf24',
+          background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)',
+          borderRadius: '6px', padding: '3px 10px',
+        }}>
+          Submitted for DM review
+        </span>
+      )}
+      <div style={{ flex: 1 }} />
+      {!wikiEditMode ? (
+        <button
+          onClick={() => { setWikiEditValue(wikiMarkdown ?? ''); setWikiPending(false); setWikiEditMode(true) }}
+          style={{
+            background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '8px',
+            color: '#64748b', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          ✏️ Edit Wiki
+        </button>
+      ) : (
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', color: requiresApproval ? '#fbbf24' : '#64748b' }}>
+            {requiresApproval ? 'Will submit for DM review' : 'Saves directly'}
+          </span>
+          <button onClick={() => setWikiEditMode(false)} style={{ background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '6px', color: '#64748b', padding: '5px 12px', fontSize: '12px', cursor: 'pointer' }}>Cancel</button>
+          <button
+            onClick={saveWikiEdit}
+            disabled={wikiSaving}
+            style={{
+              background: requiresApproval ? 'rgba(251,191,36,0.15)' : 'rgba(52,211,153,0.15)',
+              border: `1px solid ${requiresApproval ? 'rgba(251,191,36,0.4)' : 'rgba(52,211,153,0.4)'}`,
+              borderRadius: '6px', color: requiresApproval ? '#fbbf24' : '#34d399',
+              padding: '5px 14px', fontSize: '12px', fontWeight: 700,
+              cursor: wikiSaving ? 'not-allowed' : 'pointer', opacity: wikiSaving ? 0.6 : 1,
+            }}
+          >
+            {wikiSaving ? 'Saving…' : requiresApproval ? 'Submit for Review' : 'Save'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+
   if (loading) {
     return <div style={{ color: '#64748b', paddingTop: '60px', textAlign: 'center' }}>Loading wiki suggestions...</div>
   }
 
   if (!suggestions || suggestions.length === 0) {
-    return <MarkdownView content={wikiMarkdown} emptyMsg="No wiki suggestions yet. Run the pipeline to generate them." />
+    return (
+      <div style={{ maxWidth: '820px' }}>
+        {wikiEditToolbar}
+        {wikiEditMode ? (
+          <textarea
+            value={wikiEditValue}
+            onChange={e => setWikiEditValue(e.target.value)}
+            style={{
+              width: '100%', minHeight: '500px', background: '#13151f',
+              border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px',
+              color: '#e2e8f0', padding: '16px', fontSize: '13px',
+              fontFamily: 'monospace', lineHeight: 1.6, resize: 'vertical',
+              outline: 'none', boxSizing: 'border-box',
+            }}
+          />
+        ) : (
+          <MarkdownView content={wikiMarkdown} emptyMsg="No wiki suggestions yet. Run the pipeline to generate them." />
+        )}
+      </div>
+    )
   }
 
   const unappliedCount = suggestions.filter(s => !appliedIds.has(s.id) && !skippedIds.has(s.id)).length
 
   return (
     <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {wikiEditToolbar}
 
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>

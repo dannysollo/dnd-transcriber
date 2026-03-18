@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useApiUrl, useCampaign } from '../CampaignContext'
+import { useAuth } from '../AuthContext'
 
 
 export default function SettingsPage() {
+  const apiUrl = useApiUrl()
+  const { loading: campaignLoading, activeCampaign } = useCampaign()
+  const { authEnabled, isLoggedIn } = useAuth()
   const [config, setConfig] = useState<Record<string, any> | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -11,24 +16,27 @@ export default function SettingsPage() {
 
   const load = async () => {
     setLoading(true)
-    const r = await fetch('/config')
+    const r = await fetch(apiUrl('/config'))
     const data = await r.json()
     setConfig(data)
     setLoading(false)
 
     // Load vocab
-    const vr = await fetch('/config/vocab')
+    const vr = await fetch(apiUrl('/config/vocab'))
     const vdata = await vr.json()
     setVocab(vdata.vocab || '')
     setVocabError(vdata.error || '')
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    if (campaignLoading) return
+    load()
+  }, [apiUrl, campaignLoading])
 
   const save = async () => {
     if (!config) return
     setSaving(true)
-    await fetch('/config', {
+    await fetch(apiUrl('/config'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ config }),
@@ -79,6 +87,14 @@ export default function SettingsPage() {
     })
   }
 
+  if (campaignLoading) return <div style={{ padding: '32px', color: '#64748b' }}>Loading...</div>
+  if (authEnabled && (!isLoggedIn || !activeCampaign)) {
+    return (
+      <div style={{ padding: '32px', color: '#64748b', fontSize: '14px' }}>
+        Select a campaign to view settings.
+      </div>
+    )
+  }
   if (loading) return <div style={{ padding: '32px', color: '#64748b' }}>Loading...</div>
   if (!config) return null
 

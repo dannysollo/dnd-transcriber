@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useApiUrl } from '../CampaignContext'
 
 interface Session {
   name: string
@@ -6,6 +7,7 @@ interface Session {
 }
 
 export default function PipelinePage() {
+  const apiUrl = useApiUrl()
   const [sessions, setSessions] = useState<Session[]>([])
   const [selectedSession, setSelectedSession] = useState('')
   const [transcribeOnly, setTranscribeOnly] = useState(false)
@@ -18,8 +20,8 @@ export default function PipelinePage() {
 
   // Load sessions
   useEffect(() => {
-    fetch('/sessions').then(r => r.json()).then(setSessions)
-  }, [])
+    fetch(apiUrl('/sessions')).then(r => r.json()).then(setSessions)
+  }, [apiUrl])
 
   // WebSocket connection
   useEffect(() => {
@@ -64,7 +66,7 @@ export default function PipelinePage() {
     setExitCode(null)
     setRunning(true)
 
-    const r = await fetch('/pipeline/run', {
+    const r = await fetch(apiUrl('/pipeline/run'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
