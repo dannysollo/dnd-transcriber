@@ -523,7 +523,7 @@ export default function SessionView() {
       )}
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '24px 28px' }}>
+      <div className="session-content" style={{ flex: 1, overflow: 'auto', padding: '24px 28px' }}>
         {loading ? (
           <div style={{ color: '#64748b' }}>Loading...</div>
         ) : tab === 'transcript' ? (

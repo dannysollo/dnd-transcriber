@@ -76,9 +76,9 @@ export default function App() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#0f1117' }}>
+    <div className="app-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#0f1117' }}>
       {/* Sidebar */}
-      <nav style={{
+      <nav className="app-sidebar" style={{
         display: 'flex',
         flexDirection: 'column',
         width: '200px',
@@ -87,7 +87,7 @@ export default function App() {
         borderRight: '1px solid #1e2130',
       }}>
         {/* Logo */}
-        <div style={{ padding: '20px 16px 16px', borderBottom: '1px solid #1e2130' }}>
+        <div className="sidebar-logo" style={{ padding: '20px 16px 16px', borderBottom: '1px solid #1e2130' }}>
           <div style={{ fontSize: '13px', fontWeight: 700, color: '#7c6cfc' }}>DnD Transcriber</div>
           <div style={{ fontSize: '11px', marginTop: '2px', color: '#475569' }}>Session Pipeline</div>
           {!authEnabled && (
@@ -103,7 +103,7 @@ export default function App() {
 
         {/* Campaign selector */}
         {!campaignLoading && campaigns.length > 0 && (
-          <div style={{ padding: '8px 12px', borderBottom: '1px solid #1e2130', position: 'relative' }}>
+          <div className="sidebar-campaign" style={{ padding: '8px 12px', borderBottom: '1px solid #1e2130', position: 'relative' }}>
             <div
               onClick={() => setCampaignDropdownOpen(o => !o)}
               style={{
@@ -156,7 +156,7 @@ export default function App() {
         )}
 
         {/* Nav links */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '12px', flex: 1 }}>
+        <div className="sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '12px', flex: 1 }}>
           {navItems.map(({ to, label, icon }) => (
             <NavLink
               key={to}
@@ -214,7 +214,7 @@ export default function App() {
         </div>
 
         {/* User / auth section */}
-        <div style={{ padding: '12px', borderTop: '1px solid #1e2130' }}>
+        <div className="sidebar-user" style={{ padding: '12px', borderTop: '1px solid #1e2130' }}>
           {loading ? null : isLoggedIn && user ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div
@@ -262,7 +262,19 @@ export default function App() {
       </nav>
 
       {/* Main content */}
-      <main style={{ flex: 1, overflow: 'auto' }}>
+      <main className="app-main" style={{ flex: 1, overflow: 'auto' }}>
+        {/* Mobile campaign indicator */}
+        <div className="mobile-campaign-bar" style={{
+          display: 'none',
+          padding: '8px 16px',
+          background: '#13151f',
+          borderBottom: '1px solid #1e2130',
+          fontSize: '12px',
+          color: '#a89cff',
+          fontWeight: 600,
+        }}>
+          {activeCampaign?.name ?? 'No campaign'}
+        </div>
         <Routes>
           <Route path="/" element={<SessionsPage />} />
           <Route path="/sessions/:name" element={<SessionView />} />
