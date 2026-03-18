@@ -241,8 +241,17 @@ export default function SessionsPage() {
     <div style={{ padding: '32px', maxWidth: '900px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>Sessions</h1>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>All recording sessions</p>
+          <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>
+            Sessions
+            {!loading && sessions.length > 0 && (
+              <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 400, color: '#475569' }}>
+                {sessions.length}
+              </span>
+            )}
+          </h1>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
+            {activeCampaign ? activeCampaign.name : 'All recording sessions'}
+          </p>
         </div>
         {(!authEnabled || (isLoggedIn && activeCampaign != null)) && (
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -285,7 +294,16 @@ export default function SessionsPage() {
         }}
       />
 
-      {loading ? (
+      {!activeCampaign ? (
+        <div style={{
+          background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '12px',
+          padding: '48px', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>⚔️</div>
+          <div style={{ color: '#94a3b8', fontWeight: 600, marginBottom: 6 }}>No campaign selected</div>
+          <div style={{ color: '#475569', fontSize: 13 }}>Pick a campaign from the dropdown above to see its sessions.</div>
+        </div>
+      ) : loading ? (
         <div style={{ color: '#64748b', fontSize: '14px' }}>Loading...</div>
       ) : sessions.length === 0 ? (
         <div style={{
@@ -450,9 +468,6 @@ export default function SessionsPage() {
                     onClick={() => { setRenamingSession(s.name); setRenameValue(s.name) }}
                   >
                     ✏️
-                  </ActionBtn>
-                  <ActionBtn title="Open session" onClick={() => navigate(`/sessions/${s.name}`)}>
-                    →
                   </ActionBtn>
                   <ActionBtn
                     title="Delete session"

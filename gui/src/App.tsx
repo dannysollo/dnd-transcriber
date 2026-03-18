@@ -54,6 +54,18 @@ export default function App() {
     window.location.reload()
   }
 
+  // Cmd+K / Ctrl+K → jump to search
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        navigate('/search')
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [navigate])
+
   // After login, check if there's a pending invite to redirect to
   React.useEffect(() => {
     if (isLoggedIn) {
@@ -189,7 +201,10 @@ export default function App() {
               })}
             >
               <span>{icon}</span>
-              <span>{label}</span>
+              <span style={{ flex: 1 }}>{label}</span>
+              {to === '/search' && (
+                <span style={{ fontSize: '10px', color: '#334155', fontFamily: 'monospace' }}>⌘K</span>
+              )}
             </NavLink>
           ))}
           {activeCampaign?.role === 'dm' && (
