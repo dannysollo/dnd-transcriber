@@ -1,3 +1,4 @@
+import { useToast } from '../Toast'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCampaign } from '../CampaignContext'
@@ -176,6 +177,7 @@ function DiffView({ original, proposed }: { original: string; proposed: string }
 export default function EditQueuePage() {
   const { activeCampaign } = useCampaign()
   const navigate = useNavigate()
+  const { toast } = useToast()
   const [edits, setEdits] = useState<PendingEdit[]>([])
   const [loading, setLoading] = useState(true)
   const [rejectNotes, setRejectNotes] = useState<Record<number, string>>({})
@@ -206,7 +208,7 @@ export default function EditQueuePage() {
     try {
       const r = await fetch(`/campaigns/${slug}/edits/${editId}/approve`, { method: 'POST' })
       if (r.ok) setEdits(prev => prev.filter(e => e.id !== editId))
-      else alert('Failed to approve edit')
+      else toast('Failed to approve edit', 'error')
     } finally {
       setProcessing(prev => ({ ...prev, [editId]: false }))
     }
@@ -222,7 +224,7 @@ export default function EditQueuePage() {
         body: JSON.stringify({ note: note ?? null }),
       })
       if (r.ok) setEdits(prev => prev.filter(e => e.id !== editId))
-      else alert('Failed to reject edit')
+      else toast('Failed to reject edit', 'error')
     } finally {
       setProcessing(prev => ({ ...prev, [editId]: false }))
     }

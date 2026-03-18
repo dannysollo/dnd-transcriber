@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
+import { useToast } from '../Toast'
+
+type SortKey = 'name' | 'date_added' | 'modified'
 
 interface Session {
   name: string
@@ -9,6 +12,8 @@ interface Session {
   has_transcript: boolean
   has_summary: boolean
   has_wiki: boolean
+  created_at: string | null
+  modified_at: string | null
 }
 
 interface TranscriptionJob {
@@ -26,6 +31,19 @@ const statusColors: Record<string, { bg: string; text: string; label: string }> 
   empty:          { bg: 'rgba(100,116,139,0.15)', text: '#64748b', label: 'Empty' },
 }
 
+function relativeTime(iso: string | null): string {
+  if (!iso) return ''
+  const ms = Date.now() - new Date(iso + 'Z').getTime()
+  const mins = Math.floor(ms / 60000)
+  const hours = Math.floor(ms / 3600000)
+  const days = Math.floor(ms / 86400000)
+  if (mins < 2) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  if (hours < 24) return `${hours}h ago`
+  if (days < 7) return `${days}d ago`
+  return new Date(iso + 'Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,6 +55,7 @@ export default function SessionsPage() {
   const [dragOverSession, setDragOverSession] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [jobMap, setJobMap] = useState<Record<string, TranscriptionJob>>({})
+  const [sortKey, setSortKey] = useState<SortKey>('name')
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragCounters = useRef<Record<string, number>>({})
@@ -44,6 +63,7 @@ export default function SessionsPage() {
   const apiUrl = useApiUrl()
   const { isLoggedIn, authEnabled } = useAuth()
   const { activeCampaign } = useCampaign()
+  const { toast } = useToast()
 
   const loadJobs = async () => {
     if (!activeCampaign) return
@@ -93,14 +113,15 @@ export default function SessionsPage() {
     const r = await fetch(apiUrl(`/sessions/${sessionName}/transcribe`), { method: 'POST' })
     if (r.status === 409) {
       const data = await r.json()
-      alert(`Job already queued (status: ${data.status ?? data.detail?.status ?? 'pending'})`)
+      toast(`Already queued (status: ${data.status ?? data.detail?.status ?? 'pending'})`, 'warning')
       return
     }
     if (r.ok) {
       const job = await r.json()
       setJobMap(prev => ({ ...prev, [sessionName]: job }))
+      toast('Transcription queued', 'success')
     } else {
-      alert('Failed to queue transcription')
+      toast('Failed to queue transcription', 'error')
     }
   }
 
@@ -111,11 +132,13 @@ export default function SessionsPage() {
       body: JSON.stringify({ session: sessionName, transcribe_only: false, wiki_only: true }),
     })
     if (r.status === 409) {
-      alert('Pipeline is already running — wait for it to finish.')
+      toast('Pipeline is already running — wait for it to finish', 'warning')
       return
     }
-    if (!r.ok) {
-      alert('Failed to start wiki summary generation')
+    if (r.ok) {
+      toast('Wiki summary generation started', 'success')
+    } else {
+      toast('Failed to start wiki summary generation', 'error')
     }
   }
 
@@ -131,9 +154,10 @@ export default function SessionsPage() {
       if (r.ok) {
         setNewName('')
         load()
+        toast('Session created', 'success')
       } else {
         const err = await r.json()
-        alert(err.detail || 'Error creating session')
+        toast(err.detail || 'Error creating session', 'error')
       }
     } finally {
       setCreating(false)
@@ -153,9 +177,10 @@ export default function SessionsPage() {
     if (r.ok) {
       setRenamingSession(null)
       load()
+      toast('Session renamed', 'success')
     } else {
       const err = await r.json()
-      alert(err.detail || 'Rename failed')
+      toast(err.detail || 'Rename failed', 'error')
     }
   }
 
@@ -168,8 +193,9 @@ export default function SessionsPage() {
     setUploadingFor(null)
     if (r.ok) {
       load()
+      toast('Audio uploaded', 'success')
     } else {
-      alert('Upload failed')
+      toast('Upload failed', 'error')
     }
   }
 
@@ -179,8 +205,8 @@ export default function SessionsPage() {
     files.forEach(f => form.append('files', f))
     const r = await fetch(apiUrl(`/sessions/${sessionName}/upload`), { method: 'POST', body: form })
     setUploadingFor(null)
-    if (r.ok) load()
-    else alert('Upload failed')
+    if (r.ok) { load(); toast('Audio uploaded', 'success') }
+    else toast('Upload failed', 'error')
   }
 
   const importZip = async (sessionName: string, file: File) => {
@@ -189,8 +215,8 @@ export default function SessionsPage() {
     form.append('file', file)
     const r = await fetch(apiUrl(`/sessions/${sessionName}/import-zip`), { method: 'POST', body: form })
     setUploadingFor(null)
-    if (r.ok) load()
-    else alert('Zip import failed')
+    if (r.ok) { load(); toast('ZIP imported', 'success') }
+    else toast('ZIP import failed', 'error')
   }
 
   const deleteSession = async (name: string) => {
@@ -198,10 +224,18 @@ export default function SessionsPage() {
     if (r.ok) {
       setConfirmDelete(null)
       load()
+      toast('Session deleted', 'success')
     } else {
-      alert('Delete failed')
+      toast('Delete failed', 'error')
     }
   }
+
+  const sortedSessions = [...sessions].sort((a, b) => {
+    if (sortKey === 'name') return b.name.localeCompare(a.name)
+    if (sortKey === 'date_added') return new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+    if (sortKey === 'modified') return new Date(b.modified_at ?? 0).getTime() - new Date(a.modified_at ?? 0).getTime()
+    return 0
+  })
 
   const handleDragEnter = (e: React.DragEvent, name: string) => {
     e.preventDefault()
@@ -253,6 +287,24 @@ export default function SessionsPage() {
             {activeCampaign ? activeCampaign.name : 'All recording sessions'}
           </p>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {(['name', 'date_added', 'modified'] as SortKey[]).map(k => (
+            <button
+              key={k}
+              onClick={() => setSortKey(k)}
+              style={{
+                background: sortKey === k ? 'rgba(124,108,252,0.15)' : 'transparent',
+                border: `1px solid ${sortKey === k ? 'rgba(124,108,252,0.4)' : '#2a2d3a'}`,
+                borderRadius: 6, color: sortKey === k ? '#a89cff' : '#475569',
+                padding: '4px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                textTransform: 'capitalize',
+              }}
+            >
+              {k === 'name' ? 'Name' : k === 'date_added' ? 'Date Added' : 'Modified'}
+            </button>
+          ))}
+        </div>
+
         {(!authEnabled || (isLoggedIn && activeCampaign != null)) && (
           <div style={{ display: 'flex', gap: '8px' }}>
             <input
@@ -314,7 +366,7 @@ export default function SessionsPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {sessions.map(s => {
+          {sortedSessions.map(s => {
             const sc = statusColors[s.status] || statusColors.empty
             const isRenaming = renamingSession === s.name
             const isDragOver = dragOverSession === s.name
@@ -401,11 +453,13 @@ export default function SessionsPage() {
                       }}
                     />
                   ) : (
-                    <div
-                      onClick={() => navigate(`/sessions/${s.name}`)}
-                      style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0', cursor: 'pointer' }}
-                    >
-                      {s.name}
+                    <div onClick={() => navigate(`/sessions/${s.name}`)} style={{ cursor: 'pointer' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0' }}>{s.name}</div>
+                      {(sortKey === 'date_added' ? s.created_at : s.modified_at) && (
+                        <div style={{ fontSize: '11px', color: '#334155', marginTop: 2 }}>
+                          {sortKey === 'date_added' ? 'Added' : 'Modified'} {relativeTime(sortKey === 'date_added' ? s.created_at : s.modified_at)}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -1,3 +1,4 @@
+import { useToast } from '../Toast'
 import { useEffect, useRef, useState } from 'react'
 import { useApiUrl } from '../CampaignContext'
 
@@ -8,6 +9,7 @@ interface Session {
 
 export default function PipelinePage() {
   const apiUrl = useApiUrl()
+  const { toast } = useToast()
   const [sessions, setSessions] = useState<Session[]>([])
   const [selectedSession, setSelectedSession] = useState('')
   const [transcribeOnly, setTranscribeOnly] = useState(false)
@@ -77,7 +79,7 @@ export default function PipelinePage() {
     })
     if (!r.ok) {
       const err = await r.json()
-      alert(err.detail || 'Failed to start pipeline')
+      toast(err.detail || 'Failed to start pipeline', 'error')
       setRunning(false)
     }
   }

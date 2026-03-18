@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
+import { useToast } from '../Toast'
 import ReactMarkdown from 'react-markdown'
 
 // Speaker color palette
@@ -132,6 +133,7 @@ export default function SessionView() {
   const { name } = useParams<{ name: string }>()
   const navigate = useNavigate()
   const apiUrl = useApiUrl()
+  const { toast } = useToast()
   const [tab, setTab] = useState<Tab>('transcript')
   const [transcript, setTranscript] = useState<string | null>(null)
   const [summary, setSummary] = useState<string | null>(null)
@@ -300,7 +302,7 @@ export default function SessionView() {
         setChangesReport(null)
       } else {
         const err = await r.json()
-        alert(err.detail || 'Merge failed')
+        toast(err.detail || 'Merge failed', 'error')
       }
     } finally {
       setMerging(false)
@@ -572,22 +574,33 @@ export default function SessionView() {
         {tab === 'transcript' && (
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
             {!editMode && (
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search transcript..."
-                style={{
-                  background: '#1a1d27',
-                  border: '1px solid #2a2d3a',
-                  borderRadius: '8px',
-                  color: '#e2e8f0',
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  width: '200px',
-                  outline: 'none',
-                }}
-              />
+              <>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search transcript..."
+                  style={{
+                    background: '#1a1d27',
+                    border: '1px solid #2a2d3a',
+                    borderRadius: '8px',
+                    color: '#e2e8f0',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    width: '200px',
+                    outline: 'none',
+                  }}
+                />
+                {search && transcript && (() => {
+                  const q = search.toLowerCase()
+                  const count = transcript.split('\n').filter(l => l.toLowerCase().includes(q)).length
+                  return (
+                    <span style={{ fontSize: '11px', color: count > 0 ? '#a78bfa' : '#475569', whiteSpace: 'nowrap' }}>
+                      {count > 0 ? `${count} match${count !== 1 ? 'es' : ''}` : 'no matches'}
+                    </span>
+                  )
+                })()}
+              </>
             )}
             {transcript && (
               <button
@@ -658,18 +671,26 @@ export default function SessionView() {
         {loading ? (
           <div style={{ color: '#64748b' }}>Loading...</div>
         ) : tab === 'transcript' ? (
-          <TranscriptView
-            content={transcript}
-            search={search}
-            speakerColors={speakerColors}
-            currentTime={audioFiles.length > 0 ? currentTime : undefined}
-            onSeek={audioFiles.length > 0 ? seekAndSwitch : undefined}
-            targetTimestamp={targetTimestamp}
-            onTargetReached={() => setTargetTimestamp(null)}
-            sessionName={name!}
-            editMode={editMode}
-            onTranscriptChange={() => { load(); setChangesLoaded(false); setChangesReport(null) }}
-          />
+          transcript ? (
+            <TranscriptView
+              content={transcript}
+              search={search}
+              speakerColors={speakerColors}
+              currentTime={audioFiles.length > 0 ? currentTime : undefined}
+              onSeek={audioFiles.length > 0 ? seekAndSwitch : undefined}
+              targetTimestamp={targetTimestamp}
+              onTargetReached={() => setTargetTimestamp(null)}
+              sessionName={name!}
+              editMode={editMode}
+              onTranscriptChange={() => { load(); setChangesLoaded(false); setChangesReport(null) }}
+            />
+          ) : (
+            <EmptyTabState
+              icon="🎙️"
+              title="No transcript yet"
+              message="Queue a transcription job to get started. Drop audio files onto the session or use the 🎙️ button on the sessions list."
+            />
+          )
         ) : tab === 'summary' ? (
           <MarkdownEditView
             content={summary}
@@ -1154,6 +1175,7 @@ function MarkdownEditView({
   const apiUrl = useApiUrl()
   const { authEnabled } = useAuth()
   const { activeCampaign } = useCampaign()
+  const { toast } = useToast()
   const [editMode, setEditMode] = useState(false)
   const [editValue, setEditValue] = useState('')
   const [saving, setSaving] = useState(false)
@@ -1184,7 +1206,7 @@ function MarkdownEditView({
         onSaved?.()
       } else {
         const data = await r.json().catch(() => ({}))
-        alert(`Failed to save: ${data.detail || r.status}`)
+        toast(`Failed to save: ${data.detail || r.status}`, 'error')
       }
     } finally {
       setSaving(false)
@@ -1896,6 +1918,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessi
   const apiUrl = useApiUrl()
   const { authEnabled } = useAuth()
   const { activeCampaign } = useCampaign()
+  const { toast } = useToast()
   const [wikiEditMode, setWikiEditMode] = useState(false)
   const [wikiEditValue, setWikiEditValue] = useState('')
   const [wikiSaving, setWikiSaving] = useState(false)
@@ -1990,7 +2013,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessi
         onWikiSaved?.()
       } else {
         const data = await r.json().catch(() => ({}))
-        alert(`Failed to save: ${data.detail || r.status}`)
+        toast(`Failed to save: ${data.detail || r.status}`, 'error')
       }
     } finally {
       setWikiSaving(false)
@@ -2482,6 +2505,16 @@ function ChangesView({
 
       </div>
       )}
+    </div>
+  )
+}
+
+function EmptyTabState({ icon, title, message }: { icon: string; title: string; message: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, textAlign: 'center', padding: '32px' }}>
+      <div style={{ fontSize: 40, marginBottom: 16, opacity: 0.5 }}>{icon}</div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: '#94a3b8', marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 13, color: '#475569', maxWidth: 360, lineHeight: 1.6 }}>{message}</div>
     </div>
   )
 }

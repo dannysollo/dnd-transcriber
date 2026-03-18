@@ -5,13 +5,16 @@ import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './AuthContext.tsx'
 import { CampaignProvider } from './CampaignContext.tsx'
+import { ToastProvider } from './Toast.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
         <CampaignProvider>
-          <App />
+          <ToastProvider>
+            <App />
+          </ToastProvider>
         </CampaignProvider>
       </AuthProvider>
     </BrowserRouter>

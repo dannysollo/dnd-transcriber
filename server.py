@@ -1119,6 +1119,9 @@ def list_campaigns(
     result = []
     for c in campaigns:
         member = crud.get_member(db, c.id, user.id) if user else None
+        sessions_dir = get_sessions_dir(c.slug)
+        session_count = sum(1 for d in sessions_dir.iterdir() if d.is_dir() and not d.name.startswith(".")) if sessions_dir.exists() else 0
+        member_count = len(crud.get_campaign_members(db, c.id))
         result.append({
             "id": c.id,
             "slug": c.slug,
@@ -1129,6 +1132,8 @@ def list_campaigns(
             "settings": c.settings,
             "created_at": c.created_at.isoformat(),
             "role": member.role if member else "unknown",
+            "session_count": session_count,
+            "member_count": member_count,
         })
     return result
 
@@ -1438,12 +1443,15 @@ def campaign_list_sessions(
     sessions = []
     for d in sorted(sessions_dir.iterdir(), reverse=True):
         if d.is_dir() and not d.name.startswith("."):
+            stat = d.stat()
             sessions.append({
                 "name": d.name,
                 "status": session_status(d),
                 "has_transcript": (d / "transcript.md").exists(),
                 "has_summary": (d / "summary.md").exists(),
                 "has_wiki": (d / "wiki_suggestions.md").exists() or (d / "wiki.md").exists(),
+                "created_at": datetime.utcfromtimestamp(stat.st_ctime).isoformat(),
+                "modified_at": datetime.utcfromtimestamp(stat.st_mtime).isoformat(),
             })
     return sessions
 

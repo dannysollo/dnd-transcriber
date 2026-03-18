@@ -1,3 +1,4 @@
+import { useToast } from '../Toast'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
@@ -11,11 +12,15 @@ interface Campaign {
   data_path: string
   settings: Record<string, unknown>
   created_at: string
+  role?: string
+  session_count?: number
+  member_count?: number
 }
 
 export default function CampaignsPage() {
   const { user, isLoggedIn, authEnabled } = useAuth()
   const navigate = useNavigate()
+  const { toast } = useToast()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -51,7 +56,7 @@ export default function CampaignsPage() {
         load()
       } else {
         const err = await r.json()
-        alert(err.detail || 'Error creating campaign')
+        toast(err.detail || 'Error creating campaign', 'error')
       }
     } finally {
       setCreating(false)
@@ -145,26 +150,54 @@ export default function CampaignsPage() {
           {campaigns.map(c => (
             <div
               key={c.id}
-              onClick={() => navigate(`/campaigns/${c.slug}/settings`)}
               style={{
                 background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '10px',
-                padding: '16px 20px', cursor: 'pointer', transition: 'border-color 0.15s',
+                padding: '16px 20px', transition: 'border-color 0.15s',
                 display: 'flex', alignItems: 'center', gap: '12px',
               }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = '#7c6cfc')}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = '#3a3d4a')}
               onMouseLeave={e => (e.currentTarget.style.borderColor = '#2a2d3a')}
             >
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '15px', fontWeight: 600, color: '#e2e8f0' }}>{c.name}</div>
+                <div style={{ fontSize: '15px', fontWeight: 600, color: '#e2e8f0', marginBottom: 2 }}>{c.name}</div>
                 {c.description && (
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{c.description}</div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginBottom: 4 }}>{c.description}</div>
                 )}
-                <div style={{ fontSize: '11px', color: '#334155', marginTop: '4px' }}>/{c.slug}</div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11px', color: '#334155' }}>/{c.slug}</span>
+                  {c.session_count !== undefined && (
+                    <span style={{ fontSize: '11px', color: '#475569' }}>📜 {c.session_count} session{c.session_count !== 1 ? 's' : ''}</span>
+                  )}
+                  {c.member_count !== undefined && (
+                    <span style={{ fontSize: '11px', color: '#475569' }}>👥 {c.member_count} member{c.member_count !== 1 ? 's' : ''}</span>
+                  )}
+                  {c.role && (
+                    <span style={{ fontSize: '10px', color: '#475569', background: 'rgba(255,255,255,0.04)', border: '1px solid #2a2d3a', borderRadius: 4, padding: '1px 6px' }}>{c.role}</span>
+                  )}
+                </div>
               </div>
-              <div style={{ fontSize: '12px', color: '#475569' }}>
-                {new Date(c.created_at).toLocaleDateString()}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                <button
+                  onClick={() => navigate('/')}
+                  style={{
+                    background: 'rgba(124,108,252,0.1)', border: '1px solid rgba(124,108,252,0.25)',
+                    borderRadius: 7, color: '#a89cff', padding: '5px 12px', fontSize: '12px',
+                    fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  Sessions
+                </button>
+                <button
+                  onClick={() => navigate(`/campaigns/${c.slug}/settings`)}
+                  style={{
+                    background: 'transparent', border: '1px solid #2a2d3a',
+                    borderRadius: 7, color: '#64748b', padding: '5px 12px', fontSize: '12px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Settings
+                </button>
               </div>
-              <span style={{ color: '#475569', fontSize: '14px' }}>→</span>
             </div>
           ))}
         </div>

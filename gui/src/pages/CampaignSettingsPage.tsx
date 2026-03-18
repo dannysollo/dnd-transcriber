@@ -1,3 +1,4 @@
+import { useToast } from '../Toast'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
@@ -38,6 +39,7 @@ interface Invite {
 export default function CampaignSettingsPage() {
   const { slug } = useParams<{ slug: string }>()
   const { user } = useAuth()
+  const { toast } = useToast()
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [members, setMembers] = useState<Member[]>([])
   const [invites, setInvites] = useState<Invite[]>([])
@@ -112,7 +114,7 @@ export default function CampaignSettingsPage() {
         setWorkerKey(data.api_key)
         setWorkerKeyVisible(true)
       } else {
-        alert('Failed to generate key')
+        toast('Failed to generate key', 'error')
       }
     } finally {
       setGeneratingKey(false)
@@ -141,7 +143,7 @@ export default function CampaignSettingsPage() {
         }),
       })
       if (r.ok) await load()
-      else alert('Failed to save settings')
+      else toast('Failed to save settings', 'error')
     } finally {
       setSaving(false)
     }
@@ -177,7 +179,7 @@ export default function CampaignSettingsPage() {
         setInviteRole('player'); setInviteDays(''); setInviteMaxUses('')
         load()
       } else {
-        alert('Failed to create invite')
+        toast('Failed to create invite', 'error')
       }
     } finally {
       setCreatingInvite(false)
@@ -186,7 +188,7 @@ export default function CampaignSettingsPage() {
 
   const copyInviteLink = (token: string) => {
     const url = `${window.location.origin}/invite/${token}`
-    navigator.clipboard.writeText(url).then(() => alert('Invite link copied!'))
+    navigator.clipboard.writeText(url).then(() => toast('Invite link copied!', 'success'))
   }
 
   if (loading) return <div style={{ padding: '32px', color: '#64748b' }}>Loading...</div>
@@ -321,7 +323,7 @@ export default function CampaignSettingsPage() {
                   {workerKeyVisible ? 'Hide' : 'Show'}
                 </button>
                 <button
-                  onClick={() => navigator.clipboard.writeText(workerKey).then(() => alert('Key copied!'))}
+                  onClick={() => navigator.clipboard.writeText(workerKey).then(() => toast('Key copied!', 'success'))}
                   style={{ background: 'rgba(124,108,252,0.1)', border: '1px solid rgba(124,108,252,0.3)', borderRadius: '6px', color: '#a89cff', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
                 >
                   Copy
