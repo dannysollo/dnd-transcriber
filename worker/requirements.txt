@@ -6,3 +6,4 @@ pyyaml
 tqdm
 soundfile
 silero-vad
+discord.py-self  # For craig_watcher.py — watches for Craig DMs

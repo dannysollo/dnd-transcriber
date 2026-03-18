@@ -90,6 +90,58 @@ The worker will print a heartbeat, then poll every 30 seconds for pending jobs. 
 | `audio_dir` | ✅ | Local folder where Craig files live |
 | `poll_interval` | — | Seconds between job checks (default: 30) |
 | `whisper_model` | — | Override the campaign's model setting (e.g. `turbo` if your GPU is weaker) |
+| `discord_token` | — | Your Discord user token — enables Craig Watcher (see below) |
+| `session_name_format` | — | Session naming pattern: `{date}`, `{date}-{channel}`, `{recording_id}` |
+| `craig_channel_filter` | — | List of guild IDs to process (omit to process all guilds) |
+
+---
+
+## Craig Watcher (auto-download)
+
+The Craig Watcher is an optional add-on that watches your Discord DMs for messages from Craig. When Craig DMs you after a recording ends, the watcher automatically:
+
+1. Extracts the download link from Craig's message
+2. Downloads and unzips the multitrack FLAC recording
+3. Creates the session on the site
+4. Queues a transcription job
+
+**Zero manual steps** — just run a session and your transcript appears.
+
+### Setup
+
+Add these to your `worker.yaml`:
+
+```yaml
+discord_token: YOUR_DISCORD_USER_TOKEN
+session_name_format: "{date}"   # or "{date}-{channel}" for more detail
+```
+
+To find your Discord token: open Discord in the browser → DevTools → Network tab → filter for requests to `discord.com/api` → look for `Authorization` header. Keep this private.
+
+### Running
+
+Run the watcher alongside the main worker (in a separate terminal):
+
+```bash
+source venv/bin/activate
+python craig_watcher.py
+```
+
+Or run both at once:
+
+```bash
+source venv/bin/activate
+python main.py &
+python craig_watcher.py
+```
+
+### Session naming
+
+| Format | Example |
+|--------|---------|
+| `{date}` | `2026-03-18` |
+| `{date}-{channel}` | `2026-03-18-yapping` |
+| `{recording_id}` | `HYmYp2AEuIN7` |
 
 ---
 

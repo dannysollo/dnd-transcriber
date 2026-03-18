@@ -1,6 +1,13 @@
 server_url: https://your-dnd-transcriber.fly.dev
 campaign_slug: your-campaign-slug
 api_key: paste-key-from-campaign-settings
-audio_dir: /path/to/craig/audio/output
+audio_dir: /path/to/audio/output
 poll_interval: 30
-# whisper_model: turbo  # Uncomment to override the campaign's model setting (e.g. if your GPU is weaker)
+# whisper_model: turbo  # Uncomment to override the campaign's model setting
+
+# ── Craig Watcher (optional) ──────────────────────────────────────────────────
+# Uncomment to enable automatic recording download when Craig DMs you.
+# discord_token: YOUR_DISCORD_USER_TOKEN  # Your personal Discord token (not a bot token)
+# session_name_format: "{date}"           # Options: {date}, {date}-{channel}, {recording_id}
+# craig_channel_filter:                   # Optional: only process recordings from specific guilds
+#   - "1113899568355098775"
