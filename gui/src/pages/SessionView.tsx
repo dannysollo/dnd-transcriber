@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
-import { useAuth } from '../AuthContext'
 import ReactMarkdown from 'react-markdown'
 
 // Speaker color palette
@@ -132,8 +131,6 @@ export default function SessionView() {
   const { name } = useParams<{ name: string }>()
   const navigate = useNavigate()
   const apiUrl = useApiUrl()
-  const { authEnabled } = useAuth()
-  const { activeCampaign } = useCampaign()
   const [tab, setTab] = useState<Tab>('transcript')
   const [transcript, setTranscript] = useState<string | null>(null)
   const [summary, setSummary] = useState<string | null>(null)
@@ -460,7 +457,7 @@ export default function SessionView() {
                 }}
               />
             )}
-            {transcript && (!authEnabled || activeCampaign?.role === 'dm') && (
+            {transcript && (
               <button
                 onClick={() => setEditMode(m => !m)}
                 style={{
@@ -593,6 +590,34 @@ function TranscriptView({
   const [savingAll, setSavingAll] = useState(false)
   const [savingLine, setSavingLine] = useState(false)
   const [pendingLines, setPendingLines] = useState<Set<number>>(new Set())
+  // activeIdx is computed during render; we use a ref to scroll without triggering re-renders
+
+
+  // Compute parsed lines + activeIdx via useMemo so they're stable for the useEffect below
+  const parsedLines = useMemo(() => (content ? parseTranscript(content) : []), [content])
+  const searchLower = search.toLowerCase()
+  const visibleLines = useMemo(
+    () => parsedLines.filter(line => !search || line.raw.toLowerCase().includes(searchLower)),
+    [parsedLines, search, searchLower]
+  )
+  const activeIdx = useMemo(() => {
+    if (currentTime === undefined) return -1
+    let idx = -1
+    for (let i = 0; i < visibleLines.length; i++) {
+      const line = visibleLines[i]
+      if (line.type === 'speech' && line.timestamp) {
+        if (parseTimestampToSeconds(line.timestamp) <= currentTime) idx = i
+      }
+    }
+    return idx
+  }, [visibleLines, currentTime])
+
+  // Scroll active line into view (must be at top level — not after an early return)
+  useEffect(() => {
+    const el = activeLineRef.current
+    if (!el) return
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [activeIdx])
 
   // Initialize editedLines when entering edit mode
   useEffect(() => {
@@ -645,16 +670,11 @@ function TranscriptView({
     if (!sessionName) return
     setSavingAll(true)
     try {
-      const r = await fetch(apiUrl(`/sessions/${sessionName}/transcript`), {
+      await fetch(apiUrl(`/sessions/${sessionName}/transcript`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: editedLines.join('\n') }),
       })
-      if (!r.ok) {
-        const data = await r.json().catch(() => ({}))
-        alert(`Failed to save: ${data.detail || r.status}`)
-        return
-      }
       onTranscriptChange?.()
     } finally {
       setSavingAll(false)
@@ -827,33 +847,8 @@ function TranscriptView({
   }
 
   // ── Read mode rendering ──────────────────────────────────────────────────
-  const lines = parseTranscript(content)
-  const searchLower = search.toLowerCase()
-
-  const visible = lines.filter(line => {
-    if (!search) return true
-    return line.raw.toLowerCase().includes(searchLower)
-  })
-
-  // Find active line index (last speech line with timestamp <= currentTime)
-  let activeIdx = -1
-  if (currentTime !== undefined) {
-    for (let i = 0; i < visible.length; i++) {
-      const line = visible[i]
-      if (line.type === 'speech' && line.timestamp) {
-        if (parseTimestampToSeconds(line.timestamp) <= currentTime) {
-          activeIdx = i
-        }
-      }
-    }
-  }
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    const el = activeLineRef.current
-    if (!el) return
-    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [activeIdx])
+  // (parsedLines, visibleLines, activeIdx are computed via useMemo above)
+  const visible = visibleLines
 
   const highlight = (text: string) => {
     if (!search) return text
@@ -1630,7 +1625,6 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
 
 function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: string; wikiMarkdown: string | null; onRemerge?: () => void }) {
   const apiUrl = useApiUrl()
-  const { activeCampaign } = useCampaign()
   const [suggestions, setSuggestions] = useState<WikiSuggestion[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [appliedIds, setAppliedIds] = useState<Set<number>>(new Set())
@@ -1717,50 +1711,44 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: strin
 
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-        {activeCampaign?.role !== 'dm' ? (
-          <div style={{color:'#475569',fontSize:'12px'}}>Only DMs can apply wiki updates.</div>
-        ) : (
-          <>
-            <button
-              onClick={() => callApplyWiki('all', [])}
-              disabled={applying}
-              style={{
-                background: 'rgba(52,211,153,0.15)',
-                border: '1px solid rgba(52,211,153,0.3)',
-                borderRadius: '8px',
-                color: '#34d399',
-                padding: '7px 16px',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                opacity: applying ? 0.5 : 1,
-              }}
-            >
-              Apply All
-            </button>
-            {skippedIds.size > 0 && (
-              <button
-                onClick={() => callApplyWiki('skip', [...skippedIds])}
-                disabled={applying}
-                style={{
-                  background: 'rgba(124,108,252,0.15)',
-                  border: '1px solid rgba(124,108,252,0.3)',
-                  borderRadius: '8px',
-                  color: '#a89cff',
-                  padding: '7px 16px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  opacity: applying ? 0.5 : 1,
-                }}
-              >
-                Apply Selected ({unappliedCount} of {suggestions.length})
-              </button>
-            )}
-            {applying && (
-              <span style={{ fontSize: '12px', color: '#64748b' }}>Applying...</span>
-            )}
-          </>
+        <button
+          onClick={() => callApplyWiki('all', [])}
+          disabled={applying}
+          style={{
+            background: 'rgba(52,211,153,0.15)',
+            border: '1px solid rgba(52,211,153,0.3)',
+            borderRadius: '8px',
+            color: '#34d399',
+            padding: '7px 16px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            opacity: applying ? 0.5 : 1,
+          }}
+        >
+          Apply All
+        </button>
+        {skippedIds.size > 0 && (
+          <button
+            onClick={() => callApplyWiki('skip', [...skippedIds])}
+            disabled={applying}
+            style={{
+              background: 'rgba(124,108,252,0.15)',
+              border: '1px solid rgba(124,108,252,0.3)',
+              borderRadius: '8px',
+              color: '#a89cff',
+              padding: '7px 16px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              opacity: applying ? 0.5 : 1,
+            }}
+          >
+            Apply Selected ({unappliedCount} of {suggestions.length})
+          </button>
+        )}
+        {applying && (
+          <span style={{ fontSize: '12px', color: '#64748b' }}>Applying...</span>
         )}
         <span style={{ fontSize: '12px', color: '#475569', marginLeft: 'auto' }}>
           {suggestions.length} suggestion{suggestions.length !== 1 ? 's' : ''}
@@ -1937,8 +1925,6 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: strin
             }}>
               {isApplied ? (
                 <span style={{ color: '#34d399', fontSize: '12px', fontWeight: 700 }}>✓ Applied</span>
-              ) : activeCampaign?.role !== 'dm' ? (
-                <div style={{color:'#475569',fontSize:'12px'}}>Only DMs can apply wiki updates.</div>
               ) : (
                 <>
                   <button
