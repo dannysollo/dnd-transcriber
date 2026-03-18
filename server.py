@@ -6,6 +6,7 @@ import io
 import json
 import os
 import queue
+import difflib
 import re
 import shutil
 import subprocess
@@ -2199,6 +2200,7 @@ def campaign_list_edits(
             "id": e.id,
             "session_name": e.session_name,
             "line_number": e.line_number,
+            "edit_type": "summary" if e.line_number == -2 else "wiki" if e.line_number == -3 else "transcript",
             "original_text": e.original_text,
             "proposed_text": e.proposed_text,
             "status": e.status,
@@ -2230,13 +2232,38 @@ def campaign_approve_edit(
     # Apply the edit — dispatch on line_number sentinel
     session_dir = get_sessions_dir(slug) / edit.session_name
     n = edit.line_number
+
+    def apply_full_doc_edit(path: Path) -> None:
+        """3-way merge: patch(original→proposed) applied to current file content."""
+        current = path.read_text(encoding="utf-8") if path.exists() else ""
+        original_lines = edit.original_text.splitlines(keepends=True)
+        proposed_lines = edit.proposed_text.splitlines(keepends=True)
+        current_lines = current.splitlines(keepends=True)
+        # Build opcodes: what changed between original and proposed
+        matcher = difflib.SequenceMatcher(None, original_lines, proposed_lines)
+        result = list(current_lines)
+        offset = 0
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag == "equal":
+                continue
+            # Find these original lines in current (may have shifted due to prior edits)
+            # Simple strategy: apply the diff relative to current, best-effort
+            if tag == "replace":
+                result[i1 + offset:i2 + offset] = proposed_lines[j1:j2]
+                offset += (j2 - j1) - (i2 - i1)
+            elif tag == "insert":
+                result[i1 + offset:i1 + offset] = proposed_lines[j1:j2]
+                offset += j2 - j1
+            elif tag == "delete":
+                del result[i1 + offset:i2 + offset]
+                offset -= i2 - i1
+        path.write_text("".join(result), encoding="utf-8")
+
     if n == -2:
-        # Full summary replacement
         path = session_dir / "summary.md"
         if path.exists():
-            path.write_text(edit.proposed_text, encoding="utf-8")
+            apply_full_doc_edit(path)
     elif n == -3:
-        # Full wiki replacement (write to whichever file exists)
         path = None
         for filename in ("wiki_suggestions.md", "wiki.md"):
             candidate = session_dir / filename
@@ -2244,7 +2271,7 @@ def campaign_approve_edit(
                 path = candidate
                 break
         if path:
-            path.write_text(edit.proposed_text, encoding="utf-8")
+            apply_full_doc_edit(path)
     else:
         # Transcript line edit
         path = session_dir / "transcript.md"
