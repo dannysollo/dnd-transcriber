@@ -13,6 +13,7 @@ interface Campaign {
     require_edit_approval?: boolean
     discord_webhook_url?: string | null
     discord_channel_id?: string | null
+    vault_repo_url?: string | null
   }
 }
 
@@ -52,6 +53,7 @@ export default function CampaignSettingsPage() {
   const [requireApproval, setRequireApproval] = useState(false)
   const [webhookUrl, setWebhookUrl] = useState('')
   const [channelId, setChannelId] = useState('')
+  const [vaultRepoUrl, setVaultRepoUrl] = useState('')
   const [saving, setSaving] = useState(false)
 
   // Worker state
@@ -83,6 +85,7 @@ export default function CampaignSettingsPage() {
         setRequireApproval(c.settings?.require_edit_approval ?? false)
         setWebhookUrl(c.settings?.discord_webhook_url ?? '')
         setChannelId(c.settings?.discord_channel_id ?? '')
+        setVaultRepoUrl(c.settings?.vault_repo_url ?? '')
       }
       if (mResp.ok) {
         const ms = await mResp.json()
@@ -139,6 +142,7 @@ export default function CampaignSettingsPage() {
             require_edit_approval: requireApproval,
             discord_webhook_url: webhookUrl || null,
             discord_channel_id: channelId || null,
+            vault_repo_url: vaultRepoUrl || null,
           },
         }),
       })
@@ -234,6 +238,17 @@ export default function CampaignSettingsPage() {
           </Field>
           <Field label="Discord Channel ID">
             <input value={channelId} onChange={e => setChannelId(e.target.value)} style={inputStyle} placeholder="123456789" />
+          </Field>
+          <Field label="Obsidian Vault GitHub Repo">
+            <input
+              value={vaultRepoUrl}
+              onChange={e => setVaultRepoUrl(e.target.value)}
+              style={inputStyle}
+              placeholder="https://github.com/username/vault-repo"
+            />
+            <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
+              Wiki edits will be committed and pushed to this repo. Requires <code>GITHUB_TOKEN</code> set as a Fly secret.
+            </div>
           </Field>
           <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '13px', color: '#94a3b8' }}>
             <input type="checkbox" checked={requireApproval} onChange={e => setRequireApproval(e.target.checked)} />

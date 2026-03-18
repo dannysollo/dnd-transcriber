@@ -1799,13 +1799,54 @@ def campaign_apply_wiki(
     name: str,
     body: ApplyWikiBody,
     _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
 ):
     session_dir = get_sessions_dir(slug) / name
     if not session_dir.exists():
         raise HTTPException(404, "Session not found")
-    config_path = BASE_DIR / "campaigns" / slug / "config.yaml"
-    if not config_path.exists():
-        config_path = CONFIG_PATH
+
+    # ── Vault sync: clone or pull repo if vault_repo_url is set ───────────
+    campaign = crud.get_campaign_by_slug(db, slug)
+    vault_repo_url = (campaign.settings or {}).get("vault_repo_url") if campaign else None
+    github_token = os.environ.get("GITHUB_TOKEN")
+
+    if vault_repo_url:
+        # Inject token into HTTPS URL for auth
+        if github_token and vault_repo_url.startswith("https://"):
+            authed_url = vault_repo_url.replace("https://", f"https://{github_token}@")
+        else:
+            authed_url = vault_repo_url
+
+        vault_dir = BASE_DIR / "vaults" / slug
+        vault_dir.mkdir(parents=True, exist_ok=True)
+
+        if (vault_dir / ".git").exists():
+            pull = subprocess.run(["git", "pull"], cwd=vault_dir, capture_output=True, text=True)
+            if pull.returncode != 0:
+                raise HTTPException(500, f"Git pull failed: {pull.stderr.strip()}")
+        else:
+            clone = subprocess.run(
+                ["git", "clone", authed_url, str(vault_dir)],
+                capture_output=True, text=True
+            )
+            if clone.returncode != 0:
+                raise HTTPException(500, f"Git clone failed: {clone.stderr.strip()}")
+
+        # Write a temp config pointing to the synced vault
+        import tempfile
+        campaign_config = load_config(slug)
+        campaign_config["vault_path"] = str(vault_dir)
+        tmp_config = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
+        import yaml as _yaml
+        _yaml.dump(campaign_config, tmp_config)
+        tmp_config.close()
+        config_path = Path(tmp_config.name)
+    else:
+        config_path = BASE_DIR / "campaigns" / slug / "config.yaml"
+        if not config_path.exists():
+            config_path = CONFIG_PATH
+        vault_dir = None
+
     cmd = [sys.executable, str(BASE_DIR / "apply_updates.py"), str(session_dir),
            "--config", str(config_path)]
     if body.mode == "all":
@@ -1820,8 +1861,26 @@ def campaign_apply_wiki(
             cmd.extend(["--skip", ",".join(str(i) for i in body.ids)])
     else:
         raise HTTPException(400, f"Invalid mode: {body.mode}")
+
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(BASE_DIR))
     output = result.stdout + (result.stderr if result.stderr else "")
+
+    # ── Push vault changes back to GitHub ─────────────────────────────────
+    if vault_repo_url and vault_dir and (vault_dir / ".git").exists() and github_token:
+        # Set remote URL with token for push
+        subprocess.run(
+            ["git", "remote", "set-url", "origin", authed_url],
+            cwd=vault_dir, capture_output=True
+        )
+        push = subprocess.run(
+            ["git", "push"],
+            cwd=vault_dir, capture_output=True, text=True
+        )
+        if push.returncode == 0:
+            output += "\n✓ Vault pushed to GitHub."
+        else:
+            output += f"\n⚠ Git push failed: {push.stderr.strip()}"
+
     return {"output": output, "applied": body.ids}
 
 
