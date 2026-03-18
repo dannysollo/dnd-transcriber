@@ -27,7 +27,14 @@ DMs appear as `DM (Danny):` or `DM (Juno):`, players as `CharacterName [PlayerNa
 ## What To Do With a Transcript
 
 ### 1. Session Summary
-Write 3–5 paragraphs covering:
+Start with a **TL;DR** section — 3–5 bullet points, each one sentence max, covering the absolute highlights for players who just want the quick version. Format it as:
+
+**TL;DR**
+- Bullet one
+- Bullet two
+- etc.
+
+Then write 3–5 paragraphs covering:
 - What happened and in what order
 - Key decisions the party made and why
 - Important revelations, lore drops, or DM exposition
