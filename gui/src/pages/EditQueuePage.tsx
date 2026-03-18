@@ -15,126 +15,157 @@ interface PendingEdit {
   submitter_id: number
 }
 
-// Compute line-level diff between two strings
-interface DiffLine {
-  type: 'equal' | 'remove' | 'add'
-  text: string
+// Word-level LCS diff
+interface Token { type: 'equal' | 'remove' | 'add'; text: string }
+
+function tokenize(s: string): string[] {
+  // Split on word boundaries keeping whitespace as tokens
+  return s.match(/\S+|\s+/g) ?? []
 }
 
-function computeDiff(original: string, proposed: string): DiffLine[] {
-  const origLines = original.split('\n')
-  const propLines = proposed.split('\n')
-
-  // Simple LCS-based diff
-  const m = origLines.length
-  const n = propLines.length
+function lcsWordDiff(origWords: string[], propWords: string[]): Token[] {
+  const m = origWords.length, n = propWords.length
   const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
-  for (let i = m - 1; i >= 0; i--) {
-    for (let j = n - 1; j >= 0; j--) {
-      if (origLines[i] === propLines[j]) {
-        dp[i][j] = 1 + dp[i + 1][j + 1]
-      } else {
-        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1])
-      }
-    }
-  }
+  for (let i = m - 1; i >= 0; i--)
+    for (let j = n - 1; j >= 0; j--)
+      dp[i][j] = origWords[i] === propWords[j] ? 1 + dp[i+1][j+1] : Math.max(dp[i+1][j], dp[i][j+1])
 
-  const result: DiffLine[] = []
+  const result: Token[] = []
   let i = 0, j = 0
   while (i < m || j < n) {
-    if (i < m && j < n && origLines[i] === propLines[j]) {
-      result.push({ type: 'equal', text: origLines[i] })
-      i++; j++
-    } else if (j < n && (i >= m || dp[i][j + 1] >= dp[i + 1][j])) {
-      result.push({ type: 'add', text: propLines[j] })
-      j++
+    if (i < m && j < n && origWords[i] === propWords[j]) {
+      result.push({ type: 'equal', text: origWords[i] }); i++; j++
+    } else if (j < n && (i >= m || dp[i][j+1] >= dp[i+1][j])) {
+      result.push({ type: 'add', text: propWords[j] }); j++
     } else {
-      result.push({ type: 'remove', text: origLines[i] })
-      i++
+      result.push({ type: 'remove', text: origWords[i] }); i++
     }
   }
   return result
 }
 
-// Collapse unchanged runs, showing only context around changes
-function collapseDiff(lines: DiffLine[], context = 2): DiffLine[] {
+// For multi-line: line-level diff, then word-level within changed lines
+interface DiffLine { type: 'equal' | 'remove' | 'add' | 'separator'; tokens?: Token[]; text?: string; skipped?: number }
+
+function computeLineDiff(original: string, proposed: string): DiffLine[] {
+  const oLines = original.split('\n'), pLines = proposed.split('\n')
+  const m = oLines.length, n = pLines.length
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
+  for (let i = m - 1; i >= 0; i--)
+    for (let j = n - 1; j >= 0; j--)
+      dp[i][j] = oLines[i] === pLines[j] ? 1 + dp[i+1][j+1] : Math.max(dp[i+1][j], dp[i][j+1])
+
+  const result: DiffLine[] = []
+  let i = 0, j = 0
+  while (i < m || j < n) {
+    if (i < m && j < n && oLines[i] === pLines[j]) {
+      result.push({ type: 'equal', text: oLines[i] }); i++; j++
+    } else if (j < n && (i >= m || dp[i][j+1] >= dp[i+1][j])) {
+      result.push({ type: 'add', tokens: lcsWordDiff([], tokenize(pLines[j])) }); j++
+    } else {
+      // If next prop line differs, do word diff between this pair
+      if (j < n && dp[i+1][j] === dp[i][j+1]) {
+        const tokens = lcsWordDiff(tokenize(oLines[i]), tokenize(pLines[j]))
+        result.push({ type: 'remove', tokens })
+        result.push({ type: 'add', tokens: tokens.map(t => t.type === 'remove' ? { ...t, type: 'add' as const } : t.type === 'add' ? { ...t, type: 'remove' as const } : t) })
+        i++; j++
+      } else {
+        result.push({ type: 'remove', tokens: lcsWordDiff(tokenize(oLines[i]), []) }); i++
+      }
+    }
+  }
+  return result
+}
+
+function collapseLineDiff(lines: DiffLine[], context = 1): DiffLine[] {
   const changed = lines.map(l => l.type !== 'equal')
   const visible = new Set<number>()
   lines.forEach((_, idx) => {
-    if (changed[idx]) {
-      for (let k = Math.max(0, idx - context); k <= Math.min(lines.length - 1, idx + context); k++) {
+    if (changed[idx])
+      for (let k = Math.max(0, idx - context); k <= Math.min(lines.length - 1, idx + context); k++)
         visible.add(k)
-      }
-    }
   })
-
   const result: DiffLine[] = []
   let prev = -1
   for (const idx of Array.from(visible).sort((a, b) => a - b)) {
-    if (prev !== -1 && idx > prev + 1) {
-      result.push({ type: 'equal', text: `… ${idx - prev - 1} unchanged lines …` })
-    }
+    if (prev !== -1 && idx > prev + 1) result.push({ type: 'separator', skipped: idx - prev - 1 })
     result.push(lines[idx])
     prev = idx
   }
   return result
 }
 
+function renderTokens(tokens: Token[], lineType: 'add' | 'remove') {
+  return tokens.map((t, i) => {
+    if (t.type === 'equal') return <span key={i}>{t.text}</span>
+    const isHighlight = t.type === lineType
+    return (
+      <span key={i} style={{
+        background: isHighlight
+          ? (lineType === 'add' ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)')
+          : 'transparent',
+        borderRadius: '2px',
+        textDecoration: isHighlight ? undefined : 'none',
+        opacity: isHighlight ? 1 : 0.35,
+      }}>{t.text}</span>
+    )
+  })
+}
+
 function DiffView({ original, proposed }: { original: string; proposed: string }) {
   const isOneLiner = !original.includes('\n') && !proposed.includes('\n')
 
   if (isOneLiner) {
+    // Single-line: word diff inline
+    const tokens = lcsWordDiff(tokenize(original), tokenize(proposed))
+    const hasChange = tokens.some(t => t.type !== 'equal')
+    if (!hasChange) return <div style={{ fontSize: '11px', color: '#475569', fontStyle: 'italic' }}>No changes.</div>
     return (
-      <div style={{
-        background: '#0d0f18', borderRadius: '6px', padding: '10px 14px',
-        fontFamily: 'monospace', fontSize: '12px', display: 'flex',
-        flexDirection: 'column', gap: '4px',
-      }}>
-        <div style={{ color: '#f87171' }}>− {original}</div>
-        <div style={{ color: '#4ade80' }}>+ {proposed}</div>
+      <div style={{ background: '#0d0f18', borderRadius: '6px', padding: '10px 14px', fontFamily: 'monospace', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div style={{ color: '#f87171' }}>
+          <span style={{ marginRight: '8px', opacity: 0.5 }}>−</span>
+          {tokens.map((t, i) => (
+            <span key={i} style={{ background: t.type === 'remove' ? 'rgba(248,113,113,0.3)' : 'transparent', borderRadius: '2px', opacity: t.type === 'add' ? 0.3 : 1 }}>{t.text}</span>
+          ))}
+        </div>
+        <div style={{ color: '#4ade80' }}>
+          <span style={{ marginRight: '8px', opacity: 0.5 }}>+</span>
+          {tokens.map((t, i) => (
+            <span key={i} style={{ background: t.type === 'add' ? 'rgba(74,222,128,0.3)' : 'transparent', borderRadius: '2px', opacity: t.type === 'remove' ? 0.3 : 1 }}>{t.text}</span>
+          ))}
+        </div>
       </div>
     )
   }
 
-  const fullDiff = computeDiff(original, proposed)
+  const fullDiff = computeLineDiff(original, proposed)
   const hasChanges = fullDiff.some(l => l.type !== 'equal')
-  if (!hasChanges) {
-    return <div style={{ fontSize: '11px', color: '#475569', fontStyle: 'italic' }}>No changes detected.</div>
-  }
-  const diff = collapseDiff(fullDiff)
+  if (!hasChanges) return <div style={{ fontSize: '11px', color: '#475569', fontStyle: 'italic' }}>No changes detected.</div>
+  const diff = collapseLineDiff(fullDiff)
 
   return (
-    <div style={{
-      background: '#0d0f18', borderRadius: '6px',
-      fontFamily: 'monospace', fontSize: '12px', overflow: 'hidden',
-      border: '1px solid #1e2130',
-    }}>
+    <div style={{ background: '#0d0f18', borderRadius: '6px', fontFamily: 'monospace', fontSize: '12px', overflow: 'hidden', border: '1px solid #1e2130' }}>
       {diff.map((line, i) => {
-        const isCollapsed = line.type === 'equal' && line.text.startsWith('…')
-        const bg =
-          line.type === 'add' ? 'rgba(74,222,128,0.08)' :
-          line.type === 'remove' ? 'rgba(248,113,113,0.08)' :
-          isCollapsed ? 'rgba(255,255,255,0.02)' : 'transparent'
-        const color =
-          line.type === 'add' ? '#4ade80' :
-          line.type === 'remove' ? '#f87171' :
-          isCollapsed ? '#334155' : '#64748b'
-        const prefix =
-          line.type === 'add' ? '+' :
-          line.type === 'remove' ? '−' :
-          isCollapsed ? ' ' : ' '
-
+        if (line.type === 'separator') return (
+          <div key={i} style={{ padding: '2px 12px', color: '#334155', background: 'rgba(255,255,255,0.02)', fontStyle: 'italic' }}>
+            … {line.skipped} unchanged {line.skipped === 1 ? 'line' : 'lines'} …
+          </div>
+        )
+        if (line.type === 'equal') return (
+          <div key={i} style={{ padding: '2px 12px', color: '#475569', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>
+            <span style={{ marginRight: '10px', opacity: 0.4 }}> </span>{line.text}
+          </div>
+        )
+        const tokens = line.tokens ?? []
+        const bg = line.type === 'add' ? 'rgba(74,222,128,0.06)' : 'rgba(248,113,113,0.06)'
+        const prefix = line.type === 'add' ? '+' : '−'
+        const prefixColor = line.type === 'add' ? '#4ade80' : '#f87171'
         return (
-          <div
-            key={i}
-            style={{
-              padding: '2px 12px', background: bg, color,
-              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-              lineHeight: 1.5,
-            }}
-          >
-            <span style={{ marginRight: '10px', opacity: 0.6, userSelect: 'none' }}>{prefix}</span>
-            {line.text}
+          <div key={i} style={{ padding: '2px 12px', background: bg, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>
+            <span style={{ marginRight: '10px', color: prefixColor, opacity: 0.7, userSelect: 'none' }}>{prefix}</span>
+            <span style={{ color: line.type === 'add' ? '#4ade80' : '#f87171' }}>
+              {renderTokens(tokens, line.type as 'add' | 'remove')}
+            </span>
           </div>
         )
       })}

@@ -548,7 +548,7 @@ export default function SessionView() {
             onSaved={load}
           />
         ) : tab === 'wiki' ? (
-          <WikiView sessionName={name!} wikiMarkdown={wiki} onRemerge={doMerge} />
+          <WikiView sessionName={name!} wikiMarkdown={wiki} onRemerge={doMerge} onWikiSaved={load} />
         ) : (
           <ChangesView
             report={changesReport}
@@ -1761,8 +1761,14 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
 
 // ─── Wiki tab ─────────────────────────────────────────────────────────────────
 
-function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: string; wikiMarkdown: string | null; onRemerge?: () => void }) {
+function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessionName: string; wikiMarkdown: string | null; onRemerge?: () => void; onWikiSaved?: () => void }) {
   const apiUrl = useApiUrl()
+  const { authEnabled } = useAuth()
+  const { activeCampaign } = useCampaign()
+  const [wikiEditMode, setWikiEditMode] = useState(false)
+  const [wikiEditValue, setWikiEditValue] = useState('')
+  const [wikiSaving, setWikiSaving] = useState(false)
+  const [wikiPending, setWikiPending] = useState(false)
   const [suggestions, setSuggestions] = useState<WikiSuggestion[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [appliedIds, setAppliedIds] = useState<Set<number>>(new Set())
@@ -1834,18 +1840,111 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge }: { sessionName: strin
     })
   }
 
+  const isDm = !authEnabled || activeCampaign?.role === 'dm'
+  const requiresApproval = authEnabled && !isDm && activeCampaign?.settings?.require_edit_approval
+
+  const saveWikiEdit = async () => {
+    setWikiSaving(true)
+    try {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/wiki`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: wikiEditValue }),
+      })
+      if (r.status === 202) {
+        setWikiPending(true)
+        setWikiEditMode(false)
+      } else if (r.ok) {
+        setWikiEditMode(false)
+        onWikiSaved?.()
+      } else {
+        const data = await r.json().catch(() => ({}))
+        alert(`Failed to save: ${data.detail || r.status}`)
+      }
+    } finally {
+      setWikiSaving(false)
+    }
+  }
+
+  // Wiki edit toolbar (shown above both the suggestions panel and the markdown fallback)
+  const wikiEditToolbar = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+      {wikiPending && (
+        <span style={{
+          fontSize: '11px', fontWeight: 600, color: '#fbbf24',
+          background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)',
+          borderRadius: '6px', padding: '3px 10px',
+        }}>
+          Submitted for DM review
+        </span>
+      )}
+      <div style={{ flex: 1 }} />
+      {!wikiEditMode ? (
+        <button
+          onClick={() => { setWikiEditValue(wikiMarkdown ?? ''); setWikiPending(false); setWikiEditMode(true) }}
+          style={{
+            background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '8px',
+            color: '#64748b', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          ✏️ Edit Wiki
+        </button>
+      ) : (
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', color: requiresApproval ? '#fbbf24' : '#64748b' }}>
+            {requiresApproval ? 'Will submit for DM review' : 'Saves directly'}
+          </span>
+          <button onClick={() => setWikiEditMode(false)} style={{ background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '6px', color: '#64748b', padding: '5px 12px', fontSize: '12px', cursor: 'pointer' }}>Cancel</button>
+          <button
+            onClick={saveWikiEdit}
+            disabled={wikiSaving}
+            style={{
+              background: requiresApproval ? 'rgba(251,191,36,0.15)' : 'rgba(52,211,153,0.15)',
+              border: `1px solid ${requiresApproval ? 'rgba(251,191,36,0.4)' : 'rgba(52,211,153,0.4)'}`,
+              borderRadius: '6px', color: requiresApproval ? '#fbbf24' : '#34d399',
+              padding: '5px 14px', fontSize: '12px', fontWeight: 700,
+              cursor: wikiSaving ? 'not-allowed' : 'pointer', opacity: wikiSaving ? 0.6 : 1,
+            }}
+          >
+            {wikiSaving ? 'Saving…' : requiresApproval ? 'Submit for Review' : 'Save'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+
   if (loading) {
     return <div style={{ color: '#64748b', paddingTop: '60px', textAlign: 'center' }}>Loading wiki suggestions...</div>
   }
 
   if (!suggestions || suggestions.length === 0) {
-    return <MarkdownView content={wikiMarkdown} emptyMsg="No wiki suggestions yet. Run the pipeline to generate them." />
+    return (
+      <div style={{ maxWidth: '820px' }}>
+        {wikiEditToolbar}
+        {wikiEditMode ? (
+          <textarea
+            value={wikiEditValue}
+            onChange={e => setWikiEditValue(e.target.value)}
+            style={{
+              width: '100%', minHeight: '500px', background: '#13151f',
+              border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px',
+              color: '#e2e8f0', padding: '16px', fontSize: '13px',
+              fontFamily: 'monospace', lineHeight: 1.6, resize: 'vertical',
+              outline: 'none', boxSizing: 'border-box',
+            }}
+          />
+        ) : (
+          <MarkdownView content={wikiMarkdown} emptyMsg="No wiki suggestions yet. Run the pipeline to generate them." />
+        )}
+      </div>
+    )
   }
 
   const unappliedCount = suggestions.filter(s => !appliedIds.has(s.id) && !skippedIds.has(s.id)).length
 
   return (
     <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {wikiEditToolbar}
 
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
