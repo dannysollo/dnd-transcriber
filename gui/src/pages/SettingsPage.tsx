@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
+import { useToast } from '../Toast'
 
 
 export default function SettingsPage() {
   const apiUrl = useApiUrl()
   const { loading: campaignLoading, activeCampaign } = useCampaign()
   const { authEnabled, isLoggedIn } = useAuth()
+  const { toast } = useToast()
   const [config, setConfig] = useState<Record<string, any> | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [vocab, setVocab] = useState('')
-  const [vocabError, setVocabError] = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -20,12 +20,6 @@ export default function SettingsPage() {
     const data = await r.json()
     setConfig(data)
     setLoading(false)
-
-    // Load vocab
-    const vr = await fetch(apiUrl('/config/vocab'))
-    const vdata = await vr.json()
-    setVocab(vdata.vocab || '')
-    setVocabError(vdata.error || '')
   }
 
   useEffect(() => {
@@ -36,14 +30,19 @@ export default function SettingsPage() {
   const save = async () => {
     if (!config) return
     setSaving(true)
-    await fetch(apiUrl('/config'), {
+    const r = await fetch(apiUrl('/config'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ config }),
     })
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    if (r.ok) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      toast('Settings saved', 'success')
+    } else {
+      toast('Failed to save settings', 'error')
+    }
   }
 
   const updateField = (key: string, value: any) => {
@@ -105,7 +104,7 @@ export default function SettingsPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>Settings</h1>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>Pipeline and player configuration</p>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>Transcription and player configuration</p>
         </div>
         <button
           onClick={save}
@@ -125,7 +124,7 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      {/* Whisper model */}
+      {/* Whisper / transcription */}
       <Section title="Transcription">
         <Field label="Whisper Model">
           <select
@@ -142,48 +141,15 @@ export default function SettingsPage() {
           <Toggle
             value={config.vad ?? true}
             onChange={v => updateField('vad', v)}
-            description="Zeros out silence before Whisper — prevents hallucinations"
-          />
-        </Field>
-        <Field label="Sessions Directory">
-          <input
-            value={config.sessions_dir || 'sessions'}
-            onChange={e => updateField('sessions_dir', e.target.value)}
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="Vault Path">
-          <input
-            value={config.vault_path || ''}
-            onChange={e => updateField('vault_path', e.target.value)}
-            style={inputStyle}
-          />
-        </Field>
-      </Section>
-
-      {/* OpenClaw / Notify */}
-      <Section title="Claude / Notify">
-        <Field label="Notify Claude via OpenClaw">
-          <Toggle
-            value={config.notify_claude ?? true}
-            onChange={v => updateField('notify_claude', v)}
-            description="Auto-pings Claude after transcription"
-          />
-        </Field>
-        <Field label="OpenClaw Session ID">
-          <input
-            value={config.openclaw_session_id || ''}
-            onChange={e => updateField('openclaw_session_id', e.target.value)}
-            style={inputStyle}
+            description="Zeros out silence before Whisper — reduces hallucinations"
           />
         </Field>
       </Section>
 
       {/* Players */}
       <Section title="Players">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {/* Header */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 80px 32px', gap: '8px', padding: '0 8px', fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 80px 32px', gap: '8px', padding: '0 4px', fontSize: '11px', fontWeight: 600, color: '#64748b', letterSpacing: '0.04em' }}>
             <span>Discord Username</span>
             <span>Display Name</span>
             <span>Character</span>
@@ -196,12 +162,12 @@ export default function SettingsPage() {
               gridTemplateColumns: '1fr 1fr 1fr 80px 32px',
               gap: '8px',
               padding: '8px',
-              background: '#1a1d27',
+              background: '#13151f',
               border: '1px solid #2a2d3a',
               borderRadius: '8px',
               alignItems: 'center',
             }}>
-              <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#94a3b8' }}>{username}</span>
+              <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{username}</span>
               <input
                 value={info.name || ''}
                 onChange={e => updatePlayer(username, 'name', e.target.value)}
@@ -223,7 +189,8 @@ export default function SettingsPage() {
               </select>
               <button
                 onClick={() => removePlayer(username)}
-                style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '14px' }}
+                title="Remove player"
+                style={{ background: 'transparent', border: 'none', color: '#475569', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}
               >
                 ×
               </button>
@@ -235,7 +202,7 @@ export default function SettingsPage() {
               background: 'transparent',
               border: '1px dashed #2a2d3a',
               borderRadius: '8px',
-              color: '#64748b',
+              color: '#475569',
               padding: '8px',
               fontSize: '12px',
               cursor: 'pointer',
@@ -244,29 +211,10 @@ export default function SettingsPage() {
           >
             + Add player
           </button>
+          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
+            Discord usernames must match the Craig audio filename fragments. Obsidian vault sync and campaign-level settings are in <strong style={{ color: '#475569' }}>Campaign Settings</strong>.
+          </p>
         </div>
-      </Section>
-
-      {/* Vocab preview */}
-      <Section title="Vocabulary Prompt (from vault)">
-        {vocabError ? (
-          <div style={{ fontSize: '12px', color: '#f87171' }}>Error: {vocabError}</div>
-        ) : (
-          <pre style={{
-            fontFamily: 'monospace',
-            fontSize: '11px',
-            color: '#94a3b8',
-            background: '#1a1d27',
-            border: '1px solid #2a2d3a',
-            borderRadius: '8px',
-            padding: '12px',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            margin: 0,
-          }}>
-            {vocab || '(empty — check vault_path in config)'}
-          </pre>
-        )}
       </Section>
     </div>
   )
