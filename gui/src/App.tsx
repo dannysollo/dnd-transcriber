@@ -12,11 +12,13 @@ import CampaignSettingsPage from './pages/CampaignSettingsPage'
 import InvitePage from './pages/InvitePage'
 import EditQueuePage from './pages/EditQueuePage'
 import LandingPage from './pages/LandingPage'
+import SearchPage from './pages/SearchPage'
 import { useAuth, avatarUrl } from './AuthContext'
 import { useCampaign } from './CampaignContext'
 
 const navItems = [
   { to: '/', label: 'Sessions', icon: '📜' },
+  { to: '/search', label: 'Search', icon: '🔍' },
   { to: '/campaigns', label: 'Campaigns', icon: '⚔️' },
   { to: '/corrections', label: 'Corrections', icon: '✏️' },
   { to: '/settings', label: 'Settings', icon: '🔧' },
@@ -286,6 +288,7 @@ export default function App() {
           <Route path="/campaigns/:slug/settings" element={<CampaignSettingsPage />} />
           <Route path="/invite/:token" element={<InvitePage />} />
           <Route path="/edit-queue" element={<EditQueuePage />} />
+          <Route path="/search" element={<SearchPage />} />
         </Routes>
       </main>
     </div>

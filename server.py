@@ -1414,6 +1414,58 @@ def campaign_list_sessions(
     return sessions
 
 
+@app.get("/campaigns/{slug}/search")
+def campaign_search(
+    slug: str,
+    q: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    """Full-text search across all session transcripts, summaries, and wikis in a campaign."""
+    if not q or len(q.strip()) < 2:
+        raise HTTPException(400, "Query must be at least 2 characters")
+
+    query = q.strip().lower()
+    sessions_dir = get_sessions_dir(slug)
+    results = []
+
+    SEARCH_FILES = [
+        ("transcript", "transcript.md"),
+        ("summary", "summary.md"),
+        ("wiki", "wiki.md"),
+    ]
+
+    for session_dir in sorted(sessions_dir.iterdir(), reverse=True):
+        if not session_dir.is_dir() or session_dir.name.startswith("."):
+            continue
+
+        session_hits = []
+        for source_type, filename in SEARCH_FILES:
+            file_path = session_dir / filename
+            if not file_path.exists():
+                continue
+            lines = file_path.read_text(encoding="utf-8").splitlines()
+            for i, line in enumerate(lines):
+                if query in line.lower():
+                    # Include one line of context before and after
+                    snippet_start = max(0, i - 1)
+                    snippet_end = min(len(lines), i + 2)
+                    session_hits.append({
+                        "source": source_type,
+                        "line_number": i + 1,
+                        "line": line,
+                        "context": lines[snippet_start:snippet_end],
+                    })
+
+        if session_hits:
+            results.append({
+                "session": session_dir.name,
+                "hits": session_hits,
+                "hit_count": len(session_hits),
+            })
+
+    return {"query": q, "results": results, "total_sessions": len(results)}
+
+
 @app.post("/campaigns/{slug}/sessions")
 def campaign_create_session(
     slug: str,
