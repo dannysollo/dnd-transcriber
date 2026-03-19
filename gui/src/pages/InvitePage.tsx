@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 
 interface InviteInfo {
@@ -15,7 +15,7 @@ interface InviteInfo {
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>()
   const { isLoggedIn, authEnabled } = useAuth()
-  // const navigate = useNavigate()
+  const navigate = useNavigate()
   const [invite, setInvite] = useState<InviteInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [joining, setJoining] = useState(false)
@@ -42,7 +42,7 @@ export default function InvitePage() {
       const r = await fetch(`/invites/${token}/use`, { method: 'POST' })
       if (r.ok) {
         setJoined(true)
-        setTimeout(() => { window.location.href = '/campaigns' }, 1500)
+        setTimeout(() => navigate('/'), 1500)
       } else {
         const data = await r.json()
         setError(data.detail || 'Failed to join campaign')
