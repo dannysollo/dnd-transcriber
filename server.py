@@ -2525,6 +2525,27 @@ def get_all_jobs(
     return [_job_dict(j) for j in jobs]
 
 
+@app.get("/worker/whoami")
+def worker_whoami(request: Request, db: Session = Depends(get_db)):
+    """
+    Identify which campaign an API key belongs to.
+    Allows workers to omit campaign_slug from worker.yaml — just provide the api_key.
+    Returns: {campaign_slug, campaign_name}
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(401, "Missing worker API key")
+    token = auth_header[7:]
+    # Search all campaigns for a matching worker_api_key
+    from db.models import Campaign
+    campaigns = db.query(Campaign).all()
+    for campaign in campaigns:
+        stored_key = (campaign.settings or {}).get("worker_api_key")
+        if stored_key and token == stored_key:
+            return {"campaign_slug": campaign.slug, "campaign_name": campaign.name}
+    raise HTTPException(403, "Invalid worker API key — no campaign found for this key")
+
+
 @app.post("/campaigns/{slug}/worker-key")
 def generate_worker_key(
     slug: str,

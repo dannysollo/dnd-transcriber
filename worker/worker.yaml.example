@@ -1,8 +1,10 @@
 server_url: https://your-dnd-transcriber.fly.dev
-campaign_slug: your-campaign-slug
 api_key: paste-key-from-campaign-settings
 audio_dir: /path/to/audio/output
 poll_interval: 30
+# campaign_slug is optional — the worker will auto-discover it from your api_key.
+# Only set this if you want to override auto-discovery.
+# campaign_slug: your-campaign-slug
 # whisper_model: turbo  # Uncomment to override the campaign's model setting
 
 # ── Craig Watcher (optional) ──────────────────────────────────────────────────
