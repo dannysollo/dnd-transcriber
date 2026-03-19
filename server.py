@@ -2672,6 +2672,45 @@ def worker_get_config(slug: str, db: Session = Depends(get_db), request: Request
     }
 
 
+# ─── Vault connection test ────────────────────────────────────────────────────
+
+@app.post("/campaigns/{slug}/vault/test")
+def test_vault_connection(
+    slug: str,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    """Test that the vault_repo_url is reachable and clonable."""
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    vault_repo_url = (campaign.settings or {}).get("vault_repo_url")
+    if not vault_repo_url:
+        raise HTTPException(400, "No vault_repo_url configured for this campaign")
+
+    github_token = os.environ.get("GITHUB_TOKEN")
+    if github_token and vault_repo_url.startswith("https://"):
+        authed_url = vault_repo_url.replace("https://", f"https://{github_token}@")
+    else:
+        authed_url = vault_repo_url
+
+    # Try ls-remote — fast, doesn't clone, just checks connectivity + auth
+    result = subprocess.run(
+        ["git", "ls-remote", "--heads", authed_url],
+        capture_output=True, text=True, timeout=15
+    )
+    if result.returncode == 0:
+        lines = result.stdout.strip().splitlines()
+        branches = [l.split("\t")[-1].replace("refs/heads/", "") for l in lines if l]
+        return {"ok": True, "message": f"Connected ✓ — {len(branches)} branch(es): {', '.join(branches[:3])}"}
+    else:
+        err = result.stderr.strip().split("\n")[0]  # first line only, no token leak
+        # Sanitize — don't expose the token in the error
+        if github_token:
+            err = err.replace(github_token, "***")
+        return {"ok": False, "message": f"Connection failed: {err}"}
+
+
 # ─── Session sharing ──────────────────────────────────────────────────────────
 
 class CreateShareBody(BaseModel):

@@ -160,6 +160,8 @@ export default function SessionView() {
   const [shareShowTranscript, setShareShowTranscript] = useState(true)
   const [shareShowSummary, setShareShowSummary] = useState(true)
   const [shareShowWiki, setShareShowWiki] = useState(true)
+  const [existingShares, setExistingShares] = useState<{ token: string; created_at: string; expires_at: string | null; expired: boolean }[]>([])
+  const [sharesLoading, setSharesLoading] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
   const pendingSeekRef = useRef<number | null>(null)
   const dragCounter = useRef(0)
@@ -401,7 +403,14 @@ export default function SessionView() {
         <div style={{ flex: 1 }} />
 
         <button
-          onClick={() => { setShareModalOpen(true); setShareToken(null); setShareCopied(false) }}
+          onClick={async () => {
+            setShareModalOpen(true); setShareToken(null); setShareCopied(false)
+            setSharesLoading(true)
+            try {
+              const r = await fetch(apiUrl(`/sessions/${name}/shares`))
+              if (r.ok) setExistingShares(await r.json())
+            } catch { /* ignore */ } finally { setSharesLoading(false) }
+          }}
           style={{
             background: 'rgba(96,165,250,0.12)',
             border: '1px solid rgba(96,165,250,0.25)',
@@ -531,13 +540,50 @@ export default function SessionView() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button
-                    onClick={() => setShareModalOpen(false)}
+                    onClick={() => { setShareToken(null) }}
                     style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: 13 }}
                   >
-                    Done
+                    ← Create another
                   </button>
                 </div>
               </>
+            )}
+
+            {/* Existing shares list */}
+            {!sharesLoading && existingShares.length > 0 && (
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', marginTop: 16, paddingTop: 14 }}>
+                <div style={{ fontSize: 11, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                  Active Links
+                </div>
+                {existingShares.map(s => (
+                  <div key={s.token} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{
+                      flex: 1, fontSize: 11, fontFamily: 'monospace', color: s.expired ? '#475569' : '#94a3b8',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      textDecoration: s.expired ? 'line-through' : 'none',
+                    }}>
+                      /share/{s.token}
+                    </span>
+                    {!s.expired && (
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/share/${s.token}`)
+                        }}
+                        style={{ padding: '2px 8px', borderRadius: 5, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#64748b', cursor: 'pointer', fontSize: 11 }}
+                        title="Copy link"
+                      >📋</button>
+                    )}
+                    <button
+                      onClick={async () => {
+                        await fetch(apiUrl(`/sessions/${name}/shares/${s.token}`), { method: 'DELETE' })
+                        setExistingShares(prev => prev.filter(x => x.token !== s.token))
+                      }}
+                      style={{ padding: '2px 8px', borderRadius: 5, border: '1px solid rgba(248,113,113,0.25)', background: 'transparent', color: '#f87171', cursor: 'pointer', fontSize: 11 }}
+                      title="Revoke"
+                    >✕</button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

@@ -25,12 +25,28 @@ const navItems = [
   { to: '/settings', label: 'Settings', icon: '🔧' },
 ]
 
+
 export default function App() {
   const { user, isLoggedIn, authEnabled, loading } = useAuth()
   const { campaigns, activeCampaign, setActiveCampaign, loading: campaignLoading } = useCampaign()
   const [campaignDropdownOpen, setCampaignDropdownOpen] = useState(false)
   const [pendingEditCount, setPendingEditCount] = useState(0)
+  const [workerLastSeen, setWorkerLastSeen] = useState<string | null>(null)
   const navigate = useNavigate()
+
+  // Fetch worker heartbeat for DMs
+  useEffect(() => {
+    if (!activeCampaign || activeCampaign.role !== 'dm') { setWorkerLastSeen(null); return }
+    const fetchHeartbeat = () => {
+      fetch(`/campaigns/${activeCampaign.slug}/worker-key`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => setWorkerLastSeen(data?.last_seen ?? null))
+        .catch(() => {})
+    }
+    fetchHeartbeat()
+    const interval = setInterval(fetchHeartbeat, 60000)
+    return () => clearInterval(interval)
+  }, [activeCampaign?.slug, activeCampaign?.role])
 
   // Fetch pending edit count for DMs
   useEffect(() => {
@@ -113,7 +129,6 @@ export default function App() {
         {/* Logo */}
         <div className="sidebar-logo" style={{ padding: '20px 16px 16px', borderBottom: '1px solid #1e2130' }}>
           <div style={{ fontSize: '13px', fontWeight: 700, color: '#7c6cfc' }}>DnD Transcriber</div>
-          <div style={{ fontSize: '11px', marginTop: '2px', color: '#475569' }}>Session Pipeline</div>
           {!authEnabled && (
             <div style={{
               marginTop: '6px', fontSize: '10px', fontWeight: 600,
@@ -141,6 +156,22 @@ export default function App() {
                 <div style={{ fontSize: '12px', fontWeight: 600, color: '#a89cff' }}>
                   {activeCampaign?.name ?? 'None'}
                 </div>
+                {activeCampaign?.role === 'dm' && workerLastSeen && (() => {
+                  const mins = Math.floor((Date.now() - new Date(workerLastSeen).getTime()) / 60000)
+                  const online = mins < 3
+                  const label = online ? 'Worker online' : mins < 60 ? `Worker ${mins}m ago` : 'Worker offline'
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                      <span style={{
+                        width: 6, height: 6, borderRadius: '50%',
+                        background: online ? '#4ade80' : '#f87171',
+                        flexShrink: 0, display: 'inline-block',
+                        boxShadow: online ? '0 0 4px #4ade80' : 'none',
+                      }} />
+                      <span style={{ fontSize: '10px', color: online ? '#4ade80' : '#f87171' }}>{label}</span>
+                    </div>
+                  )
+                })()}
               </div>
               {campaigns.length > 1 && (
                 <span style={{ fontSize: '10px', color: '#475569' }}>
@@ -223,6 +254,7 @@ export default function App() {
                 color: isActive ? '#a89cff' : '#94a3b8',
                 fontWeight: isActive ? 600 : 400,
               })}
+              className="sidebar-nav-item"
             >
               <span>📝</span>
               <span style={{ flex: 1 }}>Edit Queue</span>
@@ -314,8 +346,26 @@ export default function App() {
           <Route path="/invite/:token" element={<InvitePage />} />
           <Route path="/edit-queue" element={<EditQueuePage />} />
           <Route path="/search" element={<SearchPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
+    </div>
+  )
+}
+
+function NotFoundPage() {
+  const navigate = useNavigate()
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 32, textAlign: 'center' }}>
+      <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.4 }}>🎲</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: '#e2e8f0', marginBottom: 8 }}>404 — Not Found</div>
+      <div style={{ fontSize: 14, color: '#475569', marginBottom: 24 }}>This page doesn't exist or has been moved.</div>
+      <button
+        onClick={() => navigate('/')}
+        style={{ background: '#7c6cfc', border: 'none', borderRadius: 8, color: '#fff', padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+      >
+        Back to Sessions
+      </button>
     </div>
   )
 }

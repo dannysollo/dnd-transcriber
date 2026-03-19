@@ -54,6 +54,8 @@ export default function CampaignSettingsPage() {
   const [webhookUrl, setWebhookUrl] = useState('')
   const [channelId, setChannelId] = useState('')
   const [vaultRepoUrl, setVaultRepoUrl] = useState('')
+  const [vaultTesting, setVaultTesting] = useState(false)
+  const [vaultTestResult, setVaultTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [saving, setSaving] = useState(false)
 
   // Worker state
@@ -242,10 +244,40 @@ export default function CampaignSettingsPage() {
           <Field label="Obsidian Vault GitHub Repo">
             <input
               value={vaultRepoUrl}
-              onChange={e => setVaultRepoUrl(e.target.value)}
+              onChange={e => { setVaultRepoUrl(e.target.value); setVaultTestResult(null) }}
               style={inputStyle}
               placeholder="https://github.com/username/vault-repo"
             />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <button
+                onClick={async () => {
+                  setVaultTesting(true)
+                  setVaultTestResult(null)
+                  try {
+                    const r = await fetch(`/campaigns/${campaign?.slug}/vault/test`, { method: 'POST' })
+                    const data = await r.json()
+                    setVaultTestResult(data)
+                  } catch {
+                    setVaultTestResult({ ok: false, message: 'Request failed' })
+                  } finally {
+                    setVaultTesting(false)
+                  }
+                }}
+                disabled={vaultTesting || !vaultRepoUrl.trim()}
+                style={{
+                  background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
+                  borderRadius: 6, color: '#93c5fd', padding: '4px 12px', fontSize: 12,
+                  fontWeight: 600, cursor: 'pointer', opacity: (vaultTesting || !vaultRepoUrl.trim()) ? 0.5 : 1,
+                }}
+              >
+                {vaultTesting ? 'Testing…' : 'Test Connection'}
+              </button>
+              {vaultTestResult && (
+                <span style={{ fontSize: 12, color: vaultTestResult.ok ? '#4ade80' : '#f87171' }}>
+                  {vaultTestResult.message}
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
               Wiki edits will be committed and pushed to this repo. Requires <code>GITHUB_TOKEN</code> set as a Fly secret.
             </div>
