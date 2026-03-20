@@ -15,12 +15,19 @@
   #root {
     height: 100dvh;
     overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body {
+    overscroll-behavior: none;
+    overflow: hidden;
   }
 
   .app-shell {
     flex-direction: column-reverse !important;
     height: 100dvh !important;
     overflow: hidden !important;
+    overscroll-behavior: none !important;
   }
 
   .app-sidebar {
@@ -81,6 +88,7 @@
     min-height: 0 !important;
     /* Needed so content doesn't push the nav bar off screen */
     height: 0 !important;
+    overscroll-behavior: contain !important;
   }
 
   .mobile-campaign-bar {

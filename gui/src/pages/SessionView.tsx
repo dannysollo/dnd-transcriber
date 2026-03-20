@@ -592,11 +592,11 @@ export default function SessionView() {
       {/* Tabs */}
       <div style={{
         display: 'flex',
-        gap: '0',
-        padding: '0 28px',
+        flexDirection: 'column',
         borderBottom: '1px solid #1e2130',
         flexShrink: 0,
       }}>
+      <div style={{ display: 'flex', gap: 0, padding: '0 12px', overflowX: 'auto', scrollbarWidth: 'none' }}>
         {tabs.map(t => (
           <button
             key={t.id}
@@ -606,19 +606,22 @@ export default function SessionView() {
               border: 'none',
               borderBottom: tab === t.id ? '2px solid #7c6cfc' : '2px solid transparent',
               color: tab === t.id ? '#a89cff' : '#64748b',
-              padding: '12px 16px',
+              padding: '12px 14px',
               fontSize: '13px',
               fontWeight: tab === t.id ? 600 : 400,
               cursor: 'pointer',
               transition: 'all 0.15s',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             {t.label}
           </button>
         ))}
+        </div>
 
         {tab === 'transcript' && (
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: '1px solid #1e2130' }}>
             {!editMode && (
               <>
                 <input
@@ -633,7 +636,8 @@ export default function SessionView() {
                     color: '#e2e8f0',
                     padding: '6px 12px',
                     fontSize: '12px',
-                    width: '200px',
+                    flex: 1,
+                    minWidth: 0,
                     outline: 'none',
                   }}
                 />
@@ -661,6 +665,7 @@ export default function SessionView() {
                   fontWeight: 600,
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
+                  flexShrink: 0,
                 }}
               >
                 {editMode ? 'Exit Edit' : 'Edit Transcript'}
