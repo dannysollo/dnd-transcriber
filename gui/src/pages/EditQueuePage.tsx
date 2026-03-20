@@ -247,7 +247,7 @@ export default function EditQueuePage() {
   }
 
   return (
-    <div style={{ padding: '32px', maxWidth: '900px' }}>
+    <div className="page-content" style={{ padding: '32px', maxWidth: '900px' }}>
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>
           Edit Queue

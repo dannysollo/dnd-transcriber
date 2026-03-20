@@ -99,3 +99,25 @@
     padding: 12px !important;
   }
 }
+
+
+/* ── Page-level mobile fixes ───────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* All main content pages: reduce padding and prevent horizontal overflow */
+  .page-content {
+    padding: 16px !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Corrections: stack two columns vertically */
+  .corrections-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Session row right side: allow wrapping */
+  .session-row-right {
+    flex-wrap: wrap !important;
+    justify-content: flex-start !important;
+  }
+}

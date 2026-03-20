@@ -272,7 +272,7 @@ export default function SessionsPage() {
   }
 
   return (
-    <div style={{ padding: '32px', maxWidth: '900px' }}>
+    <div className="page-content" style={{ padding: '32px', maxWidth: '900px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>
@@ -471,8 +471,11 @@ export default function SessionsPage() {
                   </span>
                 )}
 
+                {/* Right side: badges + actions — wraps on mobile */}
+                <div className="session-row-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end', flexShrink: 0 }}>
+
                 {/* File badges */}
-                <div style={{ display: 'flex', gap: '6px' }}>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                   {s.has_transcript && <Badge label="transcript" />}
                   {s.has_summary && <Badge label="summary" />}
                   {s.has_wiki && <Badge label="wiki" />}
@@ -531,6 +534,7 @@ export default function SessionsPage() {
                     🗑️
                   </ActionBtn>
                 </div>
+                </div>{/* end session-row-right */}
               </div>
             )
           })}

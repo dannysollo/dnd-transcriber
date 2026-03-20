@@ -201,7 +201,7 @@ export default function CampaignSettingsPage() {
   if (!campaign) return <div style={{ padding: '32px', color: '#f87171' }}>Campaign not found.</div>
 
   return (
-    <div style={{ padding: '32px', maxWidth: '860px' }}>
+    <div className="page-content" style={{ padding: '32px', maxWidth: '860px' }}>
       <h1 style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>
         {campaign.name}
       </h1>

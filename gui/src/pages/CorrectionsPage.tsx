@@ -214,7 +214,7 @@ export default function CorrectionsPage() {
   }
 
   return (
-    <div style={{ padding: '32px', maxWidth: '1100px' }}>
+    <div className="page-content" style={{ padding: '32px', maxWidth: '1100px' }}>
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>Corrections Editor</h1>
         <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
@@ -222,7 +222,7 @@ export default function CorrectionsPage() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+      <div className="corrections-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
         {/* Left: editor */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Tabs */}

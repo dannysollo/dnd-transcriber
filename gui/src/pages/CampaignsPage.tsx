@@ -72,7 +72,7 @@ export default function CampaignsPage() {
   }
 
   return (
-    <div style={{ padding: '32px', maxWidth: '900px' }}>
+    <div className="page-content" style={{ padding: '32px', maxWidth: '900px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>Campaigns</h1>
