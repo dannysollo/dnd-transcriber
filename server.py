@@ -180,6 +180,10 @@ class RenameSessionBody(BaseModel):
 
 @app.patch("/sessions/{name}")
 def rename_session(name: str, body: RenameSessionBody):
+    if "/" in body.new_name or "\\" in body.new_name:
+        raise HTTPException(400, "Session name cannot contain slashes")
+    if not body.new_name.strip():
+        raise HTTPException(400, "Session name cannot be empty")
     sessions_dir = get_sessions_dir()
     old_path = sessions_dir / name
     new_path = sessions_dir / body.new_name
@@ -1548,6 +1552,10 @@ def campaign_rename_session(
     body: RenameSessionBody,
     _member=Depends(require_campaign_member("dm")),
 ):
+    if "/" in body.new_name or "\\" in body.new_name:
+        raise HTTPException(400, "Session name cannot contain slashes")
+    if not body.new_name.strip():
+        raise HTTPException(400, "Session name cannot be empty")
     sessions_dir = get_sessions_dir(slug)
     old_path = sessions_dir / name
     new_path = sessions_dir / body.new_name

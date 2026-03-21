@@ -169,6 +169,10 @@ export default function SessionsPage() {
       setRenamingSession(null)
       return
     }
+    if (newNameVal.includes('/') || newNameVal.includes('\\')) {
+      toast('Session name cannot contain slashes', 'error')
+      return
+    }
     const r = await fetch(apiUrl(`/sessions/${oldName}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
