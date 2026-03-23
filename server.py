@@ -2520,8 +2520,7 @@ def cancel_transcription_job(
     job = crud.get_job(db, campaign.id, name)
     if not job:
         raise HTTPException(404, "No job found for this session")
-    if job.status == "claimed":
-        raise HTTPException(409, "Cannot cancel a job that is currently being processed")
+    # Allow cancelling claimed jobs too — they can get stuck if audio files disappear
     crud.delete_job(db, job)
 
 

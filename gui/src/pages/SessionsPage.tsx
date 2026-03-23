@@ -581,7 +581,7 @@ const JOB_BADGE: Record<string, { bg: string; text: string; label: string }> = {
 function JobStatusBadge({ job, onCancel }: { job: TranscriptionJob; onCancel?: () => void }) {
   const b = JOB_BADGE[job.status]
   if (!b) return null
-  const canCancel = onCancel && (job.status === 'pending' || job.status === 'error')
+  const canCancel = onCancel && job.status !== 'done'
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
       <div

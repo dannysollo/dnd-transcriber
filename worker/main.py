@@ -65,16 +65,7 @@ def poll_loop(config: dict, stop_event: threading.Event):
             session_name = job["session_name"]
             session_dir = Path(config["audio_dir"]) / session_name
 
-            if not session_dir.exists():
-                print(f"[worker] [SKIP] Session dir not found: {session_dir}")
-                continue
-
-            audio_files = find_audio_files(session_dir)
-            if not audio_files:
-                print(f"[worker] [SKIP] No audio files in {session_dir}")
-                continue
-
-            print(f"\n[worker] [JOB] {session_name} — {len(audio_files)} audio file(s)")
+            print(f"\n[worker] [JOB] {session_name}")
 
             try:
                 claimed = client.claim_job(session_name)
@@ -82,6 +73,19 @@ def poll_loop(config: dict, stop_event: threading.Event):
                     print(f"[worker]   Job for {session_name} was cancelled or already claimed — skipping.")
                     continue
                 print(f"[worker]   Claimed job.")
+
+                if not session_dir.exists():
+                    client.report_error(session_name, f"Session directory not found: {session_dir}")
+                    print(f"[worker]   [ERROR] Session dir not found: {session_dir}")
+                    continue
+
+                audio_files = find_audio_files(session_dir)
+                if not audio_files:
+                    client.report_error(session_name, f"No audio files found in {session_dir}")
+                    print(f"[worker]   [ERROR] No audio files in {session_dir}")
+                    continue
+
+                print(f"[worker]   {len(audio_files)} audio file(s) found.")
 
                 campaign_config = client.get_campaign_config()
                 job_config = {**campaign_config, **{
