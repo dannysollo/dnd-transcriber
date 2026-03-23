@@ -1901,12 +1901,23 @@ def campaign_get_raw_transcript(
     session_dir = get_sessions_dir(slug) / name
     if not session_dir.exists():
         raise HTTPException(404, "Session not found")
-    try:
-        from merge import merge_transcripts
-        raw_text = merge_transcripts(str(session_dir))
-        return {"content": raw_text}
-    except Exception as e:
-        raise HTTPException(500, str(e))
+
+    # Prefer stored raw transcript (set when worker pushes)
+    raw_path = session_dir / "raw_transcript.md"
+    if raw_path.exists():
+        return {"content": raw_path.read_text(encoding="utf-8")}
+
+    # Fallback: re-merge from speaker JSONs if they exist locally
+    speakers_dir = session_dir / "speakers"
+    if speakers_dir.exists() and any(speakers_dir.glob("*.json")):
+        try:
+            from merge import merge_transcripts
+            return {"content": merge_transcripts(str(session_dir))}
+        except Exception as e:
+            raise HTTPException(500, str(e))
+
+    # No raw data available
+    raise HTTPException(404, "Raw transcript not available — re-run transcription to generate one")
 
 
 @app.get("/campaigns/{slug}/sessions/{name}/corrections-report")
@@ -2662,6 +2673,8 @@ def worker_push_transcript(
     session_dir = BASE_DIR / "campaigns" / slug / "sessions" / session_name
     session_dir.mkdir(parents=True, exist_ok=True)
     (session_dir / "transcript.md").write_text(body.transcript, encoding="utf-8")
+    # Always keep a raw copy (pre-corrections) for the diff viewer
+    (session_dir / "raw_transcript.md").write_text(body.transcript, encoding="utf-8")
     job = crud.get_job(db, campaign.id, session_name)
     if job:
         crud.complete_job(db, job)
