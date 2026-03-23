@@ -264,10 +264,7 @@ def build_discord_client(config: dict, stop_event: threading.Event):
 
     guild_filter = set(config.get("craig_channel_filter") or [])
 
-    intents = discord.Intents.default()
-    intents.message_content = True
-    intents.dm_messages = True
-    client = discord.Client(intents=intents)
+    client = discord.Client()
 
     @client.event
     async def on_ready():
