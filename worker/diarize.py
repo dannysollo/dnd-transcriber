@@ -91,7 +91,16 @@ def diarize_and_split(wav_path: str, hf_token: str, min_speakers: int = 2, max_s
     pipeline = load_pipeline(hf_token)
 
     import torch
-    waveform, sample_rate = torchaudio.load(wav_path)
+    import soundfile as sf
+    import numpy as np
+
+    # Load via soundfile (avoids the torchcodec/FFmpeg shared-lib issue in WSL)
+    audio_np, sample_rate = sf.read(wav_path, dtype="float32", always_2d=False)
+    if audio_np.ndim == 1:
+        audio_np = audio_np[np.newaxis, :]  # (1, time)
+    elif audio_np.ndim == 2:
+        audio_np = audio_np.T  # (channels, time)
+    waveform = torch.from_numpy(audio_np)
 
     diarization = pipeline(
         {"waveform": waveform, "sample_rate": sample_rate},
