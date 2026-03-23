@@ -77,7 +77,10 @@ def poll_loop(config: dict, stop_event: threading.Event):
             print(f"\n[worker] [JOB] {session_name} — {len(audio_files)} audio file(s)")
 
             try:
-                client.claim_job(session_name)
+                claimed = client.claim_job(session_name)
+                if claimed is None:
+                    print(f"[worker]   Job for {session_name} was cancelled or already claimed — skipping.")
+                    continue
                 print(f"[worker]   Claimed job.")
 
                 campaign_config = client.get_campaign_config()

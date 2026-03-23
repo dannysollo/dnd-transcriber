@@ -20,12 +20,15 @@ class WorkerClient:
         r.raise_for_status()
         return r.json()
 
-    def claim_job(self, session_name: str) -> dict:
+    def claim_job(self, session_name: str) -> dict | None:
+        """Returns job dict, or None if job was cancelled/not found before we could claim it."""
         r = requests.post(
             self._url(f"/worker/jobs/{session_name}/claim"),
             headers=self.headers,
             timeout=30,
         )
+        if r.status_code in (404, 409):
+            return None  # Job was cancelled or already claimed by someone else
         r.raise_for_status()
         return r.json()
 
