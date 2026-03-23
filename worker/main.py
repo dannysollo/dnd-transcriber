@@ -88,8 +88,10 @@ def poll_loop(config: dict, stop_event: threading.Event):
                 print(f"[worker]   {len(audio_files)} audio file(s) found.")
 
                 campaign_config = client.get_campaign_config()
+                # Merge local-only keys (worker machine credentials/settings) into job config
+                LOCAL_KEYS = ("whisper_model", "hf_token", "diarize_tracks", "diarize_all")
                 job_config = {**campaign_config, **{
-                    k: config[k] for k in ("whisper_model",) if k in config
+                    k: config[k] for k in LOCAL_KEYS if k in config
                 }}
 
                 model_name = job_config.get("whisper_model", "turbo")
