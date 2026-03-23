@@ -2044,18 +2044,44 @@ def campaign_merge_session(
     name: str,
     _member=Depends(require_campaign_member("dm")),
 ):
+    """
+    Re-apply corrections/patterns to the existing transcript.
+    NOTE: Does NOT re-merge from speaker JSONs (those live on the worker machine).
+    If speaker JSONs exist locally, merges from them; otherwise re-applies corrections to
+    the existing transcript.md in place.
+    """
     session_dir = get_sessions_dir(slug) / name
     if not session_dir.exists():
         raise HTTPException(404, "Session not found")
     config = load_config(slug)
+    speakers_dir = session_dir / "speakers"
+    transcript_path = session_dir / "transcript.md"
+
     try:
-        from merge import save_transcript
-        result = save_transcript(
-            str(session_dir),
-            corrections=config.get("corrections"),
-            patterns=config.get("patterns"),
-        )
+        from merge import apply_corrections, apply_patterns
+
+        if speakers_dir.exists() and any(speakers_dir.glob("*.json")):
+            # Speaker JSONs present — full merge
+            from merge import save_transcript
+            result = save_transcript(
+                str(session_dir),
+                corrections=config.get("corrections"),
+                patterns=config.get("patterns"),
+            )
+        elif transcript_path.exists():
+            # No speaker JSONs (transcript came from worker) — re-apply corrections only
+            result = transcript_path.read_text(encoding="utf-8")
+            if config.get("corrections"):
+                result = apply_corrections(result, config["corrections"])
+            if config.get("patterns"):
+                result = apply_patterns(result, config["patterns"])
+            transcript_path.write_text(result, encoding="utf-8")
+        else:
+            raise HTTPException(404, "No transcript or speaker data found to merge")
+
         return {"lines": result.count("\n"), "chars": len(result)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
 
