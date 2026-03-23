@@ -82,7 +82,7 @@ def should_diarize(filename: str, config: dict) -> bool:
     return any(t.lower() in fn_lower for t in targets)
 
 
-def diarize_and_split(wav_path: str, hf_token: str, min_speakers: int = 2, max_speakers: int = 5) -> list[dict]:
+def diarize_and_split(wav_path: str, hf_token: str, min_speakers: int = 2, max_speakers: int = 2) -> list[dict]:
     """
     Run speaker diarization on a WAV file.
     Returns a list of segments: [{speaker: "SPEAKER_00", start: 0.0, end: 1.5}, ...]
@@ -104,12 +104,16 @@ def diarize_and_split(wav_path: str, hf_token: str, min_speakers: int = 2, max_s
 
     diarization = pipeline(
         {"waveform": waveform, "sample_rate": sample_rate},
+        num_speakers=min_speakers if min_speakers == max_speakers else None,
         min_speakers=min_speakers,
         max_speakers=max_speakers,
     )
 
+    # Support both old Annotation return type and new DiarizeOutput dataclass
+    annotation = diarization.speaker_diarization if hasattr(diarization, 'speaker_diarization') else diarization
+
     segments = []
-    for turn, _, speaker in diarization.itertracks(yield_label=True):
+    for turn, _, speaker in annotation.itertracks(yield_label=True):
         segments.append({
             "speaker": speaker,  # e.g. "SPEAKER_00", "SPEAKER_01"
             "start": turn.start,
@@ -157,8 +161,9 @@ def transcribe_with_diarization(
     hf_token = config.get("hf_token", "")
     vocab_prompt = config.get("vocab_prompt", "")
 
-    print(f"    Running speaker diarization...")
-    diarization_segments = diarize_and_split(wav_path, hf_token)
+    num_speakers = config.get("diarize_speakers", 2)
+    print(f"    Running speaker diarization ({num_speakers} speakers)...")
+    diarization_segments = diarize_and_split(wav_path, hf_token, min_speakers=num_speakers, max_speakers=num_speakers)
 
     if not diarization_segments:
         print(f"    Diarization found no segments — falling back to single speaker.")
