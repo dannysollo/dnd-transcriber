@@ -369,3 +369,8 @@ def get_session_shares(db: Session, campaign_id: int, session_name: str) -> list
 def delete_share(db: Session, share: SessionShare):
     db.delete(share)
     db.commit()
+
+
+def delete_job(db: Session, job: TranscriptionJob):
+    db.delete(job)
+    db.commit()

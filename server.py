@@ -2506,6 +2506,25 @@ def request_transcription(
     return _job_dict(job)
 
 
+@app.delete("/campaigns/{slug}/sessions/{name}/transcribe", status_code=204)
+def cancel_transcription_job(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    """Cancel a pending or errored transcription job. Cannot cancel a claimed (in-progress) job."""
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    job = crud.get_job(db, campaign.id, name)
+    if not job:
+        raise HTTPException(404, "No job found for this session")
+    if job.status == "claimed":
+        raise HTTPException(409, "Cannot cancel a job that is currently being processed")
+    crud.delete_job(db, job)
+
+
 @app.get("/campaigns/{slug}/sessions/{name}/transcribe")
 def get_transcription_status(
     slug: str,

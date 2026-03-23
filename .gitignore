@@ -21,3 +21,4 @@ campaigns/
 ~/.cache/whisper/
 vocab.txt
 .env
+worker/worker.yaml

@@ -125,6 +125,18 @@ export default function SessionsPage() {
     }
   }
 
+  const cancelJob = async (sessionName: string) => {
+    const r = await fetch(apiUrl(`/sessions/${sessionName}/transcribe`), { method: 'DELETE' })
+    if (r.ok || r.status === 204) {
+      setJobMap(prev => { const n = { ...prev }; delete n[sessionName]; return n })
+      toast('Job cancelled', 'success')
+    } else if (r.status === 409) {
+      toast('Cannot cancel — job is currently being processed', 'warning')
+    } else {
+      toast('Failed to cancel job', 'error')
+    }
+  }
+
   const requestWikiSummary = async (sessionName: string) => {
     const r = await fetch(apiUrl('/pipeline/run'), {
       method: 'POST',
@@ -494,7 +506,7 @@ export default function SessionsPage() {
                 </div>
 
                 {/* Job status badge */}
-                {job && <JobStatusBadge job={job} />}
+                {job && <JobStatusBadge job={job} onCancel={() => cancelJob(s.name)} />}
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: '6px' }}>
@@ -566,19 +578,32 @@ const JOB_BADGE: Record<string, { bg: string; text: string; label: string }> = {
   error:     { bg: 'rgba(248,113,113,0.15)', text: '#f87171', label: '❌ Error' },
 }
 
-function JobStatusBadge({ job }: { job: TranscriptionJob }) {
+function JobStatusBadge({ job, onCancel }: { job: TranscriptionJob; onCancel?: () => void }) {
   const b = JOB_BADGE[job.status]
   if (!b) return null
+  const canCancel = onCancel && (job.status === 'pending' || job.status === 'error')
   return (
-    <div
-      title={job.status === 'error' ? (job.error_message ?? undefined) : undefined}
-      style={{
-        background: b.bg, color: b.text, borderRadius: '20px',
-        padding: '3px 10px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
-        cursor: job.status === 'error' ? 'help' : 'default',
-      }}
-    >
-      {b.label}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div
+        title={job.status === 'error' ? (job.error_message ?? undefined) : undefined}
+        style={{
+          background: b.bg, color: b.text, borderRadius: '20px',
+          padding: '3px 10px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
+          cursor: job.status === 'error' ? 'help' : 'default',
+        }}
+      >
+        {b.label}
+      </div>
+      {canCancel && (
+        <button
+          onClick={e => { e.stopPropagation(); onCancel() }}
+          title="Cancel job"
+          style={{
+            background: 'transparent', border: 'none', color: '#64748b',
+            cursor: 'pointer', fontSize: '13px', padding: '0 2px', lineHeight: 1,
+          }}
+        >✕</button>
+      )}
     </div>
   )
 }
