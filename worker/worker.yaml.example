@@ -7,6 +7,17 @@ poll_interval: 30
 # campaign_slug: your-campaign-slug
 # whisper_model: turbo  # Uncomment to override the campaign's model setting
 
+# ── Speaker Diarization (optional) ───────────────────────────────────────────
+# Splits tracks with multiple speakers (e.g. two people on the same mic).
+# Requires: pip install pyannote.audio
+# And a HuggingFace token with access to pyannote/speaker-diarization-3.1
+# Accept terms at: https://huggingface.co/pyannote/speaker-diarization-3.1
+#
+# hf_token: hf_xxxxxxxxxxxxxxxxxxxx
+# diarize_tracks:           # Diarize only these tracks (partial filename match)
+#   - dannysollo
+# # diarize_all: true       # Or diarize every track
+
 # ── Craig Watcher (optional) ──────────────────────────────────────────────────
 # Uncomment to enable automatic recording download when Craig DMs you.
 # discord_token: YOUR_DISCORD_USER_TOKEN  # Your personal Discord token (not a bot token)

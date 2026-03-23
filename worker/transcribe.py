@@ -16,6 +16,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import diarize as diarize_module
+
 SAMPLE_RATE = 16000
 
 AUDIO_EXTS = ("*.flac", "*.mp3", "*.ogg", "*.wav", "*.m4a")
@@ -165,6 +167,44 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
             Path(wav_path).unlink(missing_ok=True)
             wav_path = vad_path
 
+        # ── Diarization path ──────────────────────────────────────────────────
+        if diarize_module.should_diarize(audio_file.name, config):
+            print(f"    Diarization enabled for this track.")
+            try:
+                diarized_segments = diarize_module.transcribe_with_diarization(
+                    wav_path, model, speaker, config
+                )
+                Path(wav_path).unlink(missing_ok=True)
+
+                if diarized_segments:
+                    # Write one JSON per detected sub-speaker
+                    sub_speakers: dict[str, list] = {}
+                    for seg in diarized_segments:
+                        sub_speakers.setdefault(seg["speaker"], []).append(seg)
+
+                    for sub_label, segs in sub_speakers.items():
+                        safe_label = sub_label.replace(" ", "_").replace("/", "-")
+                        out_file = speakers_dir / f"{audio_file.stem}_{safe_label}.json"
+                        with open(out_file, "w", encoding="utf-8") as f:
+                            json.dump(
+                                {"speaker": sub_label, "filename": audio_file.name,
+                                 "segments": [{"start": s["start"], "end": s["end"],
+                                               "text": s["text"]} for s in segs]},
+                                f, indent=2, ensure_ascii=False,
+                            )
+                    print(f"    → {len(diarized_segments)} diarized segments across {len(sub_speakers)} speaker(s)")
+                    continue  # skip normal Whisper path for this file
+                else:
+                    print(f"    Diarization returned no results — falling back to standard transcription.")
+            except Exception as e:
+                print(f"    Diarization failed ({e}) — falling back to standard transcription.")
+                # wav_path may have been consumed — reconvert
+                try:
+                    wav_path = convert_to_wav(audio_file)
+                except Exception:
+                    continue
+
+        # ── Standard single-speaker Whisper path ─────────────────────────────
         result = model.transcribe(
             wav_path,
             language="en",

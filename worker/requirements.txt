@@ -7,3 +7,6 @@ tqdm
 soundfile
 silero-vad
 discord.py-self  # For craig_watcher.py — watches for Craig DMs
+# pyannote.audio  # Optional: speaker diarization (multi-speaker on single track)
+                  # Install: pip install pyannote.audio
+                  # Also accept model terms at huggingface.co/pyannote/speaker-diarization-3.1
