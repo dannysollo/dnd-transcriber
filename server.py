@@ -1938,19 +1938,36 @@ def campaign_apply_wiki(
 
     # ── Push vault changes back to GitHub ─────────────────────────────────
     if vault_repo_url and vault_dir and (vault_dir / ".git").exists() and github_token:
-        # Set remote URL with token for push
-        subprocess.run(
-            ["git", "remote", "set-url", "origin", authed_url],
-            cwd=vault_dir, capture_output=True
-        )
-        push = subprocess.run(
-            ["git", "push"],
+        # Configure git identity (required for commits in container)
+        subprocess.run(["git", "config", "user.email", "deploy@dnd-transcriber"], cwd=vault_dir, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "DnD Transcriber"], cwd=vault_dir, capture_output=True)
+        # Stage and commit any changes
+        subprocess.run(["git", "add", "-A"], cwd=vault_dir, capture_output=True)
+        commit = subprocess.run(
+            ["git", "commit", "-m", f"Wiki update from session: {name}"],
             cwd=vault_dir, capture_output=True, text=True
         )
-        if push.returncode == 0:
-            output += "\n✓ Vault pushed to GitHub."
+        if "nothing to commit" in commit.stdout + commit.stderr:
+            output += "\n⚠ No vault changes to commit (bullets may already exist)."
         else:
-            output += f"\n⚠ Git push failed: {push.stderr.strip()}"
+            # Set remote URL with token for push
+            subprocess.run(["git", "remote", "set-url", "origin", authed_url], cwd=vault_dir, capture_output=True)
+            # Pull with rebase first so any remote commits don't block the push
+            subprocess.run(["git", "pull", "--rebase", "origin", "master"], cwd=vault_dir, capture_output=True, text=True)
+            push = subprocess.run(["git", "push"], cwd=vault_dir, capture_output=True, text=True)
+            if push.returncode == 0:
+                output += "\n✓ Vault pushed to GitHub."
+                # Trigger Netlify rebuild if hook is configured
+                netlify_hook = os.environ.get("NETLIFY_BUILD_HOOK", "")
+                if netlify_hook:
+                    try:
+                        import urllib.request as _urlreq
+                        _urlreq.urlopen(_urlreq.Request(netlify_hook, data=b"{}", method="POST"), timeout=10)
+                        output += "\n✓ Netlify rebuild triggered."
+                    except Exception as e:
+                        output += f"\n⚠ Netlify hook failed: {e}"
+            else:
+                output += f"\n⚠ Git push failed: {push.stderr.strip()}"
 
     return {"output": output, "applied": body.ids}
 
