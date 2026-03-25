@@ -158,8 +158,11 @@ def apply_suggestion(vault_path: Path, suggestion: dict) -> bool:
 
     page_path = vault_path / suggestion["page"]
     if not page_path.exists():
-        print(f"  ✗ Page not found: {suggestion['page']}")
-        return False
+        # Auto-create a stub rather than failing
+        page_path.parent.mkdir(parents=True, exist_ok=True)
+        title = page_path.stem
+        page_path.write_text(f"# {title}\n\n", encoding="utf-8")
+        print(f"  ✦ Created stub: {suggestion['page']}")
 
     content = page_path.read_text(encoding="utf-8")
     new_content, changed = insert_bullets(content, suggestion["section"], suggestion["bullets"])
@@ -230,10 +233,10 @@ def run(session_dir: str, apply_ids: list[int] | None, skip_ids: list[int],
         print(f"\nCommitting {len(applied)} update(s) to vault...")
         session_name = session.name
         commit_msg = f"Session notes ({session_name}): applied wiki updates {applied}"
-        result = subprocess.run(
-            ["git", "add", "-A"],
-            cwd=vault_path, capture_output=True
-        )
+        # Ensure git identity is set (required in containerised environments)
+        subprocess.run(["git", "config", "user.email", "deploy@dnd-transcriber"], cwd=vault_path, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "DnD Transcriber"], cwd=vault_path, capture_output=True)
+        subprocess.run(["git", "add", "-A"], cwd=vault_path, capture_output=True)
         result = subprocess.run(
             ["git", "commit", "-m", commit_msg],
             cwd=vault_path, capture_output=True, text=True
@@ -241,7 +244,7 @@ def run(session_dir: str, apply_ids: list[int] | None, skip_ids: list[int],
         if result.returncode == 0:
             print(f"  ✓ Committed: {commit_msg}")
         else:
-            print(f"  ⚠ Git commit failed (vault may not be a git repo): {result.stderr.strip()}")
+            print(f"  ⚠ Git commit failed: {result.stderr.strip()}")
 
     print(f"\nDone. Applied: {applied}")
 
