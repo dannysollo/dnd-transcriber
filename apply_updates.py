@@ -46,13 +46,19 @@ def parse_suggestions(suggestions_file: Path) -> dict[int, dict]:
         num = int(header_match.group(1))
         title = header_match.group(2).strip()
 
+        # Truncate block at any new ## section (e.g. ## Proper Noun Corrections)
+        # so trailing sections don't bleed into this suggestion's bullets
+        body_match = re.search(r'\n##\s+(?!\[\d+\])', block)
+        body = block[:body_match.start()] if body_match else block
+
         # Extract fields
-        page_match = re.search(r'^Page:\s*(.+)$', block, re.MULTILINE)
-        section_match = re.search(r'^Section:\s*(.+)$', block, re.MULTILINE)
-        bullets = re.findall(r'^- .+$', block, re.MULTILINE)
+        page_match = re.search(r'^Page:\s*(.+)$', body, re.MULTILINE)
+        section_match = re.search(r'^Section:\s*(.+)$', body, re.MULTILINE)
+        # Exclude lines that look like corrections (contain →)
+        bullets = [b for b in re.findall(r'^- .+$', body, re.MULTILINE) if '→' not in b]
 
         is_new_page = title.startswith("NEW PAGE:")
-        desc_match = re.search(r'^Description:\s*(.+)$', block, re.MULTILINE)
+        desc_match = re.search(r'^Description:\s*(.+)$', body, re.MULTILINE)
 
         suggestions[num] = {
             "title": title,

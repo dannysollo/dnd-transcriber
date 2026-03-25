@@ -520,7 +520,7 @@ export default function SessionsPage() {
                   )}
                   {(!authEnabled || isLoggedIn) && s.has_transcript && (!authEnabled || activeCampaign?.role === 'dm') && (
                     <ActionBtn
-                      title="Generate wiki summary"
+                      title="Generate summary + wiki suggestions"
                       onClick={() => requestWikiSummary(s.name)}
                     >
                       📖

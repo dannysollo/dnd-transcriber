@@ -75,7 +75,8 @@ def run(session_name: str, config_path: str = "config.yaml",
     """
     # Campaign-aware path resolution
     if campaign:
-        base = Path(__file__).parent
+        import os as _os
+        base = Path(_os.getenv("DATA_DIR", str(Path(__file__).parent)))
         campaign_dir = base / "campaigns" / campaign
         campaign_config = campaign_dir / "config.yaml"
         if campaign_config.exists():
@@ -134,7 +135,7 @@ def run(session_name: str, config_path: str = "config.yaml",
         from wiki_updater import generate_wiki_updates
         generate_wiki_updates(str(session_dir), config)
     except Exception as e:
-        print(f"  Skipped (wiki step failed: {e})")
+        print(f"ERROR: wiki step failed: {e}")
         print("  Paste transcript.md into Discord for manual analysis.")
 
     banner("All done!")

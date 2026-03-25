@@ -168,6 +168,7 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
             wav_path = vad_path
 
         # ── Diarization path ──────────────────────────────────────────────────
+        print(f"    Checking diarization: should_diarize={diarize_module.should_diarize(audio_file.name, config)}, hf_token={'yes' if config.get('hf_token') else 'missing'}, diarize_tracks={config.get('diarize_tracks')}")
         if diarize_module.should_diarize(audio_file.name, config):
             print(f"    Diarization enabled for this track.")
             try:
@@ -197,7 +198,10 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
                 else:
                     print(f"    Diarization returned no results — falling back to standard transcription.")
             except Exception as e:
-                print(f"    Diarization failed ({e}) — falling back to standard transcription.")
+                import traceback
+                print(f"    Diarization failed: {type(e).__name__}: {e}")
+                traceback.print_exc()
+                print(f"    Falling back to standard transcription.")
                 # wav_path may have been consumed — reconvert
                 try:
                     wav_path = convert_to_wav(audio_file)

@@ -237,7 +237,7 @@ def apply_wiki(name: str, body: ApplyWikiBody):
     if not session_dir.exists():
         raise HTTPException(404, "Session not found")
 
-    cmd = [sys.executable, str(BASE_DIR / "apply_updates.py"), str(session_dir),
+    cmd = [sys.executable, str(APP_DIR / "apply_updates.py"), str(session_dir),
            "--config", str(CONFIG_PATH)]
 
     if body.mode == "all":
@@ -618,6 +618,46 @@ def merge_session(name: str):
 
 # ─── Import corrections from wiki suggestions ─────────────────────────────────
 
+def _strip_md(s: str) -> str:
+    """Strip markdown bold/italic/code markers and trailing notes like *(note)*."""
+    s = re.sub(r'\*\*([^*]+)\*\*', r'\1', s)   # **bold**
+    s = re.sub(r'\*([^*]+)\*', r'\1', s)        # *italic*
+    s = re.sub(r'`([^`]+)`', r'\1', s)          # `code`
+    s = re.sub(r'\s*\(.*?\)\s*$', '', s)        # trailing *(note)*
+    return s.strip().strip('"').strip("'").strip()
+
+def _parse_correction_line(line: str) -> list[tuple[str, str]]:
+    """
+    Parse one bullet line from a Proper Noun Corrections block.
+    Handles formats:
+      - "wrong" → "Correct"
+      - "wrong" / "wrong2" → **Correct**
+      - "wrong" → **Correct** *(note)*
+      - "wrong" -> Correct
+    Returns list of (wrong, correct) tuples (one per slash-separated wrong form).
+    """
+    # Must start with a dash
+    if not line.strip().startswith('-'):
+        return []
+    line = line.strip().lstrip('-').strip()
+
+    # Split on → or ->
+    arrow_match = re.search(r'(?:→|->)', line)
+    if not arrow_match:
+        return []
+
+    lefts_raw = line[:arrow_match.start()].strip()
+    right_raw = line[arrow_match.end():].strip()
+
+    right = _strip_md(right_raw)
+    if not right:
+        return []
+
+    # Split left on / to handle "wrong1" / "wrong2"
+    lefts = [_strip_md(p) for p in re.split(r'\s*/\s*', lefts_raw)]
+    return [(l, right) for l in lefts if l and l.lower() != right.lower()]
+
+
 @app.post("/sessions/{name}/import-corrections")
 def import_corrections_from_wiki(name: str):
     sessions_dir = get_sessions_dir()
@@ -637,10 +677,7 @@ def import_corrections_from_wiki(name: str):
         if in_section and re.match(r'^#', line):
             break
         if in_section:
-            # Match: - "wrong" → "Correct"  (arrow may be → or ->)
-            m = re.match(r'^-\s+"([^"]+)"\s+(?:→|->)\s+"([^"]+)"', line)
-            if m:
-                found.append((m.group(1), m.group(2)))
+            found.extend(_parse_correction_line(line))
 
     config = load_config()
     corrections = dict(config.get("corrections") or {})
@@ -922,7 +959,7 @@ def _pipeline_thread(session: str, transcribe_only: bool, wiki_only: bool,
     pipeline_state["session"] = session
     pipeline_state["log"] = []
 
-    cmd = [sys.executable, str(BASE_DIR / "pipeline.py"), session]
+    cmd = [sys.executable, str(APP_DIR / "pipeline.py"), session]
     if transcribe_only:
         cmd.append("--transcribe-only")
     if wiki_only:
@@ -1687,6 +1724,32 @@ def campaign_get_summary(
     return {"content": path.read_text(encoding="utf-8")}
 
 
+@app.get("/campaigns/{slug}/sessions/{name}/analysis-notes")
+def campaign_get_analysis_notes(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    path = get_sessions_dir(slug) / name / "analysis_notes.md"
+    return {"content": path.read_text(encoding="utf-8") if path.exists() else ""}
+
+class AnalysisNotesBody(BaseModel):
+    content: str
+
+@app.put("/campaigns/{slug}/sessions/{name}/analysis-notes")
+def campaign_put_analysis_notes(
+    slug: str,
+    name: str,
+    body: AnalysisNotesBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    (session_dir / "analysis_notes.md").write_text(body.content, encoding="utf-8")
+    return {"ok": True}
+
+
 @app.get("/campaigns/{slug}/sessions/{name}/wiki")
 def campaign_get_wiki(
     slug: str,
@@ -1855,7 +1918,7 @@ def campaign_apply_wiki(
             config_path = CONFIG_PATH
         vault_dir = None
 
-    cmd = [sys.executable, str(BASE_DIR / "apply_updates.py"), str(session_dir),
+    cmd = [sys.executable, str(APP_DIR / "apply_updates.py"), str(session_dir),
            "--config", str(config_path)]
     if body.mode == "all":
         cmd.append("--all")
@@ -2117,9 +2180,7 @@ def campaign_import_corrections(
         if in_section and re.match(r'^#', line):
             break
         if in_section:
-            m = re.match(r'^-\s+"([^"]+)"\s+(?:→|->)\s+"([^"]+)"', line)
-            if m:
-                found.append((m.group(1), m.group(2)))
+            found.extend(_parse_correction_line(line))
     config = load_config(slug)
     corrections = dict(config.get("corrections") or {})
     imported = []
@@ -2867,6 +2928,59 @@ def delete_share(
     if not share or share.session_name != name:
         raise HTTPException(404, "Share not found")
     crud.delete_share(db, share)
+
+
+# ─── Analysis jobs (worker-based, file-flag pattern) ─────────────────────────
+# The pipeline writes an `analysis_pending` flag file. The worker polls for it,
+# runs Claude locally via openclaw, and POSTs results back.
+
+ANALYSIS_FLAG = "analysis_pending"
+
+@app.get("/campaigns/{slug}/worker/analysis-jobs")
+def worker_list_analysis_jobs(slug: str, db: Session = Depends(get_db), request: Request = None):
+    """Return sessions with a pending analysis flag."""
+    require_worker_key(slug)(request, db)
+    sessions_dir = get_sessions_dir(slug)
+    pending = []
+    if sessions_dir.exists():
+        for session_dir in sessions_dir.iterdir():
+            if session_dir.is_dir() and (session_dir / ANALYSIS_FLAG).exists():
+                transcript = session_dir / "transcript.md"
+                notes = session_dir / "analysis_notes.md"
+                pending.append({
+                    "session_name": session_dir.name,
+                    "transcript": transcript.read_text(encoding="utf-8") if transcript.exists() else "",
+                    "notes": notes.read_text(encoding="utf-8") if notes.exists() else "",
+                })
+    return pending
+
+class AnalysisResultBody(BaseModel):
+    summary: str = ""
+    wiki: str = ""
+
+@app.post("/campaigns/{slug}/worker/sessions/{name}/analysis-result")
+def worker_push_analysis_result(
+    slug: str, name: str, body: AnalysisResultBody,
+    db: Session = Depends(get_db), request: Request = None,
+):
+    """Worker posts completed analysis back. Clears the flag and writes files."""
+    require_worker_key(slug)(request, db)
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    wrote = []
+    if body.summary.strip():
+        (session_dir / "summary.md").write_text(body.summary.strip(), encoding="utf-8")
+        wrote.append("summary")
+    if body.wiki.strip():
+        (session_dir / "wiki_suggestions.md").write_text(body.wiki.strip(), encoding="utf-8")
+        wrote.append("wiki")
+    # Clear the pending flag
+    flag = session_dir / ANALYSIS_FLAG
+    if flag.exists():
+        flag.unlink()
+    log_queue.put(f"[analysis] {name}: wrote {', '.join(wrote) or 'nothing'}")
+    return {"ok": True, "wrote": wrote}
 
 
 # ─── Static frontend (SPA catch-all) ─────────────────────────────────────────

@@ -5,7 +5,6 @@ import SessionsPage from './pages/SessionsPage'
 import SessionView from './pages/SessionView'
 import PipelinePage from './pages/PipelinePage'
 import CorrectionsPage from './pages/CorrectionsPage'
-import SettingsPage from './pages/SettingsPage'
 import LoginPage from './pages/LoginPage'
 import CampaignsPage from './pages/CampaignsPage'
 import CampaignSettingsPage from './pages/CampaignSettingsPage'
@@ -22,7 +21,6 @@ const navItems = [
   { to: '/search', label: 'Search', icon: '🔍' },
   { to: '/campaigns', label: 'Campaigns', icon: '⚔️' },
   { to: '/corrections', label: 'Corrections', icon: '✏️' },
-  { to: '/settings', label: 'Settings', icon: '🔧' },
 ]
 
 
@@ -339,7 +337,6 @@ export default function App() {
           <Route path="/sessions/:name" element={<SessionView />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/corrections" element={<CorrectionsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/campaigns/:slug/settings" element={<CampaignSettingsPage />} />

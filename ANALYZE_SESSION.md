@@ -81,8 +81,10 @@ Rules:
 
 ### 3. Proper Noun Corrections
 If you notice names that were clearly mis-transcribed (e.g. "Kay" instead of "Keh"),
-list them so they can be added to the corrections dict in config.yaml:
+list them under a `## Proper Noun Corrections` heading so they can be imported into config.yaml.
+Use this exact format — one line per wrong form, plain text (no bold/markdown):
 - "wrong" → "Correct"
+- "also wrong" → "Correct"
 
 ## Approval Flow
 After posting analysis, Danny will reply with one of:

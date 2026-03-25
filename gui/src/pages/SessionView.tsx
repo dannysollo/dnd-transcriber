@@ -162,6 +162,13 @@ export default function SessionView() {
   const [shareShowWiki, setShareShowWiki] = useState(true)
   const [existingShares, setExistingShares] = useState<{ token: string; created_at: string; expires_at: string | null; expired: boolean }[]>([])
   const [sharesLoading, setSharesLoading] = useState(false)
+  const [playbackRate, setPlaybackRate] = useState(1)
+  // ── Generate (summary + wiki) ─────────────────────────────────────────────
+  const [generating, setGenerating] = useState(false)
+  const [generateLog, setGenerateLog] = useState<string[]>([])
+  const [generateDone, setGenerateDone] = useState(false)
+  const [analysisNotes, setAnalysisNotes] = useState<string>('')
+  const [notesSaving, setNotesSaving] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
   const pendingSeekRef = useRef<number | null>(null)
   const dragCounter = useRef(0)
@@ -169,15 +176,30 @@ export default function SessionView() {
 
   const load = async () => {
     setLoading(true)
-    const [t, s, w] = await Promise.allSettled([
+    const [t, s, w, n] = await Promise.allSettled([
       fetch(apiUrl(`/sessions/${name}/transcript`)).then(r => r.ok ? r.json() : null),
       fetch(apiUrl(`/sessions/${name}/summary`)).then(r => r.ok ? r.json() : null),
       fetch(apiUrl(`/sessions/${name}/wiki`)).then(r => r.ok ? r.json() : null),
+      fetch(apiUrl(`/sessions/${name}/analysis-notes`)).then(r => r.ok ? r.json() : null),
     ])
     setTranscript(t.status === 'fulfilled' && t.value ? t.value.content : null)
     setSummary(s.status === 'fulfilled' && s.value ? s.value.content : null)
     setWiki(w.status === 'fulfilled' && w.value ? w.value.content : null)
+    if (n.status === 'fulfilled' && n.value) setAnalysisNotes(n.value.content ?? '')
     setLoading(false)
+  }
+
+  const saveAnalysisNotes = async (value: string) => {
+    setNotesSaving(true)
+    try {
+      await fetch(apiUrl(`/sessions/${name}/analysis-notes`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: value }),
+      })
+    } finally {
+      setNotesSaving(false)
+    }
   }
 
   const loadAudioFiles = async () => {
@@ -308,6 +330,69 @@ export default function SessionView() {
       }
     } finally {
       setMerging(false)
+    }
+  }
+
+  const generateAnalysis = async () => {
+    setGenerating(true)
+    setGenerateLog([])
+    setGenerateDone(false)
+    try {
+      const r = await fetch(apiUrl('/pipeline/run'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session: name, wiki_only: true }),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        toast(err.detail || 'Failed to start generation', 'error')
+        setGenerating(false)
+        return
+      }
+      const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
+      const ws = new WebSocket(`${protocol}://${location.host}/ws/progress`)
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data)
+        if (msg.type === 'log') {
+          const line: string = msg.line
+          if (line.startsWith('__EXIT__')) {
+            const code = parseInt(line.replace('__EXIT__', ''))
+            ws.close()
+            setGenerating(false)
+            setGenerateDone(true)
+            if (code === 0) {
+              toast('Queued — worker is analyzing transcript…', 'success')
+              // Poll until wiki_suggestions.md appears (worker runs async after pipeline)
+              let attempts = 0
+              const poll = setInterval(async () => {
+                attempts++
+                const r = await fetch(apiUrl(`/sessions/${name}/wiki-suggestions-parsed`))
+                if (r.ok) {
+                  const data = await r.json()
+                  if (data && data.length > 0) {
+                    clearInterval(poll)
+                    toast('Summary & wiki ready!', 'success')
+                    load()
+                  }
+                }
+                if (attempts >= 40) clearInterval(poll) // give up after ~3 min
+              }, 5000)
+            } else {
+              toast('Generation failed — check logs', 'error')
+            }
+          } else {
+            setGenerateLog(prev => [...prev, line])
+          }
+        } else if (msg.type === 'status' && !msg.running) {
+          ws.close()
+          setGenerating(false)
+          setGenerateDone(true)
+        }
+      }
+      ws.onerror = () => { setGenerating(false); toast('WebSocket error during generation', 'error') }
+    } catch {
+      setGenerating(false)
+      toast('Failed to start generation', 'error')
     }
   }
 
@@ -699,20 +784,41 @@ export default function SessionView() {
             <span style={{ fontSize: '11px', color: '#64748b' }}>Session recording (merged)</span>
           </div>
           {selectedAudio && (
-            <audio
-              ref={audioRef}
-              key={selectedAudio}
-              src={apiUrl(`/sessions/${encodeURIComponent(name!)}/merged-audio`)}
-              controls
-              onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
-              onLoadedMetadata={() => {
-                if (pendingSeekRef.current !== null) {
-                  seekTo(pendingSeekRef.current)
-                  pendingSeekRef.current = null
-                }
-              }}
-              style={{ width: '100%', height: '36px', accentColor: '#7c6cfc' }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <audio
+                ref={audioRef}
+                key={selectedAudio}
+                src={apiUrl(`/sessions/${encodeURIComponent(name!)}/merged-audio`)}
+                controls
+                onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
+                onLoadedMetadata={() => {
+                  if (audioRef.current) audioRef.current.playbackRate = playbackRate
+                  if (pendingSeekRef.current !== null) {
+                    seekTo(pendingSeekRef.current)
+                    pendingSeekRef.current = null
+                  }
+                }}
+                style={{ flex: 1, height: '36px', accentColor: '#7c6cfc' }}
+              />
+              <select
+                value={playbackRate}
+                onChange={e => {
+                  const rate = parseFloat(e.target.value)
+                  setPlaybackRate(rate)
+                  if (audioRef.current) audioRef.current.playbackRate = rate
+                }}
+                style={{
+                  background: '#1a1d27', border: '1px solid #2a2d3a',
+                  borderRadius: '6px', color: '#94a3b8',
+                  padding: '4px 6px', fontSize: '11px', fontWeight: 600,
+                  cursor: 'pointer', outline: 'none', flexShrink: 0,
+                }}
+              >
+                {[1, 1.5, 2, 3].map(r => (
+                  <option key={r} value={r}>{r}×</option>
+                ))}
+              </select>
+            </div>
           )}
         </div>
       )}
@@ -743,15 +849,41 @@ export default function SessionView() {
             />
           )
         ) : tab === 'summary' ? (
-          <MarkdownEditView
-            content={summary}
-            emptyMsg="No summary yet. Run the pipeline to generate one."
-            sessionName={name!}
-            endpoint="summary"
-            onSaved={load}
-          />
+          <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <GenerateWikiPanel
+              generating={generating}
+              generateLog={generateLog}
+              generateDone={generateDone}
+              onGenerate={generateAnalysis}
+              compact={!!summary}
+              notes={analysisNotes}
+              onNotesChange={setAnalysisNotes}
+              onNotesBlur={saveAnalysisNotes}
+              notesSaving={notesSaving}
+            />
+            <MarkdownEditView
+              content={summary}
+              emptyMsg="No summary yet. Use 'Generate' above to analyze the transcript."
+              sessionName={name!}
+              endpoint="summary"
+              onSaved={load}
+            />
+          </div>
         ) : tab === 'wiki' ? (
-          <WikiView sessionName={name!} wikiMarkdown={wiki} onRemerge={doMerge} onWikiSaved={load} />
+          <WikiView
+            sessionName={name!}
+            wikiMarkdown={wiki}
+            onRemerge={doMerge}
+            onWikiSaved={load}
+            generating={generating}
+            generateLog={generateLog}
+            generateDone={generateDone}
+            onGenerate={generateAnalysis}
+            notes={analysisNotes}
+            onNotesChange={setAnalysisNotes}
+            onNotesBlur={saveAnalysisNotes}
+            notesSaving={notesSaving}
+          />
         ) : (
           <ChangesView
             report={changesReport}
@@ -1965,7 +2097,20 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
 
 // ─── Wiki tab ─────────────────────────────────────────────────────────────────
 
-function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessionName: string; wikiMarkdown: string | null; onRemerge?: () => void; onWikiSaved?: () => void }) {
+function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generating, generateLog, generateDone, onGenerate, notes, onNotesChange, onNotesBlur, notesSaving }: {
+  sessionName: string
+  wikiMarkdown: string | null
+  onRemerge?: () => void
+  onWikiSaved?: () => void
+  generating: boolean
+  generateLog: string[]
+  generateDone: boolean
+  onGenerate: () => void
+  notes: string
+  onNotesChange: (v: string) => void
+  onNotesBlur: (v: string) => void
+  notesSaving: boolean
+}) {
   const apiUrl = useApiUrl()
   const { authEnabled } = useAuth()
   const { activeCampaign } = useCampaign()
@@ -1998,7 +2143,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessi
   }
 
   useEffect(() => {
-    const fetchSuggestions = async () => {
+    const load = async () => {
       setLoading(true)
       try {
         const r = await fetch(apiUrl(`/sessions/${sessionName}/wiki-suggestions-parsed`))
@@ -2009,7 +2154,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessi
         setLoading(false)
       }
     }
-    fetchSuggestions()
+    load()
   }, [sessionName])
 
   const callApplyWiki = async (mode: 'all' | 'apply' | 'skip', ids: number[]) => {
@@ -2071,6 +2216,23 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessi
     }
   }
 
+  const reloadSuggestions = async () => {
+    setLoading(true)
+    try {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/wiki-suggestions-parsed`))
+      setSuggestions(r.ok ? await r.json() : null)
+    } catch (_) {
+      setSuggestions(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // When generation completes (generateDone flips to true), reload suggestions
+  useEffect(() => {
+    if (generateDone) reloadSuggestions()
+  }, [generateDone])
+
   // Wiki edit toolbar (shown above both the suggestions panel and the markdown fallback)
   const wikiEditToolbar = (
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
@@ -2124,8 +2286,19 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessi
 
   if (!suggestions || suggestions.length === 0) {
     return (
-      <div style={{ maxWidth: '820px' }}>
+      <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {wikiEditToolbar}
+        {/* Generate button */}
+        <GenerateWikiPanel
+          generating={generating}
+          generateLog={generateLog}
+          generateDone={generateDone}
+          onGenerate={onGenerate}
+          notes={notes}
+          onNotesChange={onNotesChange}
+          onNotesBlur={onNotesBlur}
+          notesSaving={notesSaving}
+        />
         {wikiEditMode ? (
           <textarea
             value={wikiEditValue}
@@ -2139,7 +2312,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessi
             }}
           />
         ) : (
-          <MarkdownView content={wikiMarkdown} emptyMsg="No wiki suggestions yet. Run the pipeline to generate them." />
+          <MarkdownView content={wikiMarkdown} emptyMsg="No wiki suggestions yet. Use 'Generate' above to analyze the transcript." />
         )}
       </div>
     )
@@ -2151,21 +2324,34 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessi
     <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {wikiEditToolbar}
 
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+      {/* Edit mode textarea — shown instead of suggestions */}
+      {wikiEditMode && (
+        <textarea
+          value={wikiEditValue}
+          onChange={e => setWikiEditValue(e.target.value)}
+          style={{
+            width: '100%', minHeight: '500px', background: '#13151f',
+            border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px',
+            color: '#e2e8f0', padding: '16px', fontSize: '13px',
+            fontFamily: 'monospace', lineHeight: 1.6, resize: 'vertical',
+            outline: 'none', boxSizing: 'border-box',
+          }}
+        />
+      )}
+
+      {/* Compact action bar + generate + corrections — hidden while editing */}
+      {!wikiEditMode && <>
+
+      {/* Single toolbar row */}
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Apply buttons */}
         <button
           onClick={() => callApplyWiki('all', [])}
           disabled={applying}
           style={{
-            background: 'rgba(52,211,153,0.15)',
-            border: '1px solid rgba(52,211,153,0.3)',
-            borderRadius: '8px',
-            color: '#34d399',
-            padding: '7px 16px',
-            fontSize: '12px',
-            fontWeight: 700,
-            cursor: 'pointer',
-            opacity: applying ? 0.5 : 1,
+            background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)',
+            borderRadius: '7px', color: '#34d399', padding: '5px 12px',
+            fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: applying ? 0.5 : 1,
           }}
         >
           Apply All
@@ -2175,99 +2361,127 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessi
             onClick={() => callApplyWiki('skip', [...skippedIds])}
             disabled={applying}
             style={{
-              background: 'rgba(124,108,252,0.15)',
-              border: '1px solid rgba(124,108,252,0.3)',
-              borderRadius: '8px',
-              color: '#a89cff',
-              padding: '7px 16px',
-              fontSize: '12px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              opacity: applying ? 0.5 : 1,
+              background: 'rgba(124,108,252,0.15)', border: '1px solid rgba(124,108,252,0.3)',
+              borderRadius: '7px', color: '#a89cff', padding: '5px 12px',
+              fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: applying ? 0.5 : 1,
             }}
           >
-            Apply Selected ({unappliedCount} of {suggestions.length})
+            Apply Selected ({unappliedCount}/{suggestions.length})
           </button>
         )}
-        {applying && (
-          <span style={{ fontSize: '12px', color: '#64748b' }}>Applying...</span>
+        {applying && <span style={{ fontSize: '11px', color: '#64748b' }}>Applying…</span>}
+
+        {/* Separator */}
+        <div style={{ width: '1px', height: '18px', background: '#1e2130', flexShrink: 0 }} />
+
+        {/* Generate button */}
+        <button
+          onClick={onGenerate}
+          disabled={generating}
+          style={{
+            background: generating ? 'rgba(100,116,139,0.15)' : 'rgba(124,108,252,0.15)',
+            border: `1px solid ${generating ? 'rgba(100,116,139,0.3)' : 'rgba(124,108,252,0.3)'}`,
+            borderRadius: '7px', color: generating ? '#64748b' : '#a89cff',
+            padding: '5px 12px', fontSize: '12px', fontWeight: 700,
+            cursor: generating ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+          }}
+        >
+          {generating ? '⟳ Generating…' : generateDone ? '↺ Re-generate' : '✨ Generate'}
+        </button>
+
+        {/* Import corrections button — inline */}
+        {hasProperNounCorrections && (
+          <button
+            onClick={doImportCorrections}
+            disabled={importing}
+            style={{
+              background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
+              borderRadius: '7px', color: '#93c5fd', padding: '5px 12px',
+              fontSize: '12px', fontWeight: 700, cursor: importing ? 'not-allowed' : 'pointer',
+              opacity: importing ? 0.5 : 1,
+            }}
+          >
+            {importing ? 'Importing…' : 'Import Corrections'}
+          </button>
         )}
-        <span style={{ fontSize: '12px', color: '#475569', marginLeft: 'auto' }}>
-          {suggestions.length} suggestion{suggestions.length !== 1 ? 's' : ''}
+        {importResult && (
+          <span style={{ fontSize: '11px', color: '#64748b' }}>
+            {importResult.imported.length > 0 && <span style={{ color: '#4ade80' }}>+{importResult.imported.length} imported</span>}
+            {importResult.imported.length > 0 && importResult.skipped.length > 0 && <span> · </span>}
+            {importResult.skipped.length > 0 && <span>{importResult.skipped.length} skipped</span>}
+            {importResult.imported.length === 0 && importResult.skipped.length === 0 && <span>none found</span>}
+          </span>
+        )}
+        {importResult && importResult.imported.length > 0 && onRemerge && (
+          <button
+            onClick={onRemerge}
+            style={{
+              background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.2)',
+              borderRadius: '7px', color: '#34d399', padding: '5px 10px',
+              fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            Re-merge
+          </button>
+        )}
+
+        {/* Counts pushed to right */}
+        <span style={{ fontSize: '11px', color: '#334155', marginLeft: 'auto' }}>
+          {suggestions.length} suggestions
           {appliedIds.size > 0 && <span style={{ color: '#34d399' }}> · {appliedIds.size} applied</span>}
-          {skippedIds.size > 0 && <span style={{ color: '#64748b' }}> · {skippedIds.size} skipped</span>}
+          {skippedIds.size > 0 && <span style={{ color: '#475569' }}> · {skippedIds.size} skipped</span>}
         </span>
       </div>
 
-      {/* Import corrections section */}
-      {hasProperNounCorrections && (
-        <div style={{
-          background: '#0d1017',
-          border: '1px solid #1e2130',
-          borderRadius: '10px',
-          padding: '14px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-        }}>
-          <div style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            Proper Noun Corrections
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748b' }}>
-            This wiki suggestion contains a "Proper Noun Corrections" section. Import the corrections into config.yaml.
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <button
-              onClick={doImportCorrections}
-              disabled={importing}
-              style={{
-                background: 'rgba(124,108,252,0.15)',
-                border: '1px solid rgba(124,108,252,0.3)',
-                borderRadius: '8px',
-                color: '#a89cff',
-                padding: '7px 16px',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: importing ? 'not-allowed' : 'pointer',
-                opacity: importing ? 0.5 : 1,
-              }}
-            >
-              {importing ? 'Importing...' : 'Import Corrections'}
-            </button>
-            {importResult && (
-              <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                {importResult.imported.length > 0 && (
-                  <span style={{ color: '#4ade80' }}>Imported {importResult.imported.length}</span>
-                )}
-                {importResult.imported.length > 0 && importResult.skipped.length > 0 && <span style={{ color: '#475569' }}>, </span>}
-                {importResult.skipped.length > 0 && (
-                  <span style={{ color: '#64748b' }}>{importResult.skipped.length} already existed</span>
-                )}
-                {importResult.imported.length === 0 && importResult.skipped.length === 0 && (
-                  <span style={{ color: '#64748b' }}>No corrections found</span>
-                )}
+      {/* Special instructions — collapsible */}
+      <SpecialInstructionsRow
+        notes={notes}
+        onNotesChange={onNotesChange}
+        onNotesBlur={onNotesBlur}
+        notesSaving={notesSaving}
+        generating={generating}
+        generateLog={generateLog}
+      />
+
+      {/* Corrections pills — collapsible */}
+      {hasProperNounCorrections && (() => {
+        if (!wikiMarkdown) return null
+        const sectionStart = wikiMarkdown.indexOf('Proper Noun Corrections')
+        if (sectionStart < 0) return null
+        const sectionText = wikiMarkdown.slice(sectionStart)
+        const lines = sectionText.split('\n')
+        const corrections: Array<{wrong: string; right: string}> = []
+        for (const line of lines.slice(1)) {
+          if (line.startsWith('#')) break
+          const arrow = line.indexOf('→')
+          if (arrow < 0) continue
+          const wrongs = line.slice(0, arrow).replace(/^[-\s]+/, '').split(/\s*\/\s*/)
+          const right = line.slice(arrow + 1).replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1').replace(/\(.*?\)/g, '').replace(/"/g, '').trim()
+          if (!right) continue
+          for (const w of wrongs) {
+            const clean = w.replace(/"/g, '').trim()
+            if (clean) corrections.push({ wrong: clean, right })
+          }
+        }
+        if (corrections.length === 0) return null
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', padding: '2px 0' }}>
+            {corrections.map((c, i) => (
+              <span key={i} style={{
+                background: '#13151f', border: '1px solid #2a2d3a',
+                borderRadius: '5px', padding: '2px 7px', fontSize: '11px',
+                fontFamily: 'monospace', color: '#94a3b8',
+              }}>
+                <span style={{ color: '#f87171' }}>{c.wrong}</span>
+                <span style={{ color: '#475569', margin: '0 3px' }}>→</span>
+                <span style={{ color: '#4ade80' }}>{c.right}</span>
               </span>
-            )}
-            {importResult && importResult.imported.length > 0 && onRemerge && (
-              <button
-                onClick={onRemerge}
-                style={{
-                  background: 'rgba(52,211,153,0.12)',
-                  border: '1px solid rgba(52,211,153,0.25)',
-                  borderRadius: '8px',
-                  color: '#34d399',
-                  padding: '7px 14px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Re-merge session
-              </button>
-            )}
+            ))}
           </div>
-        </div>
-      )}
+        )
+      })()}
+
+
 
       {/* Apply output */}
       {applyOutput && (
@@ -2350,8 +2564,9 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessi
             {/* Bullets */}
             <div style={{ padding: '0 16px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {s.bullets.map((b, i) => (
-                <div key={i} style={{ fontSize: '13px', color: '#94a3b8', lineHeight: 1.6 }}>
-                  {b}
+                <div key={i} style={{ fontSize: '13px', color: '#94a3b8', lineHeight: 1.6, display: 'flex', gap: '6px' }}>
+                  <span style={{ color: '#475569', flexShrink: 0 }}>–</span>
+                  <span>{b.replace(/^-\s*/, '')}</span>
                 </div>
               ))}
             </div>
@@ -2408,6 +2623,181 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved }: { sessi
           </div>
         )
       })}
+      </>}
+    </div>
+  )
+}
+
+// ─── Special Instructions Row (collapsible) ──────────────────────────────────
+
+function SpecialInstructionsRow({ notes, onNotesChange, onNotesBlur, notesSaving, generating, generateLog }: {
+  notes: string
+  onNotesChange?: (v: string) => void
+  onNotesBlur?: (v: string) => void
+  notesSaving?: boolean
+  generating?: boolean
+  generateLog?: string[]
+}) {
+  const [open, setOpen] = React.useState(false)
+  React.useEffect(() => { if (generating) setOpen(true) }, [generating])
+
+  const hasNotes = notes.trim().length > 0
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: '5px',
+          color: hasNotes ? '#64748b' : '#334155', fontSize: '11px', fontWeight: 600,
+          padding: '2px 0',
+        }}
+      >
+        <span style={{ fontSize: '9px' }}>{open ? '▼' : '▶'}</span>
+        <span>Special Instructions</span>
+        {hasNotes && !open && (
+          <span style={{ color: '#475569', fontWeight: 400, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '320px' }}>
+            — {notes.trim().slice(0, 60)}{notes.trim().length > 60 ? '…' : ''}
+          </span>
+        )}
+        {notesSaving && <span style={{ color: '#334155', fontWeight: 400 }}>saving…</span>}
+      </button>
+      {open && (
+        <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <textarea
+            value={notes}
+            onChange={e => onNotesChange?.(e.target.value)}
+            onBlur={e => onNotesBlur?.(e.target.value)}
+            placeholder="e.g. Aella and Danny are on the same mic — attribute ambiguous lines to Danny unless clearly in character."
+            rows={3}
+            style={{
+              width: '100%', background: '#13151f', border: '1px solid #2a2d3a',
+              borderRadius: '7px', color: '#e2e8f0', padding: '8px 10px',
+              fontSize: '12px', lineHeight: 1.5, resize: 'vertical',
+              outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+            }}
+          />
+          {generating && generateLog && generateLog.length > 0 && (
+            <pre style={{
+              background: '#0a0d14', border: '1px solid #1e2130', borderRadius: '7px',
+              padding: '8px 12px', fontSize: '11px', color: '#94a3b8',
+              fontFamily: 'monospace', whiteSpace: 'pre-wrap',
+              maxHeight: '140px', overflowY: 'auto', margin: 0,
+            }}>
+              {generateLog.join('\n')}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Generate Wiki Panel ──────────────────────────────────────────────────────
+
+function GenerateWikiPanel({
+  generating,
+  generateLog,
+  generateDone,
+  onGenerate,
+  compact = false,
+  notes = '',
+  onNotesChange,
+  onNotesBlur,
+  notesSaving = false,
+}: {
+  generating: boolean
+  generateLog: string[]
+  generateDone: boolean
+  onGenerate: () => void
+  compact?: boolean
+  notes?: string
+  onNotesChange?: (v: string) => void
+  onNotesBlur?: (v: string) => void
+  notesSaving?: boolean
+}) {
+  return (
+    <div style={{
+      background: '#0d1017',
+      border: '1px solid #1e2130',
+      borderRadius: '10px',
+      padding: compact ? '10px 14px' : '14px 16px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '10px',
+    }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {!compact && (
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '2px' }}>
+              Generate Summary & Wiki
+            </div>
+            <div style={{ fontSize: '12px', color: '#64748b' }}>
+              Analyze the transcript with Claude via the worker. Add any notes below to guide the analysis.
+            </div>
+          </div>
+        )}
+        {compact && (
+          <span style={{ fontSize: '12px', color: '#64748b', flex: 1 }}>Re-analyze transcript (worker runs Claude locally)</span>
+        )}
+        <button
+          onClick={onGenerate}
+          disabled={generating}
+          style={{
+            background: generating ? 'rgba(100,116,139,0.15)' : 'rgba(124,108,252,0.15)',
+            border: `1px solid ${generating ? 'rgba(100,116,139,0.3)' : 'rgba(124,108,252,0.3)'}`,
+            borderRadius: '8px',
+            color: generating ? '#64748b' : '#a89cff',
+            padding: '7px 16px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: generating ? 'not-allowed' : 'pointer',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
+          {generating ? '⟳ Generating...' : generateDone ? '↺ Re-generate' : '✨ Generate'}
+        </button>
+      </div>
+
+      {/* Notes + log — only in full (non-compact) mode */}
+      {!compact && (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 600, color: '#475569', letterSpacing: '0.04em' }}>
+                SPECIAL INSTRUCTIONS
+              </label>
+              {notesSaving && <span style={{ fontSize: '10px', color: '#475569' }}>saving…</span>}
+            </div>
+            <textarea
+              value={notes}
+              onChange={e => onNotesChange?.(e.target.value)}
+              onBlur={e => onNotesBlur?.(e.target.value)}
+              placeholder="e.g. Aella and Danny are on the same mic — attribute ambiguous lines to Danny unless clearly in character."
+              rows={3}
+              style={{
+                width: '100%', background: '#13151f', border: '1px solid #2a2d3a',
+                borderRadius: '7px', color: '#e2e8f0', padding: '8px 10px',
+                fontSize: '12px', lineHeight: 1.5, resize: 'vertical',
+                outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          {generating && generateLog.length > 0 && (
+            <pre style={{
+              background: '#0a0d14', border: '1px solid #1e2130', borderRadius: '8px',
+              padding: '10px 14px', fontSize: '11px', color: '#94a3b8',
+              fontFamily: 'monospace', whiteSpace: 'pre-wrap',
+              maxHeight: '180px', overflowY: 'auto', margin: 0,
+            }}>
+              {generateLog.join('\n')}
+            </pre>
+          )}
+        </>
+      )}
     </div>
   )
 }
