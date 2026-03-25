@@ -176,6 +176,123 @@ def apply_suggestion(vault_path: Path, suggestion: dict) -> bool:
     return True
 
 
+# ── Index.md updater ─────────────────────────────────────────────────────────
+
+# Maps category name → the line prefix to append to in Index.md
+INDEX_CATEGORY_MAP = {
+    "NPCs":       "- **NPCs:**",
+    "PCs":        "- **Player Characters:**",
+    "Sephirot":   "- **Sephirot:**",
+    "Locations":  "[[Malkuth]]",  # first item on the locations line
+    "Items":      "### Items & Artifacts",
+    "Factions":   "### Factions",
+    "Events":     "### Events",
+    "Mechanics":  "### Core Mechanics",
+}
+
+def add_to_index(index_path: Path, title: str, category: str, dry_run: bool = False) -> bool:
+    """Add [[title]] to the right line in Index.md. Returns True if changed."""
+    if not index_path.exists():
+        print(f"  ⚠ Index.md not found at {index_path}")
+        return False
+
+    content = index_path.read_text(encoding="utf-8")
+    wikilink = f"[[{title}]]"
+
+    if wikilink in content:
+        print(f"  ⚠ {wikilink} already in Index.md")
+        return False
+
+    marker = INDEX_CATEGORY_MAP.get(category)
+    if not marker:
+        print(f"  ⚠ Unknown category '{category}' — not adding to index")
+        return False
+
+    lines = content.split("\n")
+    for i, line in enumerate(lines):
+        if line.startswith(marker) or (category in ("Locations", "Items", "Factions", "Events", "Mechanics") and marker in line):
+            # For bullet-list categories (NPCs, PCs, Sephirot): append to the line
+            if category in ("NPCs", "PCs", "Sephirot"):
+                lines[i] = line.rstrip() + f" · {wikilink}"
+            else:
+                # For section-header categories: append after the line
+                lines[i] = line + f" · {wikilink}"
+            new_content = "\n".join(lines)
+            if not dry_run:
+                index_path.write_text(new_content, encoding="utf-8")
+            print(f"  ✓ Added {wikilink} to Index.md [{category}]")
+            return True
+
+    print(f"  ⚠ Could not find marker for '{category}' in Index.md")
+    return False
+
+
+def parse_index_update(suggestions_file: Path) -> tuple[list[tuple[str, str, str]], str]:
+    """
+    Parse ## Index Update section from wiki_suggestions.md.
+    Returns (new_pages, current_state_text) where:
+      new_pages = list of (path, category, display_name)
+      current_state_text = replacement text for Current State block (or "")
+    """
+    text = suggestions_file.read_text(encoding="utf-8")
+
+    # Find ## Index Update section
+    section_match = re.search(r'^## Index Update\s*$', text, re.MULTILINE)
+    if not section_match:
+        return [], ""
+
+    section_text = text[section_match.end():]
+    # Stop at next ## section
+    next_section = re.search(r'^##\s+', section_text, re.MULTILINE)
+    if next_section:
+        section_text = section_text[:next_section.start()]
+
+    new_pages = []
+    for line in section_text.splitlines():
+        line = line.strip()
+        if line.startswith("NEW:"):
+            parts = [p.strip() for p in line[4:].split("|")]
+            if len(parts) >= 3:
+                new_pages.append((parts[0], parts[1], parts[2]))
+
+    # Extract CURRENT_STATE block
+    cs_match = re.search(r'CURRENT_STATE_START\n(.*?)CURRENT_STATE_END', section_text, re.DOTALL)
+    current_state = cs_match.group(1).strip() if cs_match else ""
+
+    return new_pages, current_state
+
+
+def apply_index_update(vault_path: Path, suggestions_file: Path, dry_run: bool = False):
+    """Apply Index Update section: add new page links + update Current State."""
+    new_pages, current_state = parse_index_update(suggestions_file)
+    index_path = vault_path / "Index.md"
+    changed = False
+
+    if new_pages:
+        print("\nUpdating Index.md with new pages...")
+        for page_path, category, display_name in new_pages:
+            if add_to_index(index_path, display_name, category, dry_run):
+                changed = True
+
+    if current_state:
+        print("\nUpdating Current State in Index.md...")
+        if index_path.exists():
+            content = index_path.read_text(encoding="utf-8")
+            # Replace everything from ## 🧭 Current State onward
+            cs_section = re.search(r'^## 🧭 Current State.*', content, re.MULTILINE | re.DOTALL)
+            if cs_section:
+                new_block = f"## 🧭 Current State (End of Known Notes)\n{current_state}\n"
+                new_content = content[:cs_section.start()] + new_block
+                if not dry_run:
+                    index_path.write_text(new_content, encoding="utf-8")
+                print(f"  ✓ Updated Current State block")
+                changed = True
+            else:
+                print("  ⚠ Could not find Current State section in Index.md")
+
+    return changed
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def run(session_dir: str, apply_ids: list[int] | None, skip_ids: list[int],
@@ -245,6 +362,9 @@ def run(session_dir: str, apply_ids: list[int] | None, skip_ids: list[int],
             print(f"  ✓ Committed: {commit_msg}")
         else:
             print(f"  ⚠ Git commit failed: {result.stderr.strip()}")
+
+    # Apply Index.md updates (new page links + current state)
+    apply_index_update(vault_path, suggestions_file, dry_run)
 
     print(f"\nDone. Applied: {applied}")
 
