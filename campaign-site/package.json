@@ -1,0 +1,13 @@
+{
+  "name": "raqia-campaign-wiki",
+  "version": "1.0.0",
+  "description": "Raqia Campaign Wiki — static site generator",
+  "scripts": {
+    "build": "node build.js",
+    "serve": "node serve.js",
+    "dev": "node build.js && node serve.js"
+  },
+  "dependencies": {
+    "marked": "^9.1.6"
+  }
+}
