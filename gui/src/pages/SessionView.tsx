@@ -1008,6 +1008,9 @@ function TranscriptView({
 
   const saveLine = async (lineIdx: number, value: string) => {
     if (!sessionName) return
+    // Capture the editing index at call time — async resolution must not clobber
+    // a different line that was opened while this save was in flight (e.g. via insertLineAfter)
+    const savedEditingIdx = lineIdx
     setSavingLine(true)
     try {
       const r = await fetch(apiUrl(`/sessions/${sessionName}/transcript/line/${lineIdx + 1}`), {
@@ -1021,13 +1024,26 @@ function TranscriptView({
       } else {
         setEditedLines(prev => { const next = [...prev]; next[lineIdx] = value; return next })
       }
+    } catch (_) {
+      // Network/server error — don't lose the edit, just close the input
     } finally {
       setSavingLine(false)
-      setEditingLineIdx(null)
+      // Only clear editingLineIdx if it hasn't been changed to something else
+      // (e.g. insertLineAfter may have already set a new line while save was in flight)
+      setEditingLineIdx(prev => prev === savedEditingIdx ? null : prev)
     }
   }
 
   const insertLineAfter = (lineIdx: number) => {
+    // If a line is currently being edited, commit its current value locally first
+    // so we don't lose it when editedLines splices
+    if (editingLineIdx !== null) {
+      setEditedLines(prev => {
+        const next = [...prev]
+        next[editingLineIdx] = editingValue
+        return next
+      })
+    }
     setEditedLines(prev => {
       const next = [...prev]
       next.splice(lineIdx + 1, 0, '')
@@ -1046,7 +1062,9 @@ function TranscriptView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: editedLines.join('\n') }),
       })
-      onTranscriptChange?.()
+      try { onTranscriptChange?.() } catch (_) {}
+    } catch (_) {
+      // Network error — don't leave editor permanently disabled
     } finally {
       setSavingAll(false)
     }
@@ -1147,7 +1165,7 @@ function TranscriptView({
                     if (e.key === 'Enter') { saveLine(lineIdx, editingValue) }
                     else if (e.key === 'Escape') { setEditingLineIdx(null) }
                   }}
-                  onBlur={() => saveLine(lineIdx, editingValue)}
+                  onBlur={() => { if (!savingLine) saveLine(lineIdx, editingValue) }}
                   disabled={savingLine}
                   style={{
                     flex: 1,
