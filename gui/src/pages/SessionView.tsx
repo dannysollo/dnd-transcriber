@@ -153,6 +153,8 @@ export default function SessionView() {
   const [changesLoaded, setChangesLoaded] = useState(false)
   const [targetTimestamp, setTargetTimestamp] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
+  const sessionContentRef = useRef<HTMLDivElement | null>(null)
+  const savedScrollRef = useRef<number>(0)
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [shareToken, setShareToken] = useState<string | null>(null)
   const [shareCreating, setShareCreating] = useState(false)
@@ -264,6 +266,17 @@ export default function SessionView() {
       loadChanges()
     }
   }, [tab])
+
+  // Restore scroll position when toggling edit mode
+  useEffect(() => {
+    const el = sessionContentRef.current
+    if (!el) return
+    // Use rAF to wait for the DOM to repaint after mode switch
+    const frame = requestAnimationFrame(() => {
+      el.scrollTop = savedScrollRef.current
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [editMode])
 
   // Window-level drag-and-drop
   useEffect(() => {
@@ -739,7 +752,12 @@ export default function SessionView() {
             )}
             {transcript && (
               <button
-                onClick={() => setEditMode(m => !m)}
+                onClick={() => {
+                  if (sessionContentRef.current) {
+                    savedScrollRef.current = sessionContentRef.current.scrollTop
+                  }
+                  setEditMode(m => !m)
+                }}
                 style={{
                   background: editMode ? 'rgba(251,191,36,0.15)' : 'transparent',
                   border: `1px solid ${editMode ? 'rgba(251,191,36,0.4)' : '#2a2d3a'}`,
@@ -824,7 +842,7 @@ export default function SessionView() {
       )}
 
       {/* Content */}
-      <div className="session-content" style={{ flex: 1, overflow: 'auto', padding: '24px 28px' }}>
+      <div ref={sessionContentRef} className="session-content" style={{ flex: 1, overflow: 'auto', padding: '24px 28px' }}>
         {loading ? (
           <div style={{ color: '#64748b' }}>Loading...</div>
         ) : tab === 'transcript' ? (
