@@ -203,6 +203,23 @@ export default function EditQueuePage() {
 
   useEffect(() => { if (slug) load() }, [slug])
 
+  const approveAll = async () => {
+    const ids = edits.map(e => e.id)
+    setProcessing(Object.fromEntries(ids.map(id => [id, true])))
+    try {
+      await Promise.all(ids.map(id =>
+        fetch(`/campaigns/${slug}/edits/${id}/approve`, { method: 'POST' })
+      ))
+      setEdits([])
+      toast(`Approved ${ids.length} edit${ids.length !== 1 ? 's' : ''}`, 'success')
+    } catch {
+      toast('Some approvals failed', 'error')
+      load()
+    } finally {
+      setProcessing({})
+    }
+  }
+
   const approve = async (editId: number) => {
     setProcessing(prev => ({ ...prev, [editId]: true }))
     try {
@@ -262,9 +279,27 @@ export default function EditQueuePage() {
             </span>
           )}
         </h1>
-        <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
-          Review and approve edits submitted by players
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px' }}>
+          <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
+            Review and approve edits submitted by players
+          </p>
+          {edits.length > 0 && (
+            <button
+              onClick={approveAll}
+              disabled={Object.values(processing).some(Boolean)}
+              style={{
+                background: 'rgba(52,211,153,0.15)',
+                border: '1px solid rgba(52,211,153,0.3)',
+                borderRadius: '8px', color: '#34d399',
+                padding: '6px 14px', fontSize: '12px', fontWeight: 700,
+                cursor: 'pointer', marginLeft: 'auto',
+                opacity: Object.values(processing).some(Boolean) ? 0.5 : 1,
+              }}
+            >
+              ✓ Approve All ({edits.length})
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (

@@ -79,10 +79,37 @@ Rules:
 - Use `[[wikilinks]]` for cross-references within bullets
 - Only include things clearly evidenced in the transcript
 
-### 3. Proper Noun Corrections
+### 3. Index Update
+After the wiki suggestions, include an `## Index Update` section with:
+
+**New pages** (only for NEW PAGE suggestions): list each one so it can be added to Index.md.
+Format — one line per new page:
+```
+NEW: Characters/NPCs/The Butterfly Woman.md | NPCs | The Butterfly Woman
+NEW: Items/Rotor of Return.md | Items | Rotor of Return
+```
+Columns: `path | category | display name`
+Valid categories: `NPCs`, `PCs`, `Sephirot`, `Locations`, `Items`, `Factions`, `Events`, `Mechanics`
+
+**Current State update**: rewrite the full Current State block as it stands at the END of this session.
+Format — replace the entire block between `## 🧭 Current State` and the end of the file:
+```
+CURRENT_STATE_START
+- **Chords held:** ...
+- **Sephirot Status:** ...
+- **Ark Parts Found:** ...
+- **Current Arc:** ...
+- **Next Goals:** ...
+CURRENT_STATE_END
+```
+Be precise and concise. Only include facts confirmed in the transcript. Use [[wikilinks]] for named entities.
+
+### 4. Proper Noun Corrections
 If you notice names that were clearly mis-transcribed (e.g. "Kay" instead of "Keh"),
-list them so they can be added to the corrections dict in config.yaml:
+list them under a `## Proper Noun Corrections` heading so they can be imported into config.yaml.
+Use this exact format — one line per wrong form, plain text (no bold/markdown):
 - "wrong" → "Correct"
+- "also wrong" → "Correct"
 
 ## Approval Flow
 After posting analysis, Danny will reply with one of:

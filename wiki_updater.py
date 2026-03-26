@@ -1,129 +1,27 @@
 """
 wiki_updater.py
-Analyzes the session transcript using Claude and saves wiki suggestions to file.
-Also sends a Discord notification via OpenClaw.
+Queues an analysis job by writing an `analysis_pending` flag in the session dir.
+The worker picks it up, runs Claude locally via openclaw, and POSTs results back.
 """
-import os
-import re
-import subprocess
 import sys
 from pathlib import Path
 
-import anthropic
 import yaml
 
 
-def resolve_api_key(raw: str | None) -> str:
-    """Resolve API key — supports ${ENV_VAR} syntax or literal key."""
-    if not raw:
-        key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not key:
-            raise ValueError(
-                "No Anthropic API key found. Set ANTHROPIC_API_KEY env var "
-                "or set anthropic_api_key in config.yaml."
-            )
-        return key
-    if raw.startswith("${") and raw.endswith("}"):
-        env_var = raw[2:-1]
-        key = os.environ.get(env_var, "")
-        if not key:
-            raise ValueError(f"Environment variable {env_var} is not set.")
-        return key
-    return raw
-
-
-def find_vault_pages(vault_path: str) -> dict[str, Path]:
-    """Return a dict of {page_name_lower: path} for all vault pages."""
-    vault = Path(vault_path)
-    pages = {}
-    for md_file in vault.rglob("*.md"):
-        try:
-            rel_parts = md_file.relative_to(vault).parts
-        except ValueError:
-            rel_parts = md_file.parts
-        if any(p.startswith(".") for p in rel_parts):
-            continue
-        pages[md_file.stem.lower()] = md_file
-    return pages
-
-
-def find_mentioned_pages(transcript: str, vault_pages: dict[str, Path]) -> dict[str, str]:
-    """
-    Find vault pages whose names appear in the transcript.
-    Returns {page_name: page_content} for the top matches.
-    """
-    transcript_lower = transcript.lower()
-    mentioned: dict[str, str] = {}
-
-    skip = {"index", "readme", "morality system"}
-
-    for name_lower, path in vault_pages.items():
-        if name_lower in skip:
-            continue
-        # Only include if the name appears as a whole word-ish match
-        if re.search(r"\b" + re.escape(name_lower) + r"\b", transcript_lower):
-            try:
-                content = path.read_text(encoding="utf-8")
-                mentioned[path.stem] = content
-            except Exception:
-                pass
-
-    return mentioned
-
-
 def generate_wiki_updates(session_dir: str, config: dict):
-    """Analyze transcript with Claude, save wiki_suggestions.md, and notify Discord."""
-    session = Path(session_dir)
-    transcript_path = session.resolve() / "transcript.md"
-    context_path = Path(__file__).parent.resolve() / "ANALYZE_SESSION.md"
-    session_id = config.get("openclaw_session_id", "agent:main:discord:direct:235848101569626122")
+    """Queue an analysis job for the worker."""
+    session = Path(session_dir).resolve()
+    transcript_path = session / "transcript.md"
 
     if not transcript_path.exists():
         print("ERROR: transcript.md not found. Run merge.py first.")
         sys.exit(1)
 
-    transcript_content = transcript_path.read_text(encoding="utf-8")
-    analyze_session_md_content = context_path.read_text(encoding="utf-8")
-
-    # Generate wiki suggestions using Claude directly
-    print("  Analyzing transcript with Claude...")
-    client = anthropic.Anthropic()  # uses ANTHROPIC_API_KEY env var
-    response = client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=4096,
-        system=analyze_session_md_content,
-        messages=[{"role": "user", "content": transcript_content}]
-    )
-    suggestions_text = response.content[0].text
-
-    # Save to wiki_suggestions.md
-    suggestions_path = session.resolve() / "wiki_suggestions.md"
-    suggestions_path.write_text(suggestions_text, encoding="utf-8")
-    print("  ✓ Saved wiki_suggestions.md")
-
-    # Also send Discord notification so Danny gets pinged
-    message = (
-        f"D&D session transcript analysis complete. "
-        f"Wiki suggestions saved to {suggestions_path}. "
-        f"Review and run: python apply_updates.py {session} --all"
-    )
-
-    print(f"  Sending to Claude via OpenClaw (session: {session_id})...")
-    result = subprocess.run(
-        [
-            "openclaw", "agent",
-            "--session-id", session_id,
-            "--message", message,
-            "--deliver",
-            "--reply-channel", "discord",
-            "--reply-to", "channel:1475874124869013710",
-        ],
-        capture_output=True, text=True
-    )
-    if result.returncode == 0:
-        print("  ✓ Claude notified — analysis will appear in Discord shortly.")
-    else:
-        print(f"  ✗ OpenClaw notify failed: {result.stderr.strip()}")
+    flag_path = session / "analysis_pending"
+    flag_path.touch()
+    print(f"  ✓ Analysis job queued — worker will pick it up and run Claude locally.")
+    print(f"    Results will appear in Summary + Wiki tabs when done.")
 
 
 if __name__ == "__main__":

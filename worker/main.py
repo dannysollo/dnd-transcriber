@@ -13,7 +13,9 @@ Craig Watcher is enabled automatically when `discord_token` is present in worker
 import argparse
 import asyncio
 import io
+import os
 import re
+import subprocess
 import sys
 import tempfile
 import threading
@@ -133,6 +135,103 @@ def poll_loop(config: dict, stop_event: threading.Event):
         stop_event.wait(config["poll_interval"])
 
     print("[worker] Poll loop stopped.")
+
+
+# ─── Analysis poll loop ──────────────────────────────────────────────────────
+
+ANALYZE_SESSION_MD = Path(__file__).parent.parent / "ANALYZE_SESSION.md"
+
+def run_analysis(transcript: str, config: dict, notes: str = "") -> tuple[str, str]:
+    """
+    Send transcript to OpenClaw gateway via /v1/chat/completions.
+    Returns (summary, wiki) strings split on the first ## [1] wiki block.
+    """
+    if not ANALYZE_SESSION_MD.exists():
+        raise RuntimeError(f"ANALYZE_SESSION.md not found at {ANALYZE_SESSION_MD}")
+
+    system_prompt = ANALYZE_SESSION_MD.read_text(encoding="utf-8")
+
+    message = transcript
+    if notes and notes.strip():
+        message = f"## DM Notes for this session\n{notes.strip()}\n\n---\n\n{transcript}"
+
+    wrapper = Path(__file__).parent / "_analyze_runner.py"
+    result = subprocess.run(
+        [sys.executable, str(wrapper)],
+        input=message,
+        capture_output=True,
+        text=True,
+        timeout=300,
+        env={**os.environ, "OPENCLAW_SYSTEM_PROMPT": system_prompt},
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"analysis failed (code {result.returncode}): {result.stderr[:500]}")
+
+    full_text = result.stdout.strip()
+    if not full_text:
+        raise RuntimeError("analysis returned empty output")
+
+    # Split on first ## [1] wiki block
+    import re as _re
+    wiki_marker = _re.search(r'^## \[1\]', full_text, _re.MULTILINE)
+    if wiki_marker:
+        summary = full_text[:wiki_marker.start()].strip()
+        wiki = full_text[wiki_marker.start():].strip()
+    else:
+        summary = full_text.strip()
+        wiki = ""
+
+    return summary, wiki
+
+
+def analysis_poll_loop(config: dict, stop_event: threading.Event):
+    """Poll for pending analysis jobs and run them via openclaw agent --local."""
+    client = WorkerClient(config)
+    poll_interval = config.get("analysis_poll_interval", config.get("poll_interval", 30))
+
+    print("[analysis] Poll loop started.")
+
+    while not stop_event.is_set():
+        try:
+            jobs = client.get_pending_analysis_jobs()
+        except Exception as e:
+            print(f"[analysis] Error fetching jobs: {e}")
+            stop_event.wait(poll_interval)
+            continue
+
+        for job in jobs:
+            if stop_event.is_set():
+                break
+
+            session_name = job["session_name"]
+            transcript = job.get("transcript", "")
+
+            if not transcript.strip():
+                print(f"[analysis] {session_name}: empty transcript — skipping.")
+                continue
+
+            notes = job.get("notes", "")
+            print(f"\n[analysis] [JOB] {session_name}" + (" (with notes)" if notes.strip() else ""))
+            try:
+                summary, wiki = run_analysis(transcript, config, notes)
+                client.push_analysis_result(session_name, summary, wiki)
+                parts = []
+                if summary: parts.append("summary")
+                if wiki: parts.append("wiki")
+                print(f"[analysis]   [DONE] {session_name} — wrote: {', '.join(parts) or 'nothing'}")
+            except Exception as e:
+                print(f"[analysis]   [ERROR] {session_name}: {e}")
+                # Don't leave flag in place — remove so it doesn't loop forever
+                # (user can re-trigger from the UI)
+                try:
+                    client.push_analysis_result(session_name, "", "")
+                except Exception:
+                    pass
+
+        stop_event.wait(poll_interval)
+
+    print("[analysis] Poll loop stopped.")
 
 
 # ─── Craig Watcher helpers ────────────────────────────────────────────────────
@@ -338,9 +437,13 @@ def main():
 
     stop_event = threading.Event()
 
-    # Start poll loop in background thread
+    # Start transcription poll loop in background thread
     poll_thread = threading.Thread(target=poll_loop, args=(config, stop_event), daemon=True)
     poll_thread.start()
+
+    # Start analysis poll loop in background thread
+    analysis_thread = threading.Thread(target=analysis_poll_loop, args=(config, stop_event), daemon=True)
+    analysis_thread.start()
 
     if craig_enabled:
         # Discord client owns the main thread's event loop

@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 # System deps (ffmpeg for audio merge)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg nodejs npm \
+    ffmpeg nodejs npm git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

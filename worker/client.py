@@ -74,3 +74,18 @@ class WorkerClient:
         r = requests.get(self._url("/worker/config"), headers=self.headers, timeout=30)
         r.raise_for_status()
         return r.json()
+
+    def get_pending_analysis_jobs(self) -> list:
+        """Return sessions with a pending analysis flag."""
+        r = requests.get(self._url("/worker/analysis-jobs"), headers=self.headers, timeout=30)
+        r.raise_for_status()
+        return r.json()
+
+    def push_analysis_result(self, session_name: str, summary: str, wiki: str) -> None:
+        r = requests.post(
+            self._url(f"/worker/sessions/{session_name}/analysis-result"),
+            headers=self.headers,
+            json={"summary": summary, "wiki": wiki},
+            timeout=60,
+        )
+        r.raise_for_status()
