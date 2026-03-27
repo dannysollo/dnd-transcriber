@@ -12,6 +12,7 @@ Craig Watcher is enabled automatically when `discord_token` is present in worker
 """
 import argparse
 import asyncio
+import collections
 import io
 import os
 import re
@@ -23,6 +24,56 @@ import time
 import traceback
 import zipfile
 from pathlib import Path
+
+
+# ─── Log ring buffer & stdout tee ────────────────────────────────────────────
+
+class LogRingBuffer:
+    """Thread-safe ring buffer for log lines."""
+
+    def __init__(self, maxlen: int = 500):
+        self._buf: collections.deque = collections.deque(maxlen=maxlen)
+        self._lock = threading.Lock()
+
+    def append(self, line: str):
+        with self._lock:
+            self._buf.append(line)
+
+    def __iter__(self):
+        with self._lock:
+            return iter(list(self._buf))
+
+    def __len__(self):
+        with self._lock:
+            return len(self._buf)
+
+
+class TeeStream:
+    """Write to both real stdout and a LogRingBuffer, line by line."""
+
+    def __init__(self, real_stream, ring_buffer: LogRingBuffer):
+        self._real = real_stream
+        self._ring = ring_buffer
+        self._partial = ""
+        self.encoding = getattr(real_stream, "encoding", "utf-8")
+        self.errors = getattr(real_stream, "errors", "replace")
+
+    def write(self, text: str):
+        self._real.write(text)
+        self._partial += text
+        while "\n" in self._partial:
+            line, self._partial = self._partial.split("\n", 1)
+            ts = time.strftime("%H:%M:%S")
+            self._ring.append(f"[{ts}] {line}")
+
+    def flush(self):
+        self._real.flush()
+
+    def fileno(self):
+        return self._real.fileno()
+
+    def isatty(self):
+        return getattr(self._real, "isatty", lambda: False)()
 
 # Allow running as `python worker/main.py` from repo root
 sys.path.insert(0, str(Path(__file__).parent))
@@ -422,6 +473,13 @@ def main():
         help="Path to worker.yaml",
     )
     args = parser.parse_args()
+
+    # ── Set up log ring buffer + tee stdout ──────────────────────────────────
+    start_time = time.time()
+    log_ring = LogRingBuffer(maxlen=500)
+    sys.stdout = TeeStream(sys.__stdout__, log_ring)
+    sys.stderr = TeeStream(sys.__stderr__, log_ring)
+
     config = load_config(args.config)
 
     print("=" * 60)
@@ -434,6 +492,23 @@ def main():
     craig_enabled = bool(config.get("discord_token"))
     print(f"  Craig Watcher: {'enabled' if craig_enabled else 'disabled (no discord_token)'}")
     print("=" * 60)
+
+    # ── Start GUI server ─────────────────────────────────────────────────────
+    try:
+        import gui_server
+        gui_server.init(log_ring, config, args.config, start_time)
+        gui_thread = threading.Thread(
+            target=gui_server.run_server,
+            kwargs={"port": 8788},
+            daemon=True,
+            name="gui-server",
+        )
+        gui_thread.start()
+        print("[gui] Dashboard at http://localhost:8788")
+    except ImportError as e:
+        print(f"[gui] Warning: could not start GUI server (Flask missing?): {e}")
+    except Exception as e:
+        print(f"[gui] Warning: GUI server failed to start: {e}")
 
     stop_event = threading.Event()
 
