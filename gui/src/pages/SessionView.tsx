@@ -51,6 +51,7 @@ function findTrackForSpeaker(speakerLabel: string, audioFiles: AudioFile[], play
 interface ParsedLine {
   type: 'heading' | 'speech' | 'other'
   raw: string
+  lineIdx: number
   timestamp?: string
   speaker?: string
   text?: string
@@ -58,23 +59,25 @@ interface ParsedLine {
 
 function parseTranscript(md: string): ParsedLine[] {
   const lines: ParsedLine[] = []
+  let idx = 0
   for (const raw of md.split('\n')) {
+    const lineIdx = idx++
     // Match: **[00:00] Speaker Name:** text  (with speaker)
     const m = raw.match(/^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$/)
     if (m) {
-      lines.push({ type: 'speech', raw, timestamp: m[1], speaker: m[2].trim(), text: m[3] })
+      lines.push({ type: 'speech', raw, lineIdx, timestamp: m[1], speaker: m[2].trim(), text: m[3] })
       continue
     }
     // Match: **[00:00]** text  (no speaker — worker mixed-audio format)
     const m2 = raw.match(/^\*\*\[([^\]]+)\]\*\* (.*)$/)
     if (m2) {
-      lines.push({ type: 'speech', raw, timestamp: m2[1], speaker: undefined, text: m2[2] })
+      lines.push({ type: 'speech', raw, lineIdx, timestamp: m2[1], speaker: undefined, text: m2[2] })
       continue
     }
     if (raw.startsWith('#')) {
-      lines.push({ type: 'heading', raw })
+      lines.push({ type: 'heading', raw, lineIdx })
     } else {
-      lines.push({ type: 'other', raw })
+      lines.push({ type: 'other', raw, lineIdx })
     }
   }
   return lines
@@ -154,7 +157,7 @@ export default function SessionView() {
   const [targetTimestamp, setTargetTimestamp] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
   const sessionContentRef = useRef<HTMLDivElement | null>(null)
-  const savedScrollRef = useRef<number>(0)
+  const anchorLineIdxRef = useRef<number | null>(null)
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [shareToken, setShareToken] = useState<string | null>(null)
   const [shareCreating, setShareCreating] = useState(false)
@@ -267,13 +270,13 @@ export default function SessionView() {
     }
   }, [tab])
 
-  // Restore scroll position when toggling edit mode
+  // After toggling edit mode, scroll the anchor line into view
   useEffect(() => {
-    const el = sessionContentRef.current
-    if (!el) return
-    // Use rAF to wait for the DOM to repaint after mode switch
+    const idx = anchorLineIdxRef.current
+    if (idx === null) return
     const frame = requestAnimationFrame(() => {
-      el.scrollTop = savedScrollRef.current
+      const el = sessionContentRef.current?.querySelector(`[data-line-idx="${idx}"]`) as HTMLElement | null
+      if (el) el.scrollIntoView({ block: 'start', behavior: 'instant' })
     })
     return () => cancelAnimationFrame(frame)
   }, [editMode])
@@ -753,8 +756,20 @@ export default function SessionView() {
             {transcript && (
               <button
                 onClick={() => {
+                  // Find the topmost visible line element to use as scroll anchor
                   if (sessionContentRef.current) {
-                    savedScrollRef.current = sessionContentRef.current.scrollTop
+                    const container = sessionContentRef.current
+                    const containerTop = container.getBoundingClientRect().top
+                    const lineEls = container.querySelectorAll('[data-line-idx]')
+                    let bestIdx: number | null = null
+                    for (const el of Array.from(lineEls)) {
+                      const rect = el.getBoundingClientRect()
+                      if (rect.bottom > containerTop + 4) {
+                        bestIdx = parseInt((el as HTMLElement).dataset.lineIdx ?? '-1', 10)
+                        break
+                      }
+                    }
+                    anchorLineIdxRef.current = bestIdx
                   }
                   setEditMode(m => !m)
                 }}
@@ -973,12 +988,14 @@ function TranscriptView({
     return idx
   }, [visibleLines, currentTime])
 
-  // Scroll active line into view (must be at top level — not after an early return)
+  // Scroll active line into view — suppressed in edit mode to prevent audio controls
+  // from hijacking scroll or blurring the active text input
   useEffect(() => {
+    if (editMode) return
     const el = activeLineRef.current
     if (!el) return
     el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [activeIdx])
+  }, [activeIdx, editMode])
 
   // Initialize editedLines when entering edit mode
   useEffect(() => {
@@ -1130,6 +1147,7 @@ function TranscriptView({
           return (
             <div
               key={lineIdx}
+              data-line-idx={lineIdx}
               onMouseEnter={() => setHoveredLineIdx(lineIdx)}
               onMouseLeave={() => setHoveredLineIdx(null)}
               style={{
@@ -1293,7 +1311,7 @@ function TranscriptView({
 
         if (line.type === 'heading') {
           return (
-            <h2 key={i} style={{ fontSize: '15px', fontWeight: 700, color: '#e2e8f0', margin: '16px 0 8px' }}>
+            <h2 key={i} data-line-idx={line.lineIdx ?? i} style={{ fontSize: '15px', fontWeight: 700, color: '#e2e8f0', margin: '16px 0 8px' }}>
               {line.raw.replace(/^#+\s*/, '')}
             </h2>
           )
@@ -1304,6 +1322,7 @@ function TranscriptView({
           return (
             <div
               key={i}
+              data-line-idx={line.lineIdx ?? i}
               ref={el => {
                 if (isActive) activeLineRef.current = el
                 if (isTarget) targetLineRef.current = el
