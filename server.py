@@ -2188,6 +2188,16 @@ def campaign_merge_session(
         else:
             raise HTTPException(404, "No transcript or speaker data found to merge")
 
+        for filename in ("summary.md", "wiki_suggestions.md", "wiki.md"):
+            path = session_dir / filename
+            if path.exists():
+                text = path.read_text(encoding="utf-8")
+                if config.get("corrections"):
+                    text = apply_corrections(text, config["corrections"])
+                if config.get("patterns"):
+                    text = apply_patterns(text, config["patterns"])
+                path.write_text(text, encoding="utf-8")
+
         return {"lines": result.count("\n"), "chars": len(result)}
     except HTTPException:
         raise
