@@ -190,42 +190,50 @@ def poll_loop(config: dict, stop_event: threading.Event):
 
 # ─── Analysis poll loop ──────────────────────────────────────────────────────
 
-ANALYZE_SESSION_MD = Path(__file__).parent.parent / "ANALYZE_SESSION.md"
+ANALYZE_SESSION_MD = Path.home() / ".openclaw" / "workspace" / "ANALYZE_SESSION.md"
+CAMPAIGN_VAULT = Path.home() / ".openclaw" / "workspace" / "campaign-vault"
 
 def run_analysis(transcript: str, config: dict, notes: str = "") -> tuple[str, str]:
     """
-    Send transcript to OpenClaw gateway via /v1/chat/completions.
+    Run analysis via `claude -p` with ANALYZE_SESSION.md as the system prompt.
+    Runs from /tmp so no CLAUDE.md is auto-loaded. Vault path passed explicitly.
     Returns (summary, wiki) strings split on the first ## [1] wiki block.
     """
     if not ANALYZE_SESSION_MD.exists():
         raise RuntimeError(f"ANALYZE_SESSION.md not found at {ANALYZE_SESSION_MD}")
 
     system_prompt = ANALYZE_SESSION_MD.read_text(encoding="utf-8")
+    # Patch the vault path reference so the agent can find it by absolute path
+    system_prompt = system_prompt.replace(
+        "../campaign-vault/", str(CAMPAIGN_VAULT) + "/"
+    )
 
     message = transcript
     if notes and notes.strip():
         message = f"## DM Notes for this session\n{notes.strip()}\n\n---\n\n{transcript}"
 
-    wrapper = Path(__file__).parent / "_analyze_runner.py"
     result = subprocess.run(
-        [sys.executable, str(wrapper)],
+        ["claude", "-p",
+         "--system-prompt", system_prompt,
+         "--no-session-persistence",
+         "--output-format", "text"],
         input=message,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=None,  # let stderr flow to worker's console so errors are visible
         text=True,
-        timeout=300,
-        env={**os.environ, "OPENCLAW_SYSTEM_PROMPT": system_prompt},
+        timeout=600,
+        cwd="/tmp",
     )
 
     if result.returncode != 0:
-        raise RuntimeError(f"analysis failed (code {result.returncode}): {result.stderr[:500]}")
+        raise RuntimeError(f"claude -p failed (code {result.returncode})")
 
     full_text = result.stdout.strip()
     if not full_text:
-        raise RuntimeError("analysis returned empty output")
+        raise RuntimeError("claude -p returned empty output")
 
     # Split on first ## [1] wiki block
-    import re as _re
-    wiki_marker = _re.search(r'^## \[1\]', full_text, _re.MULTILINE)
+    wiki_marker = re.search(r'^## \[1\]', full_text, re.MULTILINE)
     if wiki_marker:
         summary = full_text[:wiki_marker.start()].strip()
         wiki = full_text[wiki_marker.start():].strip()
