@@ -605,12 +605,21 @@ def merge_session(name: str):
 
     config = load_config()
     try:
-        from merge import save_transcript
+        from merge import save_transcript, apply_corrections, apply_patterns
         result = save_transcript(
             str(session_dir),
             corrections=config.get("corrections"),
             patterns=config.get("patterns"),
         )
+        for filename in ("summary.md", "wiki_suggestions.md", "wiki.md"):
+            path = session_dir / filename
+            if path.exists():
+                text = path.read_text(encoding="utf-8")
+                if config.get("corrections"):
+                    text = apply_corrections(text, config["corrections"])
+                if config.get("patterns"):
+                    text = apply_patterns(text, config["patterns"])
+                path.write_text(text, encoding="utf-8")
         return {"lines": result.count("\n"), "chars": len(result)}
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -722,12 +731,21 @@ def _merge_all_thread(campaign_slug: Optional[str] = None):
     for session_name in sessions_to_process:
         log_queue.put(f"  [{session_name}] merging...")
         try:
-            from merge import save_transcript
+            from merge import save_transcript, apply_corrections, apply_patterns
             save_transcript(
                 str(sessions_dir / session_name),
                 corrections=config.get("corrections"),
                 patterns=config.get("patterns"),
             )
+            for filename in ("summary.md", "wiki_suggestions.md", "wiki.md"):
+                path = sessions_dir / session_name / filename
+                if path.exists():
+                    text = path.read_text(encoding="utf-8")
+                    if config.get("corrections"):
+                        text = apply_corrections(text, config["corrections"])
+                    if config.get("patterns"):
+                        text = apply_patterns(text, config["patterns"])
+                    path.write_text(text, encoding="utf-8")
             processed.append(session_name)
             log_queue.put(f"  ✓ {session_name}")
         except Exception as e:
