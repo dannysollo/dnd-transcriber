@@ -46,10 +46,13 @@ def notify_claude(session_dir: Path, session_id: str):
     transcript_path = session_dir.resolve() / "transcript.md"
     context_path = Path(__file__).parent.resolve() / "ANALYZE_SESSION.md"
 
+    instructions = context_path.read_text(encoding="utf-8").strip()
+    transcript = transcript_path.read_text(encoding="utf-8").strip()
+
     message = (
-        f"D&D session transcript is ready. "
-        f"Please read {context_path} for instructions, "
-        f"then analyze the transcript at {transcript_path}."
+        f"D&D session transcript is ready for analysis.\n\n"
+        f"## Instructions\n\n{instructions}\n\n"
+        f"## Transcript\n\n{transcript}"
     )
 
     print("\nPinging Claude via OpenClaw...")

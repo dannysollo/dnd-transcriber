@@ -336,6 +336,14 @@ export default function CampaignSettingsPage() {
                   setVaultTesting(true)
                   setVaultTestResult(null)
                   try {
+                    // Save the current vault URL before testing so the server has the latest value
+                    await fetch(`/campaigns/${campaign?.slug}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        settings: { ...campaign?.settings, vault_repo_url: vaultRepoUrl || null },
+                      }),
+                    })
                     const r = await fetch(`/campaigns/${campaign?.slug}/vault/test`, { method: 'POST' })
                     const data = await r.json()
                     setVaultTestResult(data)
