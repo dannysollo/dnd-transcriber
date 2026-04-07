@@ -15,6 +15,7 @@ interface Campaign {
     discord_webhook_url?: string | null
     discord_channel_id?: string | null
     vault_repo_url?: string | null
+    vault_github_token?: string | null
   }
 }
 
@@ -62,6 +63,7 @@ export default function CampaignSettingsPage() {
   const [webhookUrl, setWebhookUrl] = useState('')
   const [channelId, setChannelId] = useState('')
   const [vaultRepoUrl, setVaultRepoUrl] = useState('')
+  const [vaultGithubToken, setVaultGithubToken] = useState('')
   const [vaultTesting, setVaultTesting] = useState(false)
   const [vaultTestResult, setVaultTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [saving, setSaving] = useState(false)
@@ -96,6 +98,7 @@ export default function CampaignSettingsPage() {
         setWebhookUrl(c.settings?.discord_webhook_url ?? '')
         setChannelId(c.settings?.discord_channel_id ?? '')
         setVaultRepoUrl(c.settings?.vault_repo_url ?? '')
+        setVaultGithubToken(c.settings?.vault_github_token ?? '')
       }
       if (mResp.ok) {
         const ms = await mResp.json()
@@ -227,6 +230,7 @@ export default function CampaignSettingsPage() {
             discord_webhook_url: webhookUrl || null,
             discord_channel_id: channelId || null,
             vault_repo_url: vaultRepoUrl || null,
+            vault_github_token: vaultGithubToken || null,
           },
         }),
       })
@@ -341,7 +345,7 @@ export default function CampaignSettingsPage() {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        settings: { ...campaign?.settings, vault_repo_url: vaultRepoUrl || null },
+                        settings: { ...campaign?.settings, vault_repo_url: vaultRepoUrl || null, vault_github_token: vaultGithubToken || null },
                       }),
                     })
                     const r = await fetch(`/campaigns/${campaign?.slug}/vault/test`, { method: 'POST' })
@@ -369,7 +373,20 @@ export default function CampaignSettingsPage() {
               )}
             </div>
             <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
-              Wiki edits will be committed and pushed to this repo. Requires <code>GITHUB_TOKEN</code> set as a Fly secret.
+              Wiki edits will be committed and pushed to this repo.
+            </div>
+          </Field>
+          <Field label="GitHub Token (for vault repo)">
+            <input
+              type="password"
+              value={vaultGithubToken}
+              onChange={e => setVaultGithubToken(e.target.value)}
+              style={inputStyle}
+              placeholder="ghp_xxxxxxxxxxxx"
+              autoComplete="off"
+            />
+            <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
+              Personal access token with repo write access. Stored per-campaign — each user can provide their own.
             </div>
           </Field>
           <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '13px', color: '#94a3b8' }}>

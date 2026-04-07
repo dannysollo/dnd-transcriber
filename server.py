@@ -1238,7 +1238,9 @@ def get_campaign(
     if not campaign:
         raise HTTPException(404, "Campaign not found")
     merged_settings = dict(campaign.settings or {})
-    merged_settings["vault_repo_url"] = load_config(slug).get("vault_repo_url")
+    cfg = load_config(slug)
+    merged_settings["vault_repo_url"] = cfg.get("vault_repo_url")
+    merged_settings["vault_github_token"] = cfg.get("vault_github_token")
     return {
         "id": campaign.id,
         "slug": campaign.slug,
@@ -1268,20 +1270,30 @@ def patch_campaign(
     if not campaign:
         raise HTTPException(404, "Campaign not found")
     kwargs = {k: v for k, v in body.model_dump().items() if v is not None}
-    # Save vault_repo_url to config.yaml instead of DB so it's file-editable
-    if "settings" in kwargs and isinstance(kwargs["settings"], dict) and "vault_repo_url" in kwargs["settings"]:
-        cfg = load_config(slug)
-        vault_repo_url = kwargs["settings"].pop("vault_repo_url")
-        if vault_repo_url:
-            cfg["vault_repo_url"] = vault_repo_url
-        else:
-            cfg.pop("vault_repo_url", None)
-        save_config(cfg, slug)
+    # Save vault_repo_url and vault_github_token to config.yaml instead of DB so it's file-editable
+    if "settings" in kwargs and isinstance(kwargs["settings"], dict):
+        settings_dict = kwargs["settings"]
+        if "vault_repo_url" in settings_dict or "vault_github_token" in settings_dict:
+            cfg = load_config(slug)
+            if "vault_repo_url" in settings_dict:
+                vault_repo_url = settings_dict.pop("vault_repo_url")
+                if vault_repo_url:
+                    cfg["vault_repo_url"] = vault_repo_url
+                else:
+                    cfg.pop("vault_repo_url", None)
+            if "vault_github_token" in settings_dict:
+                vault_github_token = settings_dict.pop("vault_github_token")
+                if vault_github_token:
+                    cfg["vault_github_token"] = vault_github_token
+                else:
+                    cfg.pop("vault_github_token", None)
+            save_config(cfg, slug)
     campaign = crud.update_campaign(db, campaign, **kwargs)
-    # Merge vault_repo_url from config into returned settings for the UI
+    # Merge vault fields from config into returned settings for the UI
     cfg = load_config(slug)
     merged_settings = dict(campaign.settings or {})
     merged_settings["vault_repo_url"] = cfg.get("vault_repo_url")
+    merged_settings["vault_github_token"] = cfg.get("vault_github_token")
     return {
         "id": campaign.id,
         "slug": campaign.slug,
@@ -1912,7 +1924,8 @@ def campaign_apply_wiki(
     # ── Vault sync: clone or pull repo if vault_repo_url is set ───────────
     campaign_config = load_config(slug)
     vault_repo_url = campaign_config.get("vault_repo_url")
-    github_token = os.environ.get("GITHUB_TOKEN")
+    # Use per-campaign token if set, fall back to global env token
+    github_token = campaign_config.get("vault_github_token") or os.environ.get("GITHUB_TOKEN")
 
     if vault_repo_url:
         # Inject token into HTTPS URL for auth
@@ -2869,11 +2882,13 @@ def test_vault_connection(
     campaign = crud.get_campaign_by_slug(db, slug)
     if not campaign:
         raise HTTPException(404, "Campaign not found")
-    vault_repo_url = load_config(slug).get("vault_repo_url")
+    cfg = load_config(slug)
+    vault_repo_url = cfg.get("vault_repo_url")
     if not vault_repo_url:
         raise HTTPException(400, "No vault_repo_url configured for this campaign")
 
-    github_token = os.environ.get("GITHUB_TOKEN")
+    # Use per-campaign token if set, fall back to global env token
+    github_token = cfg.get("vault_github_token") or os.environ.get("GITHUB_TOKEN")
     if github_token and vault_repo_url.startswith("https://"):
         authed_url = vault_repo_url.replace("https://", f"https://{github_token}@")
     else:
