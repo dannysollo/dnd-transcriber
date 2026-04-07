@@ -1237,6 +1237,8 @@ def get_campaign(
     campaign = crud.get_campaign_by_slug(db, slug)
     if not campaign:
         raise HTTPException(404, "Campaign not found")
+    merged_settings = dict(campaign.settings or {})
+    merged_settings["vault_repo_url"] = load_config(slug).get("vault_repo_url")
     return {
         "id": campaign.id,
         "slug": campaign.slug,
@@ -1244,7 +1246,7 @@ def get_campaign(
         "description": campaign.description,
         "owner_id": campaign.owner_id,
         "data_path": campaign.data_path,
-        "settings": campaign.settings,
+        "settings": merged_settings,
         "created_at": campaign.created_at.isoformat(),
     }
 
@@ -1266,13 +1268,26 @@ def patch_campaign(
     if not campaign:
         raise HTTPException(404, "Campaign not found")
     kwargs = {k: v for k, v in body.model_dump().items() if v is not None}
+    # Save vault_repo_url to config.yaml instead of DB so it's file-editable
+    if "settings" in kwargs and isinstance(kwargs["settings"], dict) and "vault_repo_url" in kwargs["settings"]:
+        cfg = load_config(slug)
+        vault_repo_url = kwargs["settings"].pop("vault_repo_url")
+        if vault_repo_url:
+            cfg["vault_repo_url"] = vault_repo_url
+        else:
+            cfg.pop("vault_repo_url", None)
+        save_config(cfg, slug)
     campaign = crud.update_campaign(db, campaign, **kwargs)
+    # Merge vault_repo_url from config into returned settings for the UI
+    cfg = load_config(slug)
+    merged_settings = dict(campaign.settings or {})
+    merged_settings["vault_repo_url"] = cfg.get("vault_repo_url")
     return {
         "id": campaign.id,
         "slug": campaign.slug,
         "name": campaign.name,
         "description": campaign.description,
-        "settings": campaign.settings,
+        "settings": merged_settings,
     }
 
 
@@ -1895,8 +1910,8 @@ def campaign_apply_wiki(
         raise HTTPException(404, "Session not found")
 
     # ── Vault sync: clone or pull repo if vault_repo_url is set ───────────
-    campaign = crud.get_campaign_by_slug(db, slug)
-    vault_repo_url = (campaign.settings or {}).get("vault_repo_url") if campaign else None
+    campaign_config = load_config(slug)
+    vault_repo_url = campaign_config.get("vault_repo_url")
     github_token = os.environ.get("GITHUB_TOKEN")
 
     if vault_repo_url:
@@ -1923,7 +1938,6 @@ def campaign_apply_wiki(
 
         # Write a temp config pointing to the synced vault
         import tempfile
-        campaign_config = load_config(slug)
         campaign_config["vault_path"] = str(vault_dir)
         tmp_config = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
         import yaml as _yaml
@@ -2855,7 +2869,7 @@ def test_vault_connection(
     campaign = crud.get_campaign_by_slug(db, slug)
     if not campaign:
         raise HTTPException(404, "Campaign not found")
-    vault_repo_url = (campaign.settings or {}).get("vault_repo_url")
+    vault_repo_url = load_config(slug).get("vault_repo_url")
     if not vault_repo_url:
         raise HTTPException(400, "No vault_repo_url configured for this campaign")
 
