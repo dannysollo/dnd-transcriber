@@ -490,6 +490,10 @@ def main():
 
     config = load_config(args.config)
 
+    # Set HF_TOKEN from config so faster-whisper can download models
+    if config.get("hf_token"):
+        os.environ.setdefault("HF_TOKEN", config["hf_token"])
+
     print("=" * 60)
     print("DnD Transcriber Worker")
     print(f"  Server:   {config['server_url']}")
