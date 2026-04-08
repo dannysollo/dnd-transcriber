@@ -23,13 +23,6 @@ interface TranscriptionJob {
   error_message: string | null
 }
 
-const statusColors: Record<string, { bg: string; text: string; label: string }> = {
-  complete:       { bg: 'rgba(34,197,94,0.15)',   text: '#4ade80', label: 'Complete' },
-  has_transcript: { bg: 'rgba(124,108,252,0.15)', text: '#a78bfa', label: 'Has transcript' },
-  transcribed:    { bg: 'rgba(59,130,246,0.15)',  text: '#60a5fa', label: 'Transcribed' },
-  has_audio:      { bg: 'rgba(251,191,36,0.15)',  text: '#fbbf24', label: 'Has audio' },
-  empty:          { bg: 'rgba(100,116,139,0.15)', text: '#64748b', label: 'Empty' },
-}
 
 function relativeTime(iso: string | null): string {
   if (!iso) return ''
@@ -383,7 +376,6 @@ export default function SessionsPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {sortedSessions.map(s => {
-            const sc = statusColors[s.status] || statusColors.empty
             const isRenaming = renamingSession === s.name
             const isDragOver = dragOverSession === s.name
             const isUploading = uploadingFor === s.name
@@ -470,7 +462,7 @@ export default function SessionsPage() {
                       }}
                     />
                   ) : (
-                    <div onClick={() => navigate(`/sessions/${s.name}`)} style={{ cursor: 'pointer' }}>
+                    <div onClick={() => navigate(`/sessions/${s.name}`)} style={{ cursor: 'pointer', minWidth: 0, overflow: 'hidden' }}>
                       <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>
                       {(sortKey === 'date_added' ? s.created_at : s.modified_at) && (
                         <div style={{ fontSize: '11px', color: '#334155', marginTop: 2 }}>
@@ -494,19 +486,9 @@ export default function SessionsPage() {
                 {/* Badges row */}
                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', minWidth: 0 }}>
                   {s.has_transcript && <Badge label="transcript" />}
-                  {s.has_summary && <Badge label="summary" />}
-                  {s.has_wiki && <Badge label="wiki" />}
 
-                  {/* Status badge */}
-                  <div style={{
-                    background: sc.bg, color: sc.text, borderRadius: '20px',
-                    padding: '3px 10px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
-                  }}>
-                    {sc.label}
-                  </div>
-
-                  {/* Job status badge */}
-                  {job && <JobStatusBadge job={job} onCancel={() => cancelJob(s.name)} />}
+                  {/* Job status badge — hide when done (transcript badge covers it) */}
+                  {job && job.status !== 'done' && <JobStatusBadge job={job} onCancel={() => cancelJob(s.name)} />}
                 </div>
 
                 {/* Actions row */}
