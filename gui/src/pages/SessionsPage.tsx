@@ -448,11 +448,12 @@ export default function SessionsPage() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '12px',
+                  overflow: 'hidden',
                   transition: 'border-color 0.15s, box-shadow 0.15s',
                 }}
               >
                 {/* Name / rename */}
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   {isRenaming ? (
                     <input
                       autoFocus
@@ -470,7 +471,7 @@ export default function SessionsPage() {
                     />
                   ) : (
                     <div onClick={() => navigate(`/sessions/${s.name}`)} style={{ cursor: 'pointer' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0' }}>{s.name}</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>
                       {(sortKey === 'date_added' ? s.created_at : s.modified_at) && (
                         <div style={{ fontSize: '11px', color: '#334155', marginTop: 2 }}>
                           {sortKey === 'date_added' ? 'Added' : 'Modified'} {relativeTime(sortKey === 'date_added' ? s.created_at : s.modified_at)}
@@ -488,10 +489,10 @@ export default function SessionsPage() {
                 )}
 
                 {/* Right side: badges + actions — stacks on mobile */}
-                <div className="session-row-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                <div className="session-row-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', minWidth: 0, flexShrink: 1 }}>
 
                 {/* Badges row */}
-                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', minWidth: 0 }}>
                   {s.has_transcript && <Badge label="transcript" />}
                   {s.has_summary && <Badge label="summary" />}
                   {s.has_wiki && <Badge label="wiki" />}
