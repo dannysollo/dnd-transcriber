@@ -12,7 +12,7 @@ def load_whisper_model(model_name: str):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     compute_type = "int8_float16" if device == "cuda" else "int8"
     print(f"Loading Whisper model: {model_name} on {device} ({compute_type})...")
-    model = WhisperModel(model_name, device=device, compute_type=compute_type)
+    model = WhisperModel(model_name, device=device, compute_type=compute_type, cpu_threads=4, num_workers=1)
     print("Model loaded.")
     return model
 
