@@ -282,8 +282,9 @@ export default function SessionsPage() {
 
   return (
     <div className="page-content" style={{ padding: '32px', maxWidth: '900px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: '24px' }}>
+        {/* Row 1: Title + campaign name */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>
             Sessions
             {!loading && sessions.length > 0 && (
@@ -292,11 +293,13 @@ export default function SessionsPage() {
               </span>
             )}
           </h1>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
+          <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
             {activeCampaign ? activeCampaign.name : 'All recording sessions'}
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+
+        {/* Row 2: Sort buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           {(['name', 'date_added', 'modified'] as SortKey[]).map(k => (
             <button
               key={k}
@@ -314,6 +317,7 @@ export default function SessionsPage() {
           ))}
         </div>
 
+        {/* Row 3: New session input */}
         {(!authEnabled || (isLoggedIn && activeCampaign != null)) && (
           <div style={{ display: 'flex', gap: '8px' }}>
             <input
@@ -324,7 +328,7 @@ export default function SessionsPage() {
               placeholder="2026-03-15"
               style={{
                 background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '8px',
-                color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', width: '160px', outline: 'none',
+                color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', flex: 1, outline: 'none',
               }}
             />
             <button
@@ -333,7 +337,7 @@ export default function SessionsPage() {
               style={{
                 background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
                 padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                opacity: (creating || !newName.trim()) ? 0.5 : 1,
+                opacity: (creating || !newName.trim()) ? 0.5 : 1, whiteSpace: 'nowrap',
               }}
             >
               + New
