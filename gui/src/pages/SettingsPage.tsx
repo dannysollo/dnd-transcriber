@@ -132,7 +132,7 @@ export default function SettingsPage() {
             onChange={e => updateField('whisper_model', e.target.value)}
             style={selectStyle}
           >
-            {['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3', 'turbo'].map(m => (
+            {['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3', 'turbo', 'distil-large-v3'].map(m => (
               <option key={m} value={m}>{m}</option>
             ))}
           </select>

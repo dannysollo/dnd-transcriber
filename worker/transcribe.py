@@ -118,11 +118,34 @@ def apply_vad(wav_path: str) -> str:
 
 
 def load_whisper_model(model_name: str):
-    import whisper
-    print(f"Loading Whisper model: {model_name}...")
-    model = whisper.load_model(model_name)
+    from faster_whisper import WhisperModel
+    import torch
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    compute_type = "float16" if device == "cuda" else "int8"
+    print(f"Loading Whisper model: {model_name} on {device} ({compute_type})...")
+    model = WhisperModel(model_name, device=device, compute_type=compute_type)
     print("Model loaded.")
     return model
+
+
+def transcribe_audio(model, wav_path: str, **kwargs) -> dict:
+    """
+    Thin adapter around faster-whisper's transcribe() that returns the same
+    dict format as openai-whisper: {"segments": [{start, end, text, words?}, ...]}
+    """
+    kwargs.pop("verbose", None)  # faster-whisper doesn't accept this param
+
+    segments_gen, _info = model.transcribe(wav_path, **kwargs)
+    segments = []
+    for seg in segments_gen:
+        seg_dict = {"start": seg.start, "end": seg.end, "text": seg.text}
+        if seg.words:
+            seg_dict["words"] = [
+                {"start": w.start, "end": w.end, "word": w.word}
+                for w in seg.words
+            ]
+        segments.append(seg_dict)
+    return {"segments": segments}
 
 
 # ─── Per-speaker transcription ────────────────────────────────────────────────
@@ -209,12 +232,12 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
                     continue
 
         # ── Standard single-speaker Whisper path ─────────────────────────────
-        result = model.transcribe(
+        result = transcribe_audio(
+            model,
             wav_path,
             language="en",
             initial_prompt=vocab_prompt if vocab_prompt else None,
             word_timestamps=True,
-            verbose=False,
             condition_on_previous_text=False,
             no_speech_threshold=0.6,
             compression_ratio_threshold=2.4,

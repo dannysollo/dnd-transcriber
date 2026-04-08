@@ -25,6 +25,8 @@ import json
 import tempfile
 from pathlib import Path
 
+from transcribe import transcribe_audio
+
 try:
     import torch
     import torchaudio
@@ -187,12 +189,12 @@ def transcribe_with_diarization(
         label = speaker_map.get(seg["speaker"], base_speaker)
         seg_wav = extract_segment_audio(wav_path, seg["start"], seg["end"])
         try:
-            result = whisper_model.transcribe(
+            result = transcribe_audio(
+                whisper_model,
                 seg_wav,
                 language="en",
                 initial_prompt=vocab_prompt if vocab_prompt else None,
                 word_timestamps=True,
-                verbose=False,
                 condition_on_previous_text=False,
                 no_speech_threshold=0.6,
                 compression_ratio_threshold=2.4,
