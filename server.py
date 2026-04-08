@@ -2232,6 +2232,31 @@ def campaign_merge_session(
         raise HTTPException(500, str(e))
 
 
+@app.post("/campaigns/{slug}/sessions/{name}/transcript/import")
+async def campaign_import_transcript(
+    slug: str,
+    name: str,
+    file: UploadFile = File(...),
+    _member=Depends(require_campaign_member("dm")),
+):
+    """Replace transcript.md with an uploaded markdown file. Backs up the existing file first."""
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    transcript_path = session_dir / "transcript.md"
+    # Back up existing transcript before overwriting
+    if transcript_path.exists():
+        backup_path = session_dir / "transcript.md.bak"
+        shutil.copy2(transcript_path, backup_path)
+    content = await file.read()
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(400, "File must be UTF-8 encoded markdown")
+    transcript_path.write_text(text, encoding="utf-8")
+    return {"ok": True, "lines": text.count("\n"), "chars": len(text)}
+
+
 @app.post("/campaigns/{slug}/sessions/{name}/import-corrections")
 def campaign_import_corrections(
     slug: str,

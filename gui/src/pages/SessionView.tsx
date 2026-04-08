@@ -174,10 +174,53 @@ export default function SessionView() {
   const [generateDone, setGenerateDone] = useState(false)
   const [analysisNotes, setAnalysisNotes] = useState<string>('')
   const [notesSaving, setNotesSaving] = useState(false)
+  const [importingTranscript, setImportingTranscript] = useState(false)
+  const importInputRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const pendingSeekRef = useRef<number | null>(null)
   const dragCounter = useRef(0)
   const speakerColors = new Map<string, string>()
+
+  const handleDownloadTranscript = () => {
+    if (!transcript) return
+    const blob = new Blob([transcript], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${name}-transcript.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportTranscript = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.name.endsWith('.md') && !file.name.endsWith('.txt')) {
+      toast('Please select a .md or .txt file', 'error')
+      return
+    }
+    setImportingTranscript(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const r = await fetch(apiUrl(`/sessions/${name}/transcript/import`), { method: 'POST', body: form })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ detail: 'Upload failed' }))
+        toast(err.detail ?? 'Import failed', 'error')
+        return
+      }
+      const data = await r.json()
+      toast(`Transcript imported — ${data.lines} lines`, 'success')
+      load()
+      setChangesLoaded(false)
+      setChangesReport(null)
+    } catch (_) {
+      toast('Import failed', 'error')
+    } finally {
+      setImportingTranscript(false)
+      if (importInputRef.current) importInputRef.current.value = ''
+    }
+  }
 
   const load = async () => {
     setLoading(true)
@@ -789,6 +832,50 @@ export default function SessionView() {
                 {editMode ? 'Exit Edit' : 'Edit Transcript'}
               </button>
             )}
+            {transcript && (
+              <button
+                onClick={handleDownloadTranscript}
+                title="Download transcript as markdown"
+                style={{
+                  background: 'transparent',
+                  border: '1px solid #2a2d3a',
+                  borderRadius: '8px',
+                  color: '#64748b',
+                  padding: '6px 10px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  lineHeight: 1,
+                }}
+              >
+                ⬇️
+              </button>
+            )}
+            <label
+              title="Import transcript from markdown file"
+              style={{
+                background: 'transparent',
+                border: '1px solid #2a2d3a',
+                borderRadius: '8px',
+                color: importingTranscript ? '#fbbf24' : '#64748b',
+                padding: '6px 10px',
+                fontSize: '14px',
+                cursor: 'pointer',
+                flexShrink: 0,
+                lineHeight: 1,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              {importingTranscript ? '⏳' : '⬆️'}
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".md,.txt"
+                style={{ display: 'none' }}
+                onChange={handleImportTranscript}
+              />
+            </label>
           </div>
         )}
       </div>
