@@ -452,6 +452,15 @@ export default function CampaignSettingsPage() {
                     description="Zeros out silence before Whisper — reduces hallucinations"
                   />
                 </ConfigField>
+                <ConfigField label="Vocabulary Prompt">
+                  <textarea
+                    value={config.vocab_prompt || ''}
+                    onChange={e => updateConfigField('vocab_prompt', e.target.value)}
+                    placeholder="Character names, spell names, locations, proper nouns… (improves transcription accuracy)"
+                    rows={4}
+                    style={{ ...configInputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                  />
+                </ConfigField>
               </ConfigSection>
 
               {/* Players */}
