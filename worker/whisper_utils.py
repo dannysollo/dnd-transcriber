@@ -20,18 +20,28 @@ def load_whisper_model(model_name: str):
 def transcribe_audio(model, wav_path: str, **kwargs) -> dict:
     """
     Thin adapter around faster-whisper's transcribe() that returns the same
-    dict format as openai-whisper: {"segments": [{start, end, text, words?}, ...]}
+    dict format as openai-whisper: {"segments": [{start, end, text}, ...]}
     """
     kwargs.pop("verbose", None)  # faster-whisper doesn't accept this param
+    kwargs.pop("word_timestamps", None)  # unused downstream; doubles processing time
+
+    import soundfile as sf
+    try:
+        info = sf.info(wav_path)
+        duration = info.duration
+    except Exception:
+        duration = None
 
     segments_gen, _info = model.transcribe(wav_path, **kwargs)
     segments = []
+    last_print_pct = -1
     for seg in segments_gen:
-        seg_dict = {"start": seg.start, "end": seg.end, "text": seg.text}
-        if seg.words:
-            seg_dict["words"] = [
-                {"start": w.start, "end": w.end, "word": w.word}
-                for w in seg.words
-            ]
-        segments.append(seg_dict)
+        segments.append({"start": seg.start, "end": seg.end, "text": seg.text})
+        if duration and duration > 0:
+            pct = int((seg.end / duration) * 100)
+            pct = min(pct, 100)
+            milestone = (pct // 10) * 10
+            if milestone > last_print_pct:
+                print(f"      transcription {milestone}% ({seg.end:.0f}s / {duration:.0f}s)")
+                last_print_pct = milestone
     return {"segments": segments}
