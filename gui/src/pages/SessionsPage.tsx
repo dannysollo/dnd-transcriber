@@ -487,28 +487,28 @@ export default function SessionsPage() {
                   </span>
                 )}
 
-                {/* Right side: badges + actions — wraps on mobile */}
-                <div className="session-row-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end', flexShrink: 0 }}>
+                {/* Right side: badges + actions — stacks on mobile */}
+                <div className="session-row-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
 
-                {/* File badges */}
-                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                {/* Badges row */}
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
                   {s.has_transcript && <Badge label="transcript" />}
                   {s.has_summary && <Badge label="summary" />}
                   {s.has_wiki && <Badge label="wiki" />}
+
+                  {/* Status badge */}
+                  <div style={{
+                    background: sc.bg, color: sc.text, borderRadius: '20px',
+                    padding: '3px 10px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
+                  }}>
+                    {sc.label}
+                  </div>
+
+                  {/* Job status badge */}
+                  {job && <JobStatusBadge job={job} onCancel={() => cancelJob(s.name)} />}
                 </div>
 
-                {/* Status badge */}
-                <div style={{
-                  background: sc.bg, color: sc.text, borderRadius: '20px',
-                  padding: '3px 10px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
-                }}>
-                  {sc.label}
-                </div>
-
-                {/* Job status badge */}
-                {job && <JobStatusBadge job={job} onCancel={() => cancelJob(s.name)} />}
-
-                {/* Actions */}
+                {/* Actions row */}
                 <div style={{ display: 'flex', gap: '6px' }}>
                   {(!authEnabled || isLoggedIn) && (
                     <ActionBtn
