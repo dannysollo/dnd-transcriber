@@ -255,7 +255,7 @@ export default function CorrectionsPage() {
           ) : activeTab === 'corrections' ? (
             <>
               {/* Add form */}
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="corrections-add-row" style={{ display: 'flex', gap: '8px' }}>
                 <input
                   value={newWrong}
                   onChange={e => setNewWrong(e.target.value)}
@@ -620,6 +620,7 @@ const inputStyle: React.CSSProperties = {
   fontSize: '12px',
   outline: 'none',
   flex: 1,
+  minWidth: 0,
 }
 
 const addBtnStyle: React.CSSProperties = {

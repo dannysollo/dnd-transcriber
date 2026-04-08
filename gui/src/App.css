@@ -120,6 +120,17 @@
     grid-template-columns: 1fr !important;
   }
 
+  /* Corrections add-form row: wrap inputs on small screens */
+  .corrections-add-row {
+    flex-wrap: wrap !important;
+  }
+
+  /* Corrections: constrain textarea width */
+  .corrections-grid textarea {
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+  }
+
   /* Session row right side: allow wrapping */
   .session-row-right {
     flex-wrap: wrap !important;
