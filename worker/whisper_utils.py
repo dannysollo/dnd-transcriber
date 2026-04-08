@@ -53,13 +53,45 @@ def load_whisper_model(model_name: str):
     return model
 
 
+
+# Known Whisper hallucination phrases (YouTube/podcast training artifacts).
+# Segments whose stripped text exactly matches one of these are silently dropped.
+_HALLUCINATION_PHRASES = {
+    "thank you for watching",
+    "thanks for watching",
+    "thank you for watching!",
+    "thanks for watching!",
+    "please like and subscribe",
+    "don't forget to subscribe",
+    "subscribe to the channel",
+    "like and subscribe",
+    "see you in the next video",
+    "see you next time",
+    "thanks for listening",
+    "thank you for listening",
+}
+
+# Segments where faster-whisper's no_speech_prob exceeds this threshold are
+# dropped as likely silence/noise rather than real speech.
+_NO_SPEECH_THRESHOLD = 0.6
+
+
 def transcribe_audio(model, wav_path: str, **kwargs) -> dict:
     """
     Thin adapter around faster-whisper's transcribe() that returns the same
     dict format as openai-whisper: {"segments": [{start, end, text}, ...]}
+
+    Hallucination mitigations applied automatically:
+    - condition_on_previous_text=False (prevent cascade hallucinations)
+    - Segments with no_speech_prob > _NO_SPEECH_THRESHOLD are dropped
+    - Known YouTube/podcast hallucination phrases are stripped
     """
     kwargs.pop("verbose", None)  # faster-whisper doesn't accept this param
     kwargs.pop("word_timestamps", None)  # unused downstream; doubles processing time
+
+    # Disable previous-text conditioning by default — this stops one hallucination
+    # from priming the next chunk to hallucinate too.
+    kwargs.setdefault("condition_on_previous_text", False)
 
     import soundfile as sf
     try:
@@ -70,8 +102,18 @@ def transcribe_audio(model, wav_path: str, **kwargs) -> dict:
 
     segments_gen, _info = model.transcribe(wav_path, **kwargs)
     segments = []
+    dropped = 0
     last_print_pct = -1
     for seg in segments_gen:
+        # Drop silent/noise segments
+        if seg.no_speech_prob > _NO_SPEECH_THRESHOLD:
+            dropped += 1
+            continue
+        # Drop known hallucination phrases
+        if seg.text.strip().lower().rstrip("!.,") in _HALLUCINATION_PHRASES or \
+                seg.text.strip().lower() in _HALLUCINATION_PHRASES:
+            dropped += 1
+            continue
         segments.append({"start": seg.start, "end": seg.end, "text": seg.text})
         if duration and duration > 0:
             pct = int((seg.end / duration) * 100)
@@ -80,4 +122,6 @@ def transcribe_audio(model, wav_path: str, **kwargs) -> dict:
             if milestone > last_print_pct:
                 print(f"      transcription {milestone}% ({seg.end:.0f}s / {duration:.0f}s)")
                 last_print_pct = milestone
+    if dropped:
+        print(f"      dropped {dropped} hallucinated/silent segment(s)")
     return {"segments": segments}
