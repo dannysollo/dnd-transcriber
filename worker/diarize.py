@@ -25,7 +25,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from transcribe import transcribe_audio
+from whisper_utils import transcribe_audio
 
 try:
     import torch
