@@ -6,13 +6,49 @@ transcribe.py (which imports diarize) and diarize.py (which needs these helpers)
 """
 
 
+def _resolve_model_path(model_name: str) -> str:
+    """
+    Resolve a faster-whisper model name to its local HuggingFace cache path.
+
+    WhisperModel(model_name) makes a network request to HuggingFace even when
+    the model is already cached, which hangs in restricted-network environments
+    (e.g. WSL2 with blocked outbound connections).  By walking the cache
+    directory directly we get the snapshot path instantly with zero I/O.
+    """
+    import os
+    import glob
+
+    hf_cache = os.path.expanduser("~/.cache/huggingface/hub")
+
+    # faster-whisper stores models as Systran/faster-whisper-<name>
+    # distil models are Systran/faster-distil-whisper-<suffix>
+    candidates = [
+        f"models--Systran--faster-whisper-{model_name}",
+        f"models--Systran--faster-{model_name}",
+    ]
+
+    for candidate in candidates:
+        snapshots_dir = os.path.join(hf_cache, candidate, "snapshots")
+        if os.path.isdir(snapshots_dir):
+            snaps = sorted(os.listdir(snapshots_dir))
+            if snaps:
+                resolved = os.path.join(snapshots_dir, snaps[-1])
+                print(f"  resolved {model_name!r} → {resolved}")
+                return resolved
+
+    # Model not in cache — return the name and let faster-whisper download it
+    print(f"  {model_name!r} not found in cache, will download")
+    return model_name
+
+
 def load_whisper_model(model_name: str):
     from faster_whisper import WhisperModel
     import torch
     device = "cuda" if torch.cuda.is_available() else "cpu"
     compute_type = "int8_float16" if device == "cuda" else "int8"
     print(f"Loading Whisper model: {model_name} on {device} ({compute_type})...")
-    model = WhisperModel(model_name, device=device, compute_type=compute_type, cpu_threads=4, num_workers=1)
+    model_path = _resolve_model_path(model_name)
+    model = WhisperModel(model_path, device=device, compute_type=compute_type, cpu_threads=4, num_workers=1)
     print("Model loaded.")
     return model
 
