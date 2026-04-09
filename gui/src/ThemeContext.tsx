@@ -140,7 +140,7 @@ function applyTheme(t: ThemeDefinition, f: FontDefinition) {
   root.style.setProperty('--error', '#f87171')
   root.style.setProperty('--warning', '#fbbf24')
   root.style.setProperty('--font-heading', f.family)
-  root.style.setProperty('--font-body', "'Inter', system-ui, sans-serif")
+  root.style.setProperty('--font-body', f.family)
 }
 
 // Simple helper to lighten a hex color by adding brightness
