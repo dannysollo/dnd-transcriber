@@ -86,6 +86,7 @@
   }
 
   .sidebar-user { display: none !important; }
+  .nav-shortcut-hint { display: none !important; }
 
   .app-main {
     flex: 1 1 0 !important;

@@ -278,7 +278,7 @@ export default function App() {
               <Icon />
               <span style={{ flex: 1 }}>{label}</span>
               {to === '/search' && (
-                <span style={{ fontSize: '10px', color: '#334155', fontFamily: 'monospace' }}>⌘K</span>
+                <span className="nav-shortcut-hint" style={{ fontSize: '10px', color: '#334155', fontFamily: 'monospace' }}>⌘K</span>
               )}
             </NavLink>
           ))}
