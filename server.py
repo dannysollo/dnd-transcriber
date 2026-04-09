@@ -1795,6 +1795,34 @@ def campaign_put_analysis_notes(
     return {"ok": True}
 
 
+@app.get("/campaigns/{slug}/sessions/{name}/description")
+def campaign_get_description(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    path = get_sessions_dir(slug) / name / "description.md"
+    return {"content": path.read_text(encoding="utf-8") if path.exists() else None}
+
+
+class DescriptionBody(BaseModel):
+    content: str
+
+
+@app.put("/campaigns/{slug}/sessions/{name}/description")
+def campaign_put_description(
+    slug: str,
+    name: str,
+    body: DescriptionBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    (session_dir / "description.md").write_text(body.content.strip(), encoding="utf-8")
+    return {"ok": True}
+
+
 @app.get("/campaigns/{slug}/sessions/{name}/wiki")
 def campaign_get_wiki(
     slug: str,
@@ -3056,6 +3084,7 @@ def worker_list_analysis_jobs(slug: str, db: Session = Depends(get_db), request:
 class AnalysisResultBody(BaseModel):
     summary: str = ""
     wiki: str = ""
+    description: str = ""
 
 @app.post("/campaigns/{slug}/worker/sessions/{name}/analysis-result")
 def worker_push_analysis_result(
@@ -3068,6 +3097,9 @@ def worker_push_analysis_result(
     if not session_dir.exists():
         raise HTTPException(404, "Session not found")
     wrote = []
+    if body.description.strip():
+        (session_dir / "description.md").write_text(body.description.strip(), encoding="utf-8")
+        wrote.append("description")
     if body.summary.strip():
         (session_dir / "summary.md").write_text(body.summary.strip(), encoding="utf-8")
         wrote.append("summary")

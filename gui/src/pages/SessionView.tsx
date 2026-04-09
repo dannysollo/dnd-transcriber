@@ -141,6 +141,9 @@ export default function SessionView() {
   const [transcript, setTranscript] = useState<string | null>(null)
   const [summary, setSummary] = useState<string | null>(null)
   const [wiki, setWiki] = useState<string | null>(null)
+  const [description, setDescription] = useState<string | null>(null)
+  const [editingDescription, setEditingDescription] = useState(false)
+  const [descriptionDraft, setDescriptionDraft] = useState('')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [merging, setMerging] = useState(false)
@@ -224,17 +227,35 @@ export default function SessionView() {
 
   const load = async () => {
     setLoading(true)
-    const [t, s, w, n] = await Promise.allSettled([
+    const [t, s, w, n, d] = await Promise.allSettled([
       fetch(apiUrl(`/sessions/${name}/transcript`)).then(r => r.ok ? r.json() : null),
       fetch(apiUrl(`/sessions/${name}/summary`)).then(r => r.ok ? r.json() : null),
       fetch(apiUrl(`/sessions/${name}/wiki`)).then(r => r.ok ? r.json() : null),
       fetch(apiUrl(`/sessions/${name}/analysis-notes`)).then(r => r.ok ? r.json() : null),
+      fetch(apiUrl(`/sessions/${name}/description`)).then(r => r.ok ? r.json() : null),
     ])
     setTranscript(t.status === 'fulfilled' && t.value ? t.value.content : null)
     setSummary(s.status === 'fulfilled' && s.value ? s.value.content : null)
     setWiki(w.status === 'fulfilled' && w.value ? w.value.content : null)
     if (n.status === 'fulfilled' && n.value) setAnalysisNotes(n.value.content ?? '')
+    const desc = d.status === 'fulfilled' && d.value ? d.value.content : null
+    setDescription(desc)
+    setDescriptionDraft(desc ?? '')
     setLoading(false)
+  }
+
+  const saveDescription = async (value: string) => {
+    try {
+      await fetch(apiUrl(`/sessions/${name}/description`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: value }),
+      })
+      setDescription(value.trim() || null)
+      setEditingDescription(false)
+    } catch (_) {
+      toast('Failed to save description', 'error')
+    }
   }
 
   const saveAnalysisNotes = async (value: string) => {
@@ -513,38 +534,39 @@ export default function SessionView() {
             fontWeight: 700,
             border: '1px solid rgba(124,108,252,0.4)',
           }}>
-            {uploadingAudio ? '⏳ Uploading...' : '🎵 Drop audio files or ZIP to import'}
+            {uploadingAudio ? 'Uploading...' : 'Drop audio files or ZIP to import'}
           </div>
         </div>
       )}
 
       {/* Header */}
       <div style={{
-        padding: '20px 28px',
+        padding: '16px 28px 12px',
         borderBottom: '1px solid var(--border-subtle)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
         flexShrink: 0,
       }}>
-        <button
-          onClick={() => navigate('/')}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: '#64748b',
-            cursor: 'pointer',
-            padding: '4px 8px',
-            fontSize: '13px',
-            borderRadius: '6px',
-          }}
-        >
-          ← Back
-        </button>
-        <div style={{ height: '16px', width: '1px', background: 'var(--border-default)' }} />
-        <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#e2e8f0' }}>{name}</h1>
-
-        <div style={{ flex: 1 }} />
+        {/* Top row: back, title, actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              padding: '4px 0',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              flexShrink: 0,
+            }}
+          >
+            ← Sessions
+          </button>
+          <div style={{ height: '14px', width: '1px', background: 'var(--border-default)', flexShrink: 0 }} />
+          <h1 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{name}</h1>
+          <div style={{ flex: 1 }} />
 
         <button
           onClick={async () => {
@@ -566,7 +588,7 @@ export default function SessionView() {
             cursor: 'pointer',
           }}
         >
-          🔗 Share
+          Share
         </button>
 
         <button
@@ -586,6 +608,68 @@ export default function SessionView() {
         >
           {merging ? 'Merging...' : 'Re-merge'}
         </button>
+        </div>{/* end top row */}
+
+        {/* Episode description row */}
+        {(description || editingDescription) ? (
+          <div style={{ marginTop: '10px', paddingLeft: '2px' }}>
+            {editingDescription ? (
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <textarea
+                  value={descriptionDraft}
+                  onChange={e => setDescriptionDraft(e.target.value)}
+                  rows={3}
+                  style={{
+                    flex: 1,
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: '8px',
+                    color: 'var(--text-primary)',
+                    padding: '8px 12px',
+                    fontSize: '13px',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                    lineHeight: 1.5,
+                    outline: 'none',
+                  }}
+                  autoFocus
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <button className="btn-primary" style={{ fontSize: '12px', padding: '6px 14px', whiteSpace: 'nowrap' }} onClick={() => saveDescription(descriptionDraft)}>Save</button>
+                  <button className="btn-ghost" style={{ fontSize: '12px', padding: '6px 14px' }} onClick={() => { setEditingDescription(false); setDescriptionDraft(description ?? '') }}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                <p style={{
+                  margin: 0,
+                  fontSize: '13px',
+                  color: 'var(--text-muted)',
+                  lineHeight: 1.6,
+                  fontStyle: 'italic',
+                  flex: 1,
+                }}>
+                  {description}
+                </p>
+                <button
+                  onClick={() => { setEditingDescription(true); setDescriptionDraft(description ?? '') }}
+                  className="btn-ghost"
+                  style={{ fontSize: '11px', padding: '3px 8px', flexShrink: 0 }}
+                  title="Edit description"
+                >
+                  Edit
+                </button>
+              </div>
+            )}
+          </div>
+        ) : summary ? (
+          <button
+            onClick={() => { setEditingDescription(true); setDescriptionDraft('') }}
+            style={{ marginTop: '8px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '12px', cursor: 'pointer', padding: '0', opacity: 0.6 }}
+          >
+            + Add episode description
+          </button>
+        ) : null}
       </div>
 
       {/* Share modal */}
@@ -602,7 +686,7 @@ export default function SessionView() {
             borderRadius: 14, padding: 28, width: 420, maxWidth: '90vw',
           }}>
             <h3 style={{ margin: '0 0 16px', color: '#e2e8f0', fontSize: 16, fontWeight: 700 }}>
-              🔗 Share Session
+              Share Session
             </h3>
 
             {!shareToken ? (
@@ -740,7 +824,7 @@ export default function SessionView() {
         borderBottom: '1px solid var(--border-subtle)',
         flexShrink: 0,
       }}>
-      <div style={{ display: 'flex', gap: 0, padding: '0 12px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+      <div style={{ display: 'flex', gap: 0, padding: '0 20px', overflowX: 'auto', scrollbarWidth: 'none' }}>
         {tabs.map(t => (
           <button
             key={t.id}
@@ -749,12 +833,13 @@ export default function SessionView() {
               background: 'transparent',
               border: 'none',
               borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-              color: tab === t.id ? 'var(--accent-text)' : '#64748b',
-              padding: '12px 14px',
+              color: tab === t.id ? 'var(--text-primary)' : 'var(--text-muted)',
+              padding: '11px 16px',
               fontSize: '13px',
+              letterSpacing: '0.01em',
               fontWeight: tab === t.id ? 600 : 400,
               cursor: 'pointer',
-              transition: 'all 0.15s',
+              transition: 'color 0.15s',
               whiteSpace: 'nowrap',
               flexShrink: 0,
             }}
@@ -836,38 +921,18 @@ export default function SessionView() {
               <button
                 onClick={handleDownloadTranscript}
                 title="Download transcript as markdown"
-                style={{
-                  background: 'transparent',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: '8px',
-                  color: '#64748b',
-                  padding: '6px 10px',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                  lineHeight: 1,
-                }}
+                className="btn-ghost"
+                style={{ fontSize: '12px', padding: '5px 12px', flexShrink: 0 }}
               >
-                ⬇️
+                Download
               </button>
             )}
             <label
               title="Import transcript from markdown file"
-              style={{
-                background: 'transparent',
-                border: '1px solid var(--border-default)',
-                borderRadius: '8px',
-                color: importingTranscript ? '#fbbf24' : '#64748b',
-                padding: '6px 10px',
-                fontSize: '14px',
-                cursor: 'pointer',
-                flexShrink: 0,
-                lineHeight: 1,
-                display: 'flex',
-                alignItems: 'center',
-              }}
+              className="btn-ghost"
+              style={{ fontSize: '12px', padding: '5px 12px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             >
-              {importingTranscript ? '⏳' : '⬆️'}
+              {importingTranscript ? 'Importing...' : 'Import'}
               <input
                 ref={importInputRef}
                 type="file"
@@ -1609,7 +1674,7 @@ function MarkdownEditView({
               color: '#64748b', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
             }}
           >
-            ✏️ Edit {endpoint === 'summary' ? 'Summary' : 'Wiki'}
+            Edit {endpoint === 'summary' ? 'Summary' : 'Wiki'}
           </button>
         ) : (
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -2267,7 +2332,7 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
                   style={{ background: 'transparent', border: 'none', color: '#475569', cursor: 'pointer', fontSize: '13px', opacity: 0.7 }}
                   title="Rename speaker"
                 >
-                  ✏️
+                  Rename
                 </button>
               )}
             </div>
@@ -2437,7 +2502,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
             color: '#64748b', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
           }}
         >
-          ✏️ Edit Wiki
+          Edit Wiki
         </button>
       ) : (
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

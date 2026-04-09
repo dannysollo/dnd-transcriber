@@ -81,11 +81,11 @@ class WorkerClient:
         r.raise_for_status()
         return r.json()
 
-    def push_analysis_result(self, session_name: str, summary: str, wiki: str) -> None:
+    def push_analysis_result(self, session_name: str, summary: str, wiki: str, description: str = "") -> None:
         r = requests.post(
             self._url(f"/worker/sessions/{session_name}/analysis-result"),
             headers=self.headers,
-            json={"summary": summary, "wiki": wiki},
+            json={"summary": summary, "wiki": wiki, "description": description},
             timeout=60,
         )
         r.raise_for_status()

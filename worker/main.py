@@ -193,7 +193,7 @@ def poll_loop(config: dict, stop_event: threading.Event):
 ANALYZE_SESSION_MD = Path.home() / ".openclaw" / "workspace" / "ANALYZE_SESSION.md"
 CAMPAIGN_VAULT = Path.home() / ".openclaw" / "workspace" / "campaign-vault"
 
-def run_analysis(transcript: str, config: dict, notes: str = "") -> tuple[str, str]:
+def run_analysis(transcript: str, config: dict, notes: str = "") -> tuple[str, str, str]:
     """
     Run analysis via `claude -p` with ANALYZE_SESSION.md as the system prompt.
     Runs from /tmp so no CLAUDE.md is auto-loaded. Vault path passed explicitly.
@@ -232,6 +232,14 @@ def run_analysis(transcript: str, config: dict, notes: str = "") -> tuple[str, s
     if not full_text:
         raise RuntimeError("claude -p returned empty output")
 
+    # Extract blurb block
+    blurb = ""
+    blurb_match = re.search(r'BLURB_START\s*(.*?)\s*BLURB_END', full_text, re.DOTALL)
+    if blurb_match:
+        blurb = blurb_match.group(1).strip()
+        # Remove blurb block from full_text before splitting summary/wiki
+        full_text = (full_text[:blurb_match.start()] + full_text[blurb_match.end():]).strip()
+
     # Split on first ## [1] wiki block
     wiki_marker = re.search(r'^## \[1\]', full_text, re.MULTILINE)
     if wiki_marker:
@@ -241,7 +249,7 @@ def run_analysis(transcript: str, config: dict, notes: str = "") -> tuple[str, s
         summary = full_text.strip()
         wiki = ""
 
-    return summary, wiki
+    return summary, wiki, blurb
 
 
 def analysis_poll_loop(config: dict, stop_event: threading.Event):
@@ -273,9 +281,10 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
             notes = job.get("notes", "")
             print(f"\n[analysis] [JOB] {session_name}" + (" (with notes)" if notes.strip() else ""))
             try:
-                summary, wiki = run_analysis(transcript, config, notes)
-                client.push_analysis_result(session_name, summary, wiki)
+                summary, wiki, blurb = run_analysis(transcript, config, notes)
+                client.push_analysis_result(session_name, summary, wiki, blurb)
                 parts = []
+                if blurb: parts.append("blurb")
                 if summary: parts.append("summary")
                 if wiki: parts.append("wiki")
                 print(f"[analysis]   [DONE] {session_name} — wrote: {', '.join(parts) or 'nothing'}")
@@ -284,7 +293,7 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
                 # Don't leave flag in place — remove so it doesn't loop forever
                 # (user can re-trigger from the UI)
                 try:
-                    client.push_analysis_result(session_name, "", "")
+                    client.push_analysis_result(session_name, "", "", "")
                 except Exception:
                     pass
 
