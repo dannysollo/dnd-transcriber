@@ -396,11 +396,8 @@ export default function CampaignSettingsPage() {
           <button
             onClick={saveSettings}
             disabled={saving}
-            style={{
-              background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
-              padding: '10px 20px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-              opacity: saving ? 0.6 : 1, alignSelf: 'flex-start',
-            }}
+            className="btn-primary"
+            style={{ alignSelf: 'flex-start' }}
           >
             {saving ? 'Saving...' : 'Save Settings'}
           </button>
@@ -416,11 +413,7 @@ export default function CampaignSettingsPage() {
             <button
               onClick={saveConfig}
               disabled={configSaving || !config}
-              style={{
-                background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
-                padding: '9px 20px', fontSize: '13px', fontWeight: 700,
-                cursor: (configSaving || !config) ? 'wait' : 'pointer',
-              }}
+              className="btn-primary"
             >
               {configSaving ? 'Saving...' : configSaved ? '✓ Saved' : 'Save'}
             </button>
@@ -564,10 +557,8 @@ export default function CampaignSettingsPage() {
                   {m.user_id !== user?.id && myRole === 'dm' && (
                     <button
                       onClick={() => removeMember(m.user_id)}
-                      style={{
-                        background: 'transparent', border: '1px solid rgba(248,113,113,0.3)',
-                        borderRadius: '6px', color: '#f87171', padding: '4px 10px', fontSize: '12px', cursor: 'pointer',
-                      }}
+                      className="btn-danger"
+                      style={{ padding: '4px 10px', fontSize: '12px', borderRadius: '6px' }}
                     >
                       Remove
                     </button>
@@ -614,11 +605,8 @@ export default function CampaignSettingsPage() {
                   <button
                     onClick={createInvite}
                     disabled={creatingInvite}
-                    style={{
-                      background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
-                      padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                      opacity: creatingInvite ? 0.6 : 1, alignSelf: 'flex-start',
-                    }}
+                    className="btn-primary"
+                    style={{ alignSelf: 'flex-start' }}
                   >
                     Generate Link
                   </button>
@@ -644,10 +632,8 @@ export default function CampaignSettingsPage() {
                         </div>
                         <button
                           onClick={() => copyInviteLink(i.token)}
-                          style={{
-                            background: 'var(--accent-muted)', border: '1px solid var(--accent-subtle)',
-                            borderRadius: '6px', color: 'var(--accent-text)', padding: '4px 12px', fontSize: '12px', cursor: 'pointer',
-                          }}
+                          className="btn-secondary"
+                          style={{ padding: '4px 12px', fontSize: '12px', borderRadius: '6px' }}
                         >
                           Copy Link
                         </button>
@@ -679,13 +665,15 @@ export default function CampaignSettingsPage() {
                 </code>
                 <button
                   onClick={() => setWorkerKeyVisible(v => !v)}
-                  style={{ background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '6px', color: '#64748b', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                  className="btn-ghost"
+                  style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px' }}
                 >
                   {workerKeyVisible ? 'Hide' : 'Show'}
                 </button>
                 <button
                   onClick={() => navigator.clipboard.writeText(workerKey).then(() => toast('Key copied!', 'success'))}
-                  style={{ background: 'rgba(124,108,252,0.1)', border: '1px solid rgba(124,108,252,0.3)', borderRadius: '6px', color: 'var(--accent-text)', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                  className="btn-secondary"
+                  style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px' }}
                 >
                   Copy
                 </button>
@@ -696,11 +684,8 @@ export default function CampaignSettingsPage() {
             <button
               onClick={generateWorkerKey}
               disabled={generatingKey}
-              style={{
-                background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
-                padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                opacity: generatingKey ? 0.6 : 1, alignSelf: 'flex-start',
-              }}
+              className="btn-primary"
+              style={{ alignSelf: 'flex-start' }}
             >
               {generatingKey ? 'Generating...' : workerKey ? 'Rotate Key' : 'Generate Key'}
             </button>

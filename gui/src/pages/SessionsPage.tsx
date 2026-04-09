@@ -334,11 +334,8 @@ export default function SessionsPage() {
             <button
               onClick={createSession}
               disabled={creating || !newName.trim()}
-              style={{
-                background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
-                padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                opacity: (creating || !newName.trim()) ? 0.5 : 1, whiteSpace: 'nowrap',
-              }}
+              className="btn-primary"
+              style={{ whiteSpace: 'nowrap' }}
             >
               + New
             </button>
@@ -389,36 +386,29 @@ export default function SessionsPage() {
               return (
                 <div
                   key={s.name}
+                  className="session-card"
                   style={{
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid rgba(248,113,113,0.4)',
-                    borderRadius: '10px',
+                    border: '1px solid rgba(239,68,68,0.4)',
                     padding: '14px 20px',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '12px',
                   }}
                 >
-                  <span style={{ flex: 1, fontSize: '14px', color: '#f87171' }}>
+                  <span style={{ flex: 1, fontSize: '14px', color: 'var(--danger)' }}>
                     Delete <strong>{s.name}</strong>?
                   </span>
                   <button
                     onClick={() => deleteSession(s.name)}
-                    style={{
-                      background: 'rgba(248,113,113,0.15)', border: '1px solid rgba(248,113,113,0.4)',
-                      borderRadius: '6px', color: '#f87171', padding: '5px 14px',
-                      fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                    }}
+                    className="btn-danger"
+                    style={{ padding: '5px 14px', fontSize: '13px', borderRadius: '6px' }}
                   >
                     Yes, delete
                   </button>
                   <button
                     onClick={() => setConfirmDelete(null)}
-                    style={{
-                      background: 'transparent', border: '1px solid var(--border-default)',
-                      borderRadius: '6px', color: '#94a3b8', padding: '5px 14px',
-                      fontSize: '13px', cursor: 'pointer',
-                    }}
+                    className="btn-ghost"
+                    style={{ padding: '5px 14px', fontSize: '13px', borderRadius: '6px' }}
                   >
                     Cancel
                   </button>
@@ -431,21 +421,20 @@ export default function SessionsPage() {
             return (
               <div
                 key={s.name}
+                className="session-card"
                 onDragEnter={e => handleDragEnter(e, s.name)}
                 onDragLeave={e => handleDragLeave(e, s.name)}
                 onDragOver={handleDragOver}
                 onDrop={e => handleDrop(e, s.name)}
                 style={{
-                  background: isDragOver ? 'rgba(124,108,252,0.06)' : 'var(--bg-elevated)',
-                  border: isDragOver ? '1px solid var(--accent)' : '1px solid var(--border-default)',
-                  boxShadow: isDragOver ? '0 0 0 2px rgba(124,108,252,0.25)' : 'none',
-                  borderRadius: '10px',
+                  background: isDragOver ? 'rgba(124,108,252,0.06)' : undefined,
+                  border: isDragOver ? '1px solid var(--accent)' : undefined,
+                  boxShadow: isDragOver ? '0 0 0 2px rgba(124,108,252,0.25)' : undefined,
                   padding: '14px 20px',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '12px',
                   overflow: 'hidden',
-                  transition: 'border-color 0.15s, box-shadow 0.15s',
                 }}
               >
                 {/* Name / rename */}

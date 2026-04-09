@@ -7,10 +7,12 @@ export interface ThemeDefinition {
   surface: string
   elevated: string
   overlay: string
+  card: string
   accent: string
   accentHover: string
   accentMuted: string
   accentText: string
+  danger: string
 }
 
 export interface FontDefinition {
@@ -27,10 +29,12 @@ export const themes: ThemeDefinition[] = [
     surface: '#13151f',
     elevated: '#191c2a',
     overlay: '#1e2130',
+    card: '#1b1e2e',
     accent: '#7c6cfc',
     accentHover: '#9d8fff',
     accentMuted: 'rgba(124,108,252,0.15)',
     accentText: '#a89cff',
+    danger: '#ef4444',
   },
   {
     id: 'crimson',
@@ -39,10 +43,12 @@ export const themes: ThemeDefinition[] = [
     surface: '#16100f',
     elevated: '#1c1411',
     overlay: '#221814',
+    card: '#1f1613',
     accent: '#c0392b',
     accentHover: '#e74c3c',
     accentMuted: 'rgba(192,57,43,0.15)',
     accentText: '#e8816f',
+    danger: '#ef4444',
   },
   {
     id: 'teal',
@@ -51,10 +57,12 @@ export const themes: ThemeDefinition[] = [
     surface: '#0d1a1a',
     elevated: '#112020',
     overlay: '#162626',
+    card: '#142424',
     accent: '#0d9488',
     accentHover: '#14b8a6',
     accentMuted: 'rgba(13,148,136,0.15)',
     accentText: '#2dd4bf',
+    danger: '#ef4444',
   },
   {
     id: 'gold',
@@ -63,10 +71,12 @@ export const themes: ThemeDefinition[] = [
     surface: '#1a1610',
     elevated: '#201c13',
     overlay: '#262116',
+    card: '#231f14',
     accent: '#c9a84c',
     accentHover: '#d4b866',
     accentMuted: 'rgba(201,168,76,0.15)',
     accentText: '#ddc97a',
+    danger: '#ef4444',
   },
   {
     id: 'amethyst',
@@ -75,10 +85,12 @@ export const themes: ThemeDefinition[] = [
     surface: '#10101e',
     elevated: '#151525',
     overlay: '#1a1a2e',
+    card: '#181828',
     accent: '#8b5cf6',
     accentHover: '#a78bfa',
     accentMuted: 'rgba(139,92,246,0.15)',
     accentText: '#c4b5fd',
+    danger: '#ef4444',
   },
   {
     id: 'midnight',
@@ -87,10 +99,12 @@ export const themes: ThemeDefinition[] = [
     surface: '#0d1424',
     elevated: '#101a2e',
     overlay: '#142038',
+    card: '#131c32',
     accent: '#3b82f6',
     accentHover: '#60a5fa',
     accentMuted: 'rgba(59,130,246,0.15)',
     accentText: '#93c5fd',
+    danger: '#ef4444',
   },
 ]
 
@@ -126,6 +140,7 @@ function applyTheme(t: ThemeDefinition, f: FontDefinition) {
   root.style.setProperty('--bg-surface', t.surface)
   root.style.setProperty('--bg-elevated', t.elevated)
   root.style.setProperty('--bg-overlay', t.overlay)
+  root.style.setProperty('--bg-card', t.card)
   root.style.setProperty('--border-subtle', t.overlay)
   root.style.setProperty('--border-default', adjustColor(t.overlay, 8))
   root.style.setProperty('--border-strong', adjustColor(t.overlay, 16))
@@ -139,6 +154,7 @@ function applyTheme(t: ThemeDefinition, f: FontDefinition) {
   root.style.setProperty('--success', '#4ade80')
   root.style.setProperty('--error', '#f87171')
   root.style.setProperty('--warning', '#fbbf24')
+  root.style.setProperty('--danger', t.danger)
   root.style.setProperty('--font-heading', f.family)
   root.style.setProperty('--font-body', f.family)
 }

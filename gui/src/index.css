@@ -6,6 +6,7 @@
   --bg-surface: #13151f;
   --bg-elevated: #191c2a;
   --bg-overlay: #1e2130;
+  --bg-card: #1b1e2e;
   --border-subtle: #1e2130;
   --border-default: #262936;
   --border-strong: #2e3142;
@@ -19,6 +20,7 @@
   --success: #4ade80;
   --error: #f87171;
   --warning: #fbbf24;
+  --danger: #ef4444;
   --font-heading: system-ui, sans-serif;
   --font-body: 'Inter', system-ui, sans-serif;
 }
@@ -49,6 +51,100 @@ h1, h2, h3, h4, h5, h6 {
 /* Global transitions */
 a, button {
   transition: all 0.15s ease;
+}
+
+/* ── Button hierarchy ───────────────────────────────────────────────────────── */
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--accent-text);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--accent-muted);
+}
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  background: rgba(239,68,68,0.15);
+  color: var(--danger);
+  border: 1px solid rgba(239,68,68,0.4);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(239,68,68,0.25);
+  border-color: var(--danger);
+}
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Session / content cards ────────────────────────────────────────────────── */
+.session-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transition: all 0.15s ease;
+}
+.session-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+  border-color: var(--border-strong);
 }
 
 /* Scrollbar */
