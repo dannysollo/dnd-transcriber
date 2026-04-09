@@ -41,6 +41,11 @@ body {
   box-sizing: border-box;
 }
 
+/* Apply heading font to all heading elements and prominent labels */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+
 /* Global transitions */
 a, button {
   transition: all 0.15s ease;
