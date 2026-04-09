@@ -47,7 +47,7 @@ export default function CampaignSettingsPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [invites, setInvites] = useState<Invite[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'settings' | 'config' | 'members' | 'invites' | 'worker'>('settings')
+  const [tab, setTab] = useState<'settings' | 'config' | 'people' | 'worker'>('settings')
   const apiUrl = useApiUrl()
 
   // Config tab state (mirrors SettingsPage)
@@ -295,7 +295,7 @@ export default function CampaignSettingsPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0' }}>
-        {(['settings', 'config', 'members', 'invites', ...(myRole === 'dm' ? ['worker'] : [])] as ('settings' | 'config' | 'members' | 'invites' | 'worker')[]).map(t => (
+        {(['settings', 'config', 'people', ...(myRole === 'dm' ? ['worker'] : [])] as ('settings' | 'config' | 'people' | 'worker')[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -524,50 +524,140 @@ export default function CampaignSettingsPage() {
         </div>
       )}
 
-      {tab === 'members' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {members.map(m => (
-            <div key={m.id} style={{
-              background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px',
-              padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px',
-            }}>
-              {m.avatar && (
-                <img
-                  src={`https://cdn.discordapp.com/avatars/${m.discord_id}/${m.avatar}.png?size=32`}
-                  style={{ width: 32, height: 32, borderRadius: '50%' }}
-                  alt=""
-                />
-              )}
-              <div style={{ flex: 1, fontSize: '14px', color: '#e2e8f0', fontWeight: 500 }}>
-                {m.username}
-              </div>
-              <select
-                value={m.role}
-                onChange={e => changeRole(m.user_id, e.target.value)}
-                disabled={m.user_id === user?.id || myRole !== 'dm'}
-                style={{
-                  background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: '6px',
-                  color: '#94a3b8', padding: '4px 8px', fontSize: '12px',
-                  opacity: myRole !== 'dm' ? 0.5 : 1,
-                }}
-              >
-                <option value="spectator">Spectator</option>
-                <option value="player">Player</option>
-                <option value="dm">DM</option>
-              </select>
-              {m.user_id !== user?.id && myRole === 'dm' && (
-                <button
-                  onClick={() => removeMember(m.user_id)}
-                  style={{
-                    background: 'transparent', border: '1px solid rgba(248,113,113,0.3)',
-                    borderRadius: '6px', color: '#f87171', padding: '4px 10px', fontSize: '12px', cursor: 'pointer',
-                  }}
-                >
-                  Remove
-                </button>
-              )}
+      {tab === 'people' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Members */}
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+              Members
             </div>
-          ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {members.map(m => (
+                <div key={m.id} style={{
+                  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px',
+                  padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px',
+                }}>
+                  {m.avatar && (
+                    <img
+                      src={`https://cdn.discordapp.com/avatars/${m.discord_id}/${m.avatar}.png?size=32`}
+                      style={{ width: 32, height: 32, borderRadius: '50%' }}
+                      alt=""
+                    />
+                  )}
+                  <div style={{ flex: 1, fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                    {m.username}
+                  </div>
+                  <select
+                    value={m.role}
+                    onChange={e => changeRole(m.user_id, e.target.value)}
+                    disabled={m.user_id === user?.id || myRole !== 'dm'}
+                    style={{
+                      background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: '6px',
+                      color: 'var(--text-secondary)', padding: '4px 8px', fontSize: '12px',
+                      opacity: myRole !== 'dm' ? 0.5 : 1,
+                    }}
+                  >
+                    <option value="spectator">Spectator</option>
+                    <option value="player">Player</option>
+                    <option value="dm">DM</option>
+                  </select>
+                  {m.user_id !== user?.id && myRole === 'dm' && (
+                    <button
+                      onClick={() => removeMember(m.user_id)}
+                      style={{
+                        background: 'transparent', border: '1px solid rgba(248,113,113,0.3)',
+                        borderRadius: '6px', color: '#f87171', padding: '4px 10px', fontSize: '12px', cursor: 'pointer',
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Invites */}
+          {myRole === 'dm' && (
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+                Invite Links
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Create invite form */}
+                <div style={{
+                  background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px',
+                  padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px',
+                }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Create Invite Link</div>
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <Field label="Role to grant">
+                      <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ ...inputStyle, width: 'auto' }}>
+                        <option value="spectator">Spectator</option>
+                        <option value="player">Player</option>
+                        <option value="dm">DM</option>
+                      </select>
+                    </Field>
+                    <Field label="Expires in (days, optional)">
+                      <input
+                        type="number" value={inviteDays} onChange={e => setInviteDays(e.target.value)}
+                        placeholder="Never" style={{ ...inputStyle, width: '120px' }} min="1"
+                      />
+                    </Field>
+                    <Field label="Max uses (optional)">
+                      <input
+                        type="number" value={inviteMaxUses} onChange={e => setInviteMaxUses(e.target.value)}
+                        placeholder="Unlimited" style={{ ...inputStyle, width: '120px' }} min="1"
+                      />
+                    </Field>
+                  </div>
+                  <button
+                    onClick={createInvite}
+                    disabled={creatingInvite}
+                    style={{
+                      background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
+                      padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                      opacity: creatingInvite ? 0.6 : 1, alignSelf: 'flex-start',
+                    }}
+                  >
+                    Generate Link
+                  </button>
+                </div>
+
+                {/* Invite list */}
+                {invites.length === 0 ? (
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No invite links yet.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {invites.map(i => (
+                      <div key={i.id} style={{
+                        background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px',
+                        padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px',
+                      }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--accent-text)' }}>{i.token}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            Role: <strong style={{ color: 'var(--text-secondary)' }}>{i.role}</strong>
+                            {' · '}Uses: {i.use_count}{i.max_uses ? `/${i.max_uses}` : ''}
+                            {i.expires_at && ` · Expires: ${new Date(i.expires_at).toLocaleDateString()}`}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => copyInviteLink(i.token)}
+                          style={{
+                            background: 'var(--accent-muted)', border: '1px solid var(--accent-subtle)',
+                            borderRadius: '6px', color: 'var(--accent-text)', padding: '4px 12px', fontSize: '12px', cursor: 'pointer',
+                          }}
+                        >
+                          Copy Link
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -625,81 +715,6 @@ export default function CampaignSettingsPage() {
         </div>
       )}
 
-      {tab === 'invites' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Create invite form */}
-          <div style={{
-            background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px',
-            padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px',
-          }}>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0' }}>Create Invite Link</div>
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              <Field label="Role to grant">
-                <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ ...inputStyle, width: 'auto' }}>
-                  <option value="spectator">Spectator</option>
-                  <option value="player">Player</option>
-                  <option value="dm">DM</option>
-                </select>
-              </Field>
-              <Field label="Expires in (days, optional)">
-                <input
-                  type="number" value={inviteDays} onChange={e => setInviteDays(e.target.value)}
-                  placeholder="Never" style={{ ...inputStyle, width: '120px' }} min="1"
-                />
-              </Field>
-              <Field label="Max uses (optional)">
-                <input
-                  type="number" value={inviteMaxUses} onChange={e => setInviteMaxUses(e.target.value)}
-                  placeholder="Unlimited" style={{ ...inputStyle, width: '120px' }} min="1"
-                />
-              </Field>
-            </div>
-            <button
-              onClick={createInvite}
-              disabled={creatingInvite}
-              style={{
-                background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
-                padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                opacity: creatingInvite ? 0.6 : 1, alignSelf: 'flex-start',
-              }}
-            >
-              Generate Link
-            </button>
-          </div>
-
-          {/* Invite list */}
-          {invites.length === 0 ? (
-            <div style={{ fontSize: '13px', color: '#64748b' }}>No invite links yet.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {invites.map(i => (
-                <div key={i.id} style={{
-                  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px',
-                  padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px',
-                }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--accent-text)' }}>{i.token}</div>
-                    <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>
-                      Role: <strong style={{ color: '#94a3b8' }}>{i.role}</strong>
-                      {' · '}Uses: {i.use_count}{i.max_uses ? `/${i.max_uses}` : ''}
-                      {i.expires_at && ` · Expires: ${new Date(i.expires_at).toLocaleDateString()}`}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => copyInviteLink(i.token)}
-                    style={{
-                      background: 'rgba(124,108,252,0.1)', border: '1px solid rgba(124,108,252,0.3)',
-                      borderRadius: '6px', color: 'var(--accent-text)', padding: '4px 12px', fontSize: '12px', cursor: 'pointer',
-                    }}
-                  >
-                    Copy Link
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }
