@@ -124,4 +124,9 @@ def transcribe_audio(model, wav_path: str, **kwargs) -> dict:
                 last_print_pct = milestone
     if dropped:
         print(f"      dropped {dropped} hallucinated/silent segment(s)")
+
+    # Sort by start time — faster-whisper's overlapping 30s chunks can produce
+    # minor out-of-order segments at chunk boundaries.
+    segments.sort(key=lambda s: s["start"])
+
     return {"segments": segments}
