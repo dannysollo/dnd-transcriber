@@ -294,7 +294,7 @@ export default function CampaignSettingsPage() {
       <div style={{ fontSize: '12px', color: '#475569', marginBottom: '24px' }}>/{campaign.slug}</div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid #1e2130', paddingBottom: '0' }}>
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0' }}>
         {(['settings', 'config', 'members', 'invites', ...(myRole === 'dm' ? ['worker'] : [])] as ('settings' | 'config' | 'members' | 'invites' | 'worker')[]).map(t => (
           <button
             key={t}
@@ -302,8 +302,8 @@ export default function CampaignSettingsPage() {
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               padding: '8px 16px', fontSize: '13px', fontWeight: 600,
-              color: tab === t ? '#a89cff' : '#64748b',
-              borderBottom: tab === t ? '2px solid #7c6cfc' : '2px solid transparent',
+              color: tab === t ? 'var(--accent-text)' : '#64748b',
+              borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
               marginBottom: '-1px',
               textTransform: 'capitalize',
             }}
@@ -397,7 +397,7 @@ export default function CampaignSettingsPage() {
             onClick={saveSettings}
             disabled={saving}
             style={{
-              background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
+              background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
               padding: '10px 20px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
               opacity: saving ? 0.6 : 1, alignSelf: 'flex-start',
             }}
@@ -417,7 +417,7 @@ export default function CampaignSettingsPage() {
               onClick={saveConfig}
               disabled={configSaving || !config}
               style={{
-                background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
+                background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
                 padding: '9px 20px', fontSize: '13px', fontWeight: 700,
                 cursor: (configSaving || !config) ? 'wait' : 'pointer',
               }}
@@ -476,8 +476,8 @@ export default function CampaignSettingsPage() {
                   {Object.entries(config.players || {}).map(([username, info]: [string, any]) => (
                     <div key={username} style={{
                       display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 80px 32px',
-                      gap: '8px', padding: '8px', background: '#13151f',
-                      border: '1px solid #2a2d3a', borderRadius: '8px', alignItems: 'center',
+                      gap: '8px', padding: '8px', background: 'var(--bg-surface)',
+                      border: '1px solid var(--border-default)', borderRadius: '8px', alignItems: 'center',
                     }}>
                       <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{username}</span>
                       <input
@@ -511,7 +511,7 @@ export default function CampaignSettingsPage() {
                   <button
                     onClick={addConfigPlayer}
                     style={{
-                      background: 'transparent', border: '1px dashed #2a2d3a', borderRadius: '8px',
+                      background: 'transparent', border: '1px dashed var(--border-default)', borderRadius: '8px',
                       color: '#475569', padding: '8px', fontSize: '12px', cursor: 'pointer', textAlign: 'center',
                     }}
                   >
@@ -528,7 +528,7 @@ export default function CampaignSettingsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {members.map(m => (
             <div key={m.id} style={{
-              background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '10px',
+              background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px',
               padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px',
             }}>
               {m.avatar && (
@@ -546,7 +546,7 @@ export default function CampaignSettingsPage() {
                 onChange={e => changeRole(m.user_id, e.target.value)}
                 disabled={m.user_id === user?.id || myRole !== 'dm'}
                 style={{
-                  background: '#0f1117', border: '1px solid #2a2d3a', borderRadius: '6px',
+                  background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: '6px',
                   color: '#94a3b8', padding: '4px 8px', fontSize: '12px',
                   opacity: myRole !== 'dm' ? 0.5 : 1,
                 }}
@@ -574,28 +574,28 @@ export default function CampaignSettingsPage() {
       {tab === 'worker' && myRole === 'dm' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '540px' }}>
           <div style={{ fontSize: '13px', color: '#94a3b8', lineHeight: '1.5' }}>
-            Install the worker package on the transcription machine, then paste this key into <code style={{ background: '#1a1d27', padding: '1px 5px', borderRadius: '4px' }}>worker.yaml</code>.
+            Install the worker package on the transcription machine, then paste this key into <code style={{ background: 'var(--bg-elevated)', padding: '1px 5px', borderRadius: '4px' }}>worker.yaml</code>.
           </div>
-          <div style={{ background: '#13151f', border: '1px solid #2a2d3a', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0' }}>Worker API Key</div>
             {workerKey ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <code style={{
-                  flex: 1, background: '#0f1117', border: '1px solid #2a2d3a', borderRadius: '6px',
-                  padding: '8px 12px', fontSize: '12px', color: '#a89cff', fontFamily: 'monospace',
+                  flex: 1, background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: '6px',
+                  padding: '8px 12px', fontSize: '12px', color: 'var(--accent-text)', fontFamily: 'monospace',
                   overflowX: 'auto', whiteSpace: 'nowrap',
                 }}>
                   {workerKeyVisible ? workerKey : '•'.repeat(32)}
                 </code>
                 <button
                   onClick={() => setWorkerKeyVisible(v => !v)}
-                  style={{ background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '6px', color: '#64748b', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                  style={{ background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '6px', color: '#64748b', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
                 >
                   {workerKeyVisible ? 'Hide' : 'Show'}
                 </button>
                 <button
                   onClick={() => navigator.clipboard.writeText(workerKey).then(() => toast('Key copied!', 'success'))}
-                  style={{ background: 'rgba(124,108,252,0.1)', border: '1px solid rgba(124,108,252,0.3)', borderRadius: '6px', color: '#a89cff', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                  style={{ background: 'rgba(124,108,252,0.1)', border: '1px solid rgba(124,108,252,0.3)', borderRadius: '6px', color: 'var(--accent-text)', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
                 >
                   Copy
                 </button>
@@ -607,7 +607,7 @@ export default function CampaignSettingsPage() {
               onClick={generateWorkerKey}
               disabled={generatingKey}
               style={{
-                background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
+                background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
                 padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                 opacity: generatingKey ? 0.6 : 1, alignSelf: 'flex-start',
               }}
@@ -629,7 +629,7 @@ export default function CampaignSettingsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Create invite form */}
           <div style={{
-            background: '#13151f', border: '1px solid #2a2d3a', borderRadius: '12px',
+            background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px',
             padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px',
           }}>
             <div style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0' }}>Create Invite Link</div>
@@ -658,7 +658,7 @@ export default function CampaignSettingsPage() {
               onClick={createInvite}
               disabled={creatingInvite}
               style={{
-                background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
+                background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
                 padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                 opacity: creatingInvite ? 0.6 : 1, alignSelf: 'flex-start',
               }}
@@ -674,11 +674,11 @@ export default function CampaignSettingsPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {invites.map(i => (
                 <div key={i.id} style={{
-                  background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '10px',
+                  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px',
                   padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px',
                 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '12px', fontFamily: 'monospace', color: '#a89cff' }}>{i.token}</div>
+                    <div style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--accent-text)' }}>{i.token}</div>
                     <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>
                       Role: <strong style={{ color: '#94a3b8' }}>{i.role}</strong>
                       {' · '}Uses: {i.use_count}{i.max_uses ? `/${i.max_uses}` : ''}
@@ -689,7 +689,7 @@ export default function CampaignSettingsPage() {
                     onClick={() => copyInviteLink(i.token)}
                     style={{
                       background: 'rgba(124,108,252,0.1)', border: '1px solid rgba(124,108,252,0.3)',
-                      borderRadius: '6px', color: '#a89cff', padding: '4px 12px', fontSize: '12px', cursor: 'pointer',
+                      borderRadius: '6px', color: 'var(--accent-text)', padding: '4px 12px', fontSize: '12px', cursor: 'pointer',
                     }}
                   >
                     Copy Link
@@ -705,7 +705,7 @@ export default function CampaignSettingsPage() {
 }
 
 const inputStyle: React.CSSProperties = {
-  background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '8px',
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '8px',
   color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', outline: 'none', width: '100%',
 }
 
@@ -726,7 +726,7 @@ function ConfigSection({ title, children }: { title: string; children: React.Rea
       <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
         {title}
       </div>
-      <div style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '10px', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px', overflow: 'hidden' }}>
         {children}
       </div>
     </div>
@@ -735,7 +735,7 @@ function ConfigSection({ title, children }: { title: string; children: React.Rea
 
 function ConfigField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderBottom: '1px solid #1e2130' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
       <label style={{ fontSize: '13px', color: '#94a3b8', width: '200px', flexShrink: 0 }}>{label}</label>
       <div style={{ flex: 1 }}>{children}</div>
     </div>
@@ -749,7 +749,7 @@ function ConfigToggle({ value, onChange, description }: { value: boolean; onChan
         onClick={() => onChange(!value)}
         style={{
           width: '40px', height: '22px', borderRadius: '11px',
-          background: value ? '#7c6cfc' : '#2a2d3a',
+          background: value ? 'var(--accent)' : 'var(--border-default)',
           border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s',
         }}
       >
@@ -765,11 +765,11 @@ function ConfigToggle({ value, onChange, description }: { value: boolean; onChan
 }
 
 const configInputStyle: React.CSSProperties = {
-  background: '#13151f', border: '1px solid #2a2d3a', borderRadius: '7px',
+  background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '7px',
   color: '#e2e8f0', padding: '7px 10px', fontSize: '13px', outline: 'none', width: '100%',
 }
 
 const configSelectStyle: React.CSSProperties = {
-  background: '#13151f', border: '1px solid #2a2d3a', borderRadius: '7px',
+  background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '7px',
   color: '#e2e8f0', padding: '7px 10px', fontSize: '13px', outline: 'none', width: '100%',
 }

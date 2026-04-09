@@ -66,7 +66,7 @@ export default function CampaignsPage() {
   if (authEnabled && !isLoggedIn) {
     return (
       <div style={{ padding: '32px', color: '#64748b' }}>
-        Please <a href="/auth/discord" style={{ color: '#7c6cfc' }}>log in</a> to view campaigns.
+        Please <a href="/auth/discord" style={{ color: 'var(--accent)' }}>log in</a> to view campaigns.
       </div>
     )
   }
@@ -83,7 +83,7 @@ export default function CampaignsPage() {
         <button
           onClick={() => setShowCreate(v => !v)}
           style={{
-            background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
+            background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
             padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
           }}
         >
@@ -93,7 +93,7 @@ export default function CampaignsPage() {
 
       {showCreate && (
         <div style={{
-          background: '#13151f', border: '1px solid #2a2d3a', borderRadius: '12px',
+          background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px',
           padding: '24px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '12px',
         }}>
           <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0' }}>New Campaign</div>
@@ -116,7 +116,7 @@ export default function CampaignsPage() {
               onClick={createCampaign}
               disabled={creating || !slug.trim() || !name.trim()}
               style={{
-                background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
+                background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
                 padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                 opacity: (creating || !slug.trim() || !name.trim()) ? 0.5 : 1,
               }}
@@ -126,7 +126,7 @@ export default function CampaignsPage() {
             <button
               onClick={() => setShowCreate(false)}
               style={{
-                background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '8px',
+                background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '8px',
                 color: '#94a3b8', padding: '8px 16px', fontSize: '13px', cursor: 'pointer',
               }}
             >
@@ -140,7 +140,7 @@ export default function CampaignsPage() {
         <div style={{ color: '#64748b', fontSize: '14px' }}>Loading...</div>
       ) : campaigns.length === 0 ? (
         <div style={{
-          background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '12px',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px',
           padding: '48px', textAlign: 'center', color: '#64748b',
         }}>
           No campaigns yet. Create one above.
@@ -151,12 +151,12 @@ export default function CampaignsPage() {
             <div
               key={c.id}
               style={{
-                background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '10px',
+                background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px',
                 padding: '16px 20px', transition: 'border-color 0.15s',
                 display: 'flex', alignItems: 'center', gap: '12px',
               }}
               onMouseEnter={e => (e.currentTarget.style.borderColor = '#3a3d4a')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = '#2a2d3a')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-default)')}
             >
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: '15px', fontWeight: 600, color: '#e2e8f0', marginBottom: 2 }}>{c.name}</div>
@@ -172,7 +172,7 @@ export default function CampaignsPage() {
                     <span style={{ fontSize: '11px', color: '#475569' }}>👥 {c.member_count} member{c.member_count !== 1 ? 's' : ''}</span>
                   )}
                   {c.role && (
-                    <span style={{ fontSize: '10px', color: '#475569', background: 'rgba(255,255,255,0.04)', border: '1px solid #2a2d3a', borderRadius: 4, padding: '1px 6px' }}>{c.role}</span>
+                    <span style={{ fontSize: '10px', color: '#475569', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-default)', borderRadius: 4, padding: '1px 6px' }}>{c.role}</span>
                   )}
                 </div>
               </div>
@@ -181,7 +181,7 @@ export default function CampaignsPage() {
                   onClick={() => navigate('/')}
                   style={{
                     background: 'rgba(124,108,252,0.1)', border: '1px solid rgba(124,108,252,0.25)',
-                    borderRadius: 7, color: '#a89cff', padding: '5px 12px', fontSize: '12px',
+                    borderRadius: 7, color: 'var(--accent-text)', padding: '5px 12px', fontSize: '12px',
                     fontWeight: 600, cursor: 'pointer',
                   }}
                 >
@@ -190,7 +190,7 @@ export default function CampaignsPage() {
                 <button
                   onClick={() => navigate(`/campaigns/${c.slug}/settings`)}
                   style={{
-                    background: 'transparent', border: '1px solid #2a2d3a',
+                    background: 'transparent', border: '1px solid var(--border-default)',
                     borderRadius: 7, color: '#64748b', padding: '5px 12px', fontSize: '12px',
                     cursor: 'pointer',
                   }}
@@ -207,7 +207,7 @@ export default function CampaignsPage() {
 }
 
 const inputStyle: React.CSSProperties = {
-  background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '8px',
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '8px',
   color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', outline: 'none', width: '100%',
 }
 

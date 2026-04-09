@@ -87,7 +87,7 @@ export default function PipelinePage() {
   const getLineColor = (line: string) => {
     if (line.startsWith('ERROR') || line.includes('✗') || line.includes('failed')) return '#f87171'
     if (line.includes('✓') || line.includes('complete') || line.includes('saved')) return '#4ade80'
-    if (line.startsWith('=') || line.startsWith('[')) return '#a89cff'
+    if (line.startsWith('=') || line.startsWith('[')) return 'var(--accent-text)'
     if (line.startsWith('  ')) return '#94a3b8'
     return '#cbd5e1'
   }
@@ -103,8 +103,8 @@ export default function PipelinePage() {
 
       {/* Controls */}
       <div style={{
-        background: '#1a1d27',
-        border: '1px solid #2a2d3a',
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border-default)',
         borderRadius: '12px',
         padding: '20px',
         display: 'flex',
@@ -120,8 +120,8 @@ export default function PipelinePage() {
             value={selectedSession}
             onChange={e => setSelectedSession(e.target.value)}
             style={{
-              background: '#13151f',
-              border: '1px solid #2a2d3a',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-default)',
               borderRadius: '8px',
               color: '#e2e8f0',
               padding: '8px 12px',
@@ -162,14 +162,14 @@ export default function PipelinePage() {
                   }}
                   style={{
                     background: active ? 'rgba(124,108,252,0.15)' : 'transparent',
-                    border: `1px solid ${active ? 'rgba(124,108,252,0.4)' : '#2a2d3a'}`,
+                    border: `1px solid ${active ? 'rgba(124,108,252,0.4)' : 'var(--border-default)'}`,
                     borderRadius: '8px',
                     padding: '10px 14px',
                     cursor: 'pointer',
                     textAlign: 'left',
                   }}
                 >
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: active ? '#a89cff' : '#e2e8f0' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: active ? 'var(--accent-text)' : '#e2e8f0' }}>
                     {opt.label}
                   </div>
                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{opt.desc}</div>
@@ -185,7 +185,7 @@ export default function PipelinePage() {
             onClick={run}
             disabled={running || !selectedSession}
             style={{
-              background: running ? '#2a2d3a' : '#7c6cfc',
+              background: running ? 'var(--border-default)' : 'var(--accent)',
               border: 'none',
               borderRadius: '8px',
               color: running ? '#64748b' : '#fff',
@@ -212,13 +212,13 @@ export default function PipelinePage() {
       {(logs.length > 0 || running) && (
         <div style={{
           background: '#0d0f18',
-          border: '1px solid #1e2130',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '12px',
           overflow: 'hidden',
         }}>
           <div style={{
             padding: '10px 16px',
-            borderBottom: '1px solid #1e2130',
+            borderBottom: '1px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
@@ -267,7 +267,7 @@ function Spinner({ size = 14 }: { size?: number }) {
       width: size,
       height: size,
       border: `2px solid rgba(124,108,252,0.3)`,
-      borderTopColor: '#7c6cfc',
+      borderTopColor: 'var(--accent)',
       borderRadius: '50%',
       animation: 'spin 0.7s linear infinite',
     }} />

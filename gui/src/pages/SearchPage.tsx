@@ -115,7 +115,7 @@ export default function SearchPage() {
               padding: '10px 20px',
               borderRadius: 8,
               border: 'none',
-              background: loading ? 'rgba(124,108,252,0.3)' : '#7c6cfc',
+              background: loading ? 'rgba(124,108,252,0.3)' : 'var(--accent)',
               color: '#fff',
               fontWeight: 600,
               fontSize: 14,
@@ -220,7 +220,7 @@ export default function SearchPage() {
                               style={{
                                 color: isMatch ? '#e2e8f0' : '#475569',
                                 background: isMatch ? 'rgba(124,108,252,0.08)' : 'transparent',
-                                borderLeft: isMatch ? '2px solid #7c6cfc' : '2px solid transparent',
+                                borderLeft: isMatch ? '2px solid var(--accent)' : '2px solid transparent',
                                 paddingLeft: 8,
                                 borderRadius: 2,
                               }}

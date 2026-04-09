@@ -145,7 +145,7 @@ function DiffView({ original, proposed }: { original: string; proposed: string }
   const diff = collapseLineDiff(fullDiff)
 
   return (
-    <div style={{ background: '#0d0f18', borderRadius: '6px', fontFamily: 'monospace', fontSize: '12px', overflow: 'hidden', border: '1px solid #1e2130' }}>
+    <div style={{ background: '#0d0f18', borderRadius: '6px', fontFamily: 'monospace', fontSize: '12px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
       {diff.map((line, i) => {
         if (line.type === 'separator') return (
           <div key={i} style={{ padding: '2px 12px', color: '#334155', background: 'rgba(255,255,255,0.02)', fontStyle: 'italic' }}>
@@ -306,7 +306,7 @@ export default function EditQueuePage() {
         <div style={{ color: '#64748b', fontSize: '14px' }}>Loading...</div>
       ) : edits.length === 0 ? (
         <div style={{
-          background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '12px',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px',
           padding: '48px', textAlign: 'center', color: '#64748b', fontSize: '14px',
         }}>
           No pending edits. All caught up!
@@ -323,7 +323,7 @@ export default function EditQueuePage() {
                   <div
                     key={edit.id}
                     style={{
-                      background: '#1a1d27', border: '1px solid #2a2d3a',
+                      background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
                       borderRadius: '10px', padding: '16px',
                       display: 'flex', flexDirection: 'column', gap: '12px',
                     }}
@@ -331,7 +331,7 @@ export default function EditQueuePage() {
                     {/* Header */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                       <span style={{
-                        fontSize: '11px', fontWeight: 700, color: '#a89cff',
+                        fontSize: '11px', fontWeight: 700, color: 'var(--accent-text)',
                         background: 'rgba(124,108,252,0.1)', borderRadius: '5px', padding: '2px 8px',
                       }}>
                         {editTypeLabel(edit)}
@@ -354,7 +354,7 @@ export default function EditQueuePage() {
                       onChange={e => setRejectNotes(prev => ({ ...prev, [edit.id]: e.target.value }))}
                       placeholder="Rejection note (optional)"
                       style={{
-                        background: '#13151f', border: '1px solid #2a2d3a', borderRadius: '6px',
+                        background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '6px',
                         color: '#94a3b8', padding: '6px 10px', fontSize: '12px', outline: 'none',
                       }}
                     />

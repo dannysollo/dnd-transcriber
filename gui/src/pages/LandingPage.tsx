@@ -6,7 +6,7 @@ export default function LandingPage() {
       alignItems: 'center',
       justifyContent: 'center',
       minHeight: '100vh',
-      background: '#0f1117',
+      background: 'var(--bg-base)',
       color: '#e2e8f0',
       fontFamily: 'inherit',
       padding: '24px',
@@ -20,7 +20,7 @@ export default function LandingPage() {
         margin: '0 0 12px',
         fontSize: '36px',
         fontWeight: 800,
-        color: '#7c6cfc',
+        color: 'var(--accent)',
         letterSpacing: '-0.5px',
       }}>
         DnD Transcriber

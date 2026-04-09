@@ -13,7 +13,7 @@ export default function LoginPage() {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      height: '100vh', background: '#0f1117', gap: '24px',
+      height: '100vh', background: 'var(--bg-base)', gap: '24px',
     }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: '28px', fontWeight: 700, color: '#e2e8f0', marginBottom: '8px' }}>
@@ -25,7 +25,7 @@ export default function LoginPage() {
       </div>
 
       <div style={{
-        background: '#13151f', border: '1px solid #1e2130', borderRadius: '16px',
+        background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '16px',
         padding: '40px 48px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px',
         minWidth: '320px',
       }}>

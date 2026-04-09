@@ -505,7 +505,7 @@ export default function SessionView() {
           pointerEvents: 'none',
         }}>
           <div style={{
-            background: '#1a1d27',
+            background: 'var(--bg-elevated)',
             borderRadius: '16px',
             padding: '32px 64px',
             color: '#a78bfa',
@@ -521,7 +521,7 @@ export default function SessionView() {
       {/* Header */}
       <div style={{
         padding: '20px 28px',
-        borderBottom: '1px solid #1e2130',
+        borderBottom: '1px solid var(--border-subtle)',
         display: 'flex',
         alignItems: 'center',
         gap: '12px',
@@ -541,7 +541,7 @@ export default function SessionView() {
         >
           ← Back
         </button>
-        <div style={{ height: '16px', width: '1px', background: '#2a2d3a' }} />
+        <div style={{ height: '16px', width: '1px', background: 'var(--border-default)' }} />
         <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#e2e8f0' }}>{name}</h1>
 
         <div style={{ flex: 1 }} />
@@ -576,7 +576,7 @@ export default function SessionView() {
             background: 'rgba(124,108,252,0.15)',
             border: '1px solid rgba(124,108,252,0.3)',
             borderRadius: '8px',
-            color: '#a89cff',
+            color: 'var(--accent-text)',
             padding: '6px 14px',
             fontSize: '12px',
             fontWeight: 600,
@@ -598,7 +598,7 @@ export default function SessionView() {
           onClick={e => { if (e.target === e.currentTarget) setShareModalOpen(false) }}
         >
           <div style={{
-            background: '#1a1d27', border: '1px solid rgba(255,255,255,0.1)',
+            background: 'var(--bg-elevated)', border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: 14, padding: 28, width: 420, maxWidth: '90vw',
           }}>
             <h3 style={{ margin: '0 0 16px', color: '#e2e8f0', fontSize: 16, fontWeight: 700 }}>
@@ -621,7 +621,7 @@ export default function SessionView() {
                         type="checkbox"
                         checked={val}
                         onChange={e => (set as (v: boolean) => void)(e.target.checked)}
-                        style={{ width: 16, height: 16, accentColor: '#7c6cfc' }}
+                        style={{ width: 16, height: 16, accentColor: 'var(--accent)' }}
                       />
                       Include {label}
                     </label>
@@ -651,7 +651,7 @@ export default function SessionView() {
                         setShareCreating(false)
                       }
                     }}
-                    style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#7c6cfc', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13, opacity: shareCreating ? 0.6 : 1 }}
+                    style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13, opacity: shareCreating ? 0.6 : 1 }}
                   >
                     {shareCreating ? 'Creating…' : 'Generate Link'}
                   </button>
@@ -677,7 +677,7 @@ export default function SessionView() {
                       setShareCopied(true)
                       setTimeout(() => setShareCopied(false), 2000)
                     }}
-                    style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: shareCopied ? '#22c55e' : '#7c6cfc', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13, transition: 'background 0.2s' }}
+                    style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: shareCopied ? '#22c55e' : 'var(--accent)', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13, transition: 'background 0.2s' }}
                   >
                     {shareCopied ? '✓ Copied' : 'Copy'}
                   </button>
@@ -737,7 +737,7 @@ export default function SessionView() {
       <div style={{
         display: 'flex',
         flexDirection: 'column',
-        borderBottom: '1px solid #1e2130',
+        borderBottom: '1px solid var(--border-subtle)',
         flexShrink: 0,
       }}>
       <div style={{ display: 'flex', gap: 0, padding: '0 12px', overflowX: 'auto', scrollbarWidth: 'none' }}>
@@ -748,8 +748,8 @@ export default function SessionView() {
             style={{
               background: 'transparent',
               border: 'none',
-              borderBottom: tab === t.id ? '2px solid #7c6cfc' : '2px solid transparent',
-              color: tab === t.id ? '#a89cff' : '#64748b',
+              borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
+              color: tab === t.id ? 'var(--accent-text)' : '#64748b',
               padding: '12px 14px',
               fontSize: '13px',
               fontWeight: tab === t.id ? 600 : 400,
@@ -765,7 +765,7 @@ export default function SessionView() {
         </div>
 
         {tab === 'transcript' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: '1px solid #1e2130' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: '1px solid var(--border-subtle)' }}>
             {!editMode && (
               <>
                 <input
@@ -774,8 +774,8 @@ export default function SessionView() {
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search transcript..."
                   style={{
-                    background: '#1a1d27',
-                    border: '1px solid #2a2d3a',
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-default)',
                     borderRadius: '8px',
                     color: '#e2e8f0',
                     padding: '6px 12px',
@@ -818,7 +818,7 @@ export default function SessionView() {
                 }}
                 style={{
                   background: editMode ? 'rgba(251,191,36,0.15)' : 'transparent',
-                  border: `1px solid ${editMode ? 'rgba(251,191,36,0.4)' : '#2a2d3a'}`,
+                  border: `1px solid ${editMode ? 'rgba(251,191,36,0.4)' : 'var(--border-default)'}`,
                   borderRadius: '8px',
                   color: editMode ? '#fbbf24' : '#64748b',
                   padding: '6px 12px',
@@ -838,7 +838,7 @@ export default function SessionView() {
                 title="Download transcript as markdown"
                 style={{
                   background: 'transparent',
-                  border: '1px solid #2a2d3a',
+                  border: '1px solid var(--border-default)',
                   borderRadius: '8px',
                   color: '#64748b',
                   padding: '6px 10px',
@@ -855,7 +855,7 @@ export default function SessionView() {
               title="Import transcript from markdown file"
               style={{
                 background: 'transparent',
-                border: '1px solid #2a2d3a',
+                border: '1px solid var(--border-default)',
                 borderRadius: '8px',
                 color: importingTranscript ? '#fbbf24' : '#64748b',
                 padding: '6px 10px',
@@ -888,7 +888,7 @@ export default function SessionView() {
       {/* Audio player panel — transcript tab only */}
       {tab === 'transcript' && audioFiles.length > 0 && (
         <div style={{
-          borderBottom: '1px solid #1e2130',
+          borderBottom: '1px solid var(--border-subtle)',
           background: '#0a0d14',
           flexShrink: 0,
           padding: '10px 28px',
@@ -918,7 +918,7 @@ export default function SessionView() {
                     pendingSeekRef.current = null
                   }
                 }}
-                style={{ flex: 1, height: '36px', accentColor: '#7c6cfc' }}
+                style={{ flex: 1, height: '36px', accentColor: 'var(--accent)' }}
               />
               <select
                 value={playbackRate}
@@ -928,7 +928,7 @@ export default function SessionView() {
                   if (audioRef.current) audioRef.current.playbackRate = rate
                 }}
                 style={{
-                  background: '#1a1d27', border: '1px solid #2a2d3a',
+                  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
                   borderRadius: '6px', color: '#94a3b8',
                   padding: '4px 6px', fontSize: '11px', fontWeight: 600,
                   cursor: 'pointer', outline: 'none', flexShrink: 0,
@@ -1210,7 +1210,7 @@ function TranscriptView({
             onClick={saveAll}
             disabled={savingAll}
             style={{
-              background: savingAll ? '#2a2d3a' : 'rgba(251,191,36,0.2)',
+              background: savingAll ? 'var(--border-default)' : 'rgba(251,191,36,0.2)',
               border: '1px solid rgba(251,191,36,0.4)',
               borderRadius: '6px',
               color: savingAll ? '#64748b' : '#fbbf24',
@@ -1250,7 +1250,7 @@ function TranscriptView({
               {/* Line number */}
               <span style={{
                 fontSize: '10px',
-                color: '#2a2d3a',
+                color: 'var(--border-default)',
                 fontFamily: 'monospace',
                 flexShrink: 0,
                 width: '36px',
@@ -1274,7 +1274,7 @@ function TranscriptView({
                   disabled={savingLine}
                   style={{
                     flex: 1,
-                    background: '#13151f',
+                    background: 'var(--bg-surface)',
                     border: '1px solid rgba(251,191,36,0.4)',
                     borderRadius: '4px',
                     color: '#e2e8f0',
@@ -1513,7 +1513,7 @@ function MarkdownView({ content, emptyMsg }: { content: string | null; emptyMsg:
           li: ({ children }) => <li style={{ marginBottom: '4px' }}>{children}</li>,
           strong: ({ children }) => <strong style={{ color: '#e2e8f0' }}>{children}</strong>,
           code: ({ children }) => (
-            <code style={{ background: '#1a1d27', borderRadius: '4px', padding: '2px 5px', fontSize: '12px' }}>
+            <code style={{ background: 'var(--bg-elevated)', borderRadius: '4px', padding: '2px 5px', fontSize: '12px' }}>
               {children}
             </code>
           ),
@@ -1605,7 +1605,7 @@ function MarkdownEditView({
           <button
             onClick={enterEdit}
             style={{
-              background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '8px',
+              background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '8px',
               color: '#64748b', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
             }}
           >
@@ -1619,7 +1619,7 @@ function MarkdownEditView({
             <button
               onClick={() => setEditMode(false)}
               style={{
-                background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '6px',
+                background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '6px',
                 color: '#64748b', padding: '5px 12px', fontSize: '12px', cursor: 'pointer',
               }}
             >
@@ -1648,7 +1648,7 @@ function MarkdownEditView({
           value={editValue}
           onChange={e => setEditValue(e.target.value)}
           style={{
-            width: '100%', minHeight: '500px', background: '#13151f',
+            width: '100%', minHeight: '500px', background: 'var(--bg-surface)',
             border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px',
             color: '#e2e8f0', padding: '16px', fontSize: '13px',
             fontFamily: 'monospace', lineHeight: 1.6, resize: 'vertical',
@@ -1847,9 +1847,9 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
           onClick={handleToggle}
           style={{
             background: showDiff ? 'rgba(124,108,252,0.2)' : 'rgba(30,33,48,0.8)',
-            border: `1px solid ${showDiff ? 'rgba(124,108,252,0.5)' : '#2a2d3a'}`,
+            border: `1px solid ${showDiff ? 'rgba(124,108,252,0.5)' : 'var(--border-default)'}`,
             borderRadius: '8px',
-            color: showDiff ? '#a89cff' : '#64748b',
+            color: showDiff ? 'var(--accent-text)' : '#64748b',
             padding: '6px 14px',
             fontSize: '12px',
             fontWeight: 600,
@@ -1862,7 +1862,7 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
         {showDiff && rawContent != null && (
           <>
             <span style={{ fontSize: '12px', color: '#475569' }}>
-              <span style={{ color: changedCount > 0 ? '#a89cff' : '#475569', fontWeight: 700 }}>{changedCount}</span>
+              <span style={{ color: changedCount > 0 ? 'var(--accent-text)' : '#475569', fontWeight: 700 }}>{changedCount}</span>
               {' '}line{changedCount !== 1 ? 's' : ''} changed out of{' '}
               <span style={{ fontWeight: 700, color: '#94a3b8' }}>{totalLines}</span> total
             </span>
@@ -1871,7 +1871,7 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
                 type="checkbox"
                 checked={changedLinesOnly}
                 onChange={e => setChangedLinesOnly(e.target.checked)}
-                style={{ accentColor: '#7c6cfc' }}
+                style={{ accentColor: 'var(--accent)' }}
               />
               Changed lines only
             </label>
@@ -1882,7 +1882,7 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
       {/* Diff panels */}
       {showDiff && (
         <div style={{
-          border: '1px solid #1e2130',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '10px',
           overflow: 'hidden',
           height: '400px',
@@ -1905,7 +1905,7 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
                   padding: '6px 10px',
                   background: 'rgba(239,68,68,0.08)',
                   borderBottom: '1px solid rgba(239,68,68,0.2)',
-                  borderRight: '1px solid #1e2130',
+                  borderRight: '1px solid var(--border-subtle)',
                   fontSize: '11px',
                   fontWeight: 700,
                   color: '#fca5a5',
@@ -1917,11 +1917,11 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
                 <div
                   ref={leftRef}
                   onScroll={() => syncScroll('left')}
-                  style={{ ...scrollAreaStyle, borderRight: '1px solid #1e2130', background: 'rgba(239,68,68,0.02)' }}
+                  style={{ ...scrollAreaStyle, borderRight: '1px solid var(--border-subtle)', background: 'rgba(239,68,68,0.02)' }}
                 >
                   {displayItems.map((item, idx) =>
                     item.type === 'separator' ? (
-                      <div key={idx} style={{ padding: '2px 8px', color: '#475569', fontSize: '11px', background: '#0d1017', borderTop: '1px solid #1e2130', borderBottom: '1px solid #1e2130' }}>
+                      <div key={idx} style={{ padding: '2px 8px', color: '#475569', fontSize: '11px', background: '#0d1017', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)' }}>
                         ···  {item.skipped} line{item.skipped !== 1 ? 's' : ''} hidden
                       </div>
                     ) : (
@@ -1970,7 +1970,7 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
                 >
                   {displayItems.map((item, idx) =>
                     item.type === 'separator' ? (
-                      <div key={idx} style={{ padding: '2px 8px', color: '#475569', fontSize: '11px', background: '#0d1017', borderTop: '1px solid #1e2130', borderBottom: '1px solid #1e2130' }}>
+                      <div key={idx} style={{ padding: '2px 8px', color: '#475569', fontSize: '11px', background: '#0d1017', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)' }}>
                         ···  {item.skipped} line{item.skipped !== 1 ? 's' : ''} hidden
                       </div>
                     ) : (
@@ -2036,7 +2036,7 @@ function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: str
         return (
           <div key={key} style={{
             borderRadius: '8px',
-            border: '1px solid #1e2130',
+            border: '1px solid var(--border-subtle)',
             overflow: 'hidden',
             opacity: dimmed ? 0.45 : 1,
           }}>
@@ -2074,7 +2074,7 @@ function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: str
               </span>
               {/* Hit count badge */}
               <span style={{
-                background: item.hit_count > 0 ? 'rgba(52,211,153,0.15)' : '#1a1d27',
+                background: item.hit_count > 0 ? 'rgba(52,211,153,0.15)' : 'var(--bg-elevated)',
                 color: item.hit_count > 0 ? '#34d399' : '#475569',
                 borderRadius: '999px',
                 padding: '1px 8px',
@@ -2089,7 +2089,7 @@ function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: str
             {isOpen && item.examples.length > 0 && (
               <div style={{
                 padding: '6px 12px 10px 32px',
-                borderTop: '1px solid #1a1d27',
+                borderTop: '1px solid var(--border-subtle)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '6px',
@@ -2181,7 +2181,7 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
   }
 
   return (
-    <div style={{ borderBottom: '1px solid #1e2130', background: '#080a10', flexShrink: 0 }}>
+    <div style={{ borderBottom: '1px solid var(--border-subtle)', background: '#080a10', flexShrink: 0 }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -2237,8 +2237,8 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
                     }}
                     placeholder="New name"
                     style={{
-                      background: '#13151f',
-                      border: '1px solid #2a2d3a',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border-default)',
                       borderRadius: '6px',
                       color: '#e2e8f0',
                       padding: '4px 8px',
@@ -2250,7 +2250,7 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
                   <button
                     onClick={() => doRename(s.name)}
                     disabled={renaming}
-                    style={{ background: 'rgba(124,108,252,0.2)', border: '1px solid rgba(124,108,252,0.3)', borderRadius: '6px', color: '#a89cff', padding: '4px 10px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                    style={{ background: 'rgba(124,108,252,0.2)', border: '1px solid rgba(124,108,252,0.3)', borderRadius: '6px', color: 'var(--accent-text)', padding: '4px 10px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
                   >
                     {renaming ? '...' : 'Save'}
                   </button>
@@ -2433,7 +2433,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
         <button
           onClick={() => { setWikiEditValue(wikiMarkdown ?? ''); setWikiPending(false); setWikiEditMode(true) }}
           style={{
-            background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '8px',
+            background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '8px',
             color: '#64748b', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
           }}
         >
@@ -2444,7 +2444,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           <span style={{ fontSize: '11px', color: requiresApproval ? '#fbbf24' : '#64748b' }}>
             {requiresApproval ? 'Will submit for DM review' : 'Saves directly'}
           </span>
-          <button onClick={() => setWikiEditMode(false)} style={{ background: 'transparent', border: '1px solid #2a2d3a', borderRadius: '6px', color: '#64748b', padding: '5px 12px', fontSize: '12px', cursor: 'pointer' }}>Cancel</button>
+          <button onClick={() => setWikiEditMode(false)} style={{ background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '6px', color: '#64748b', padding: '5px 12px', fontSize: '12px', cursor: 'pointer' }}>Cancel</button>
           <button
             onClick={saveWikiEdit}
             disabled={wikiSaving}
@@ -2487,7 +2487,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
             value={wikiEditValue}
             onChange={e => setWikiEditValue(e.target.value)}
             style={{
-              width: '100%', minHeight: '500px', background: '#13151f',
+              width: '100%', minHeight: '500px', background: 'var(--bg-surface)',
               border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px',
               color: '#e2e8f0', padding: '16px', fontSize: '13px',
               fontFamily: 'monospace', lineHeight: 1.6, resize: 'vertical',
@@ -2513,7 +2513,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           value={wikiEditValue}
           onChange={e => setWikiEditValue(e.target.value)}
           style={{
-            width: '100%', minHeight: '500px', background: '#13151f',
+            width: '100%', minHeight: '500px', background: 'var(--bg-surface)',
             border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px',
             color: '#e2e8f0', padding: '16px', fontSize: '13px',
             fontFamily: 'monospace', lineHeight: 1.6, resize: 'vertical',
@@ -2545,7 +2545,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
             disabled={applying}
             style={{
               background: 'rgba(124,108,252,0.15)', border: '1px solid rgba(124,108,252,0.3)',
-              borderRadius: '7px', color: '#a89cff', padding: '5px 12px',
+              borderRadius: '7px', color: 'var(--accent-text)', padding: '5px 12px',
               fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: applying ? 0.5 : 1,
             }}
           >
@@ -2555,7 +2555,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
         {applying && <span style={{ fontSize: '11px', color: '#64748b' }}>Applying…</span>}
 
         {/* Separator */}
-        <div style={{ width: '1px', height: '18px', background: '#1e2130', flexShrink: 0 }} />
+        <div style={{ width: '1px', height: '18px', background: 'var(--border-subtle)', flexShrink: 0 }} />
 
         {/* Generate button */}
         <button
@@ -2564,7 +2564,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           style={{
             background: generating ? 'rgba(100,116,139,0.15)' : 'rgba(124,108,252,0.15)',
             border: `1px solid ${generating ? 'rgba(100,116,139,0.3)' : 'rgba(124,108,252,0.3)'}`,
-            borderRadius: '7px', color: generating ? '#64748b' : '#a89cff',
+            borderRadius: '7px', color: generating ? '#64748b' : 'var(--accent-text)',
             padding: '5px 12px', fontSize: '12px', fontWeight: 700,
             cursor: generating ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
           }}
@@ -2651,7 +2651,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', padding: '2px 0' }}>
             {corrections.map((c, i) => (
               <span key={i} style={{
-                background: '#13151f', border: '1px solid #2a2d3a',
+                background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
                 borderRadius: '5px', padding: '2px 7px', fontSize: '11px',
                 fontFamily: 'monospace', color: '#94a3b8',
               }}>
@@ -2670,7 +2670,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
       {applyOutput && (
         <pre style={{
           background: '#0a0d14',
-          border: '1px solid #1e2130',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '8px',
           padding: '12px 16px',
           fontSize: '11px',
@@ -2693,7 +2693,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           <div
             key={s.id}
             style={{
-              border: `1px solid ${isApplied ? 'rgba(52,211,153,0.3)' : '#1e2130'}`,
+              border: `1px solid ${isApplied ? 'rgba(52,211,153,0.3)' : 'var(--border-subtle)'}`,
               borderRadius: '10px',
               background: isApplied ? 'rgba(52,211,153,0.05)' : '#0d1017',
               overflow: 'hidden',
@@ -2704,8 +2704,8 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
             {/* Card header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px' }}>
               <span style={{
-                background: '#1a1d27',
-                border: '1px solid #2a2d3a',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
                 borderRadius: '6px',
                 padding: '2px 8px',
                 fontSize: '11px',
@@ -2759,7 +2759,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
               display: 'flex',
               gap: '8px',
               padding: '8px 16px',
-              borderTop: '1px solid #1e2130',
+              borderTop: '1px solid var(--border-subtle)',
               background: 'rgba(0,0,0,0.2)',
               alignItems: 'center',
             }}>
@@ -2789,7 +2789,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
                     disabled={applying}
                     style={{
                       background: isSkipped ? 'rgba(100,116,139,0.15)' : 'transparent',
-                      border: `1px solid ${isSkipped ? '#475569' : '#2a2d3a'}`,
+                      border: `1px solid ${isSkipped ? '#475569' : 'var(--border-default)'}`,
                       borderRadius: '6px',
                       color: isSkipped ? '#94a3b8' : '#475569',
                       padding: '4px 12px',
@@ -2855,7 +2855,7 @@ function SpecialInstructionsRow({ notes, onNotesChange, onNotesBlur, notesSaving
             placeholder="e.g. Aella and Danny are on the same mic — attribute ambiguous lines to Danny unless clearly in character."
             rows={3}
             style={{
-              width: '100%', background: '#13151f', border: '1px solid #2a2d3a',
+              width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
               borderRadius: '7px', color: '#e2e8f0', padding: '8px 10px',
               fontSize: '12px', lineHeight: 1.5, resize: 'vertical',
               outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
@@ -2863,7 +2863,7 @@ function SpecialInstructionsRow({ notes, onNotesChange, onNotesBlur, notesSaving
           />
           {generating && generateLog && generateLog.length > 0 && (
             <pre style={{
-              background: '#0a0d14', border: '1px solid #1e2130', borderRadius: '7px',
+              background: '#0a0d14', border: '1px solid var(--border-subtle)', borderRadius: '7px',
               padding: '8px 12px', fontSize: '11px', color: '#94a3b8',
               fontFamily: 'monospace', whiteSpace: 'pre-wrap',
               maxHeight: '140px', overflowY: 'auto', margin: 0,
@@ -2903,7 +2903,7 @@ function GenerateWikiPanel({
   return (
     <div style={{
       background: '#0d1017',
-      border: '1px solid #1e2130',
+      border: '1px solid var(--border-subtle)',
       borderRadius: '10px',
       padding: compact ? '10px 14px' : '14px 16px',
       display: 'flex',
@@ -2932,7 +2932,7 @@ function GenerateWikiPanel({
             background: generating ? 'rgba(100,116,139,0.15)' : 'rgba(124,108,252,0.15)',
             border: `1px solid ${generating ? 'rgba(100,116,139,0.3)' : 'rgba(124,108,252,0.3)'}`,
             borderRadius: '8px',
-            color: generating ? '#64748b' : '#a89cff',
+            color: generating ? '#64748b' : 'var(--accent-text)',
             padding: '7px 16px',
             fontSize: '12px',
             fontWeight: 700,
@@ -2962,7 +2962,7 @@ function GenerateWikiPanel({
               placeholder="e.g. Aella and Danny are on the same mic — attribute ambiguous lines to Danny unless clearly in character."
               rows={3}
               style={{
-                width: '100%', background: '#13151f', border: '1px solid #2a2d3a',
+                width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
                 borderRadius: '7px', color: '#e2e8f0', padding: '8px 10px',
                 fontSize: '12px', lineHeight: 1.5, resize: 'vertical',
                 outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
@@ -2971,7 +2971,7 @@ function GenerateWikiPanel({
           </div>
           {generating && generateLog.length > 0 && (
             <pre style={{
-              background: '#0a0d14', border: '1px solid #1e2130', borderRadius: '8px',
+              background: '#0a0d14', border: '1px solid var(--border-subtle)', borderRadius: '8px',
               padding: '10px 14px', fontSize: '11px', color: '#94a3b8',
               fontFamily: 'monospace', whiteSpace: 'pre-wrap',
               maxHeight: '180px', overflowY: 'auto', margin: 0,
@@ -3030,7 +3030,7 @@ function ChangesView({
         alignItems: 'center',
         flexWrap: 'wrap',
         background: '#0d1017',
-        border: '1px solid #1e2130',
+        border: '1px solid var(--border-subtle)',
         borderRadius: '10px',
         padding: '12px 16px',
         fontSize: '13px',

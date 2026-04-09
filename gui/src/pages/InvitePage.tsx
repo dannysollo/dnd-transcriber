@@ -55,10 +55,10 @@ export default function InvitePage() {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      height: '100vh', background: '#0f1117',
+      height: '100vh', background: 'var(--bg-base)',
     }}>
       <div style={{
-        background: '#13151f', border: '1px solid #1e2130', borderRadius: '16px',
+        background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '16px',
         padding: '40px 48px', maxWidth: '400px', width: '100%',
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px',
         textAlign: 'center',
@@ -97,7 +97,7 @@ export default function InvitePage() {
               <>
                 <div style={{ fontSize: '13px', color: '#94a3b8' }}>
                   You've been invited to join as a{' '}
-                  <strong style={{ color: '#a89cff' }}>{invite.role}</strong>.
+                  <strong style={{ color: 'var(--accent-text)' }}>{invite.role}</strong>.
                 </div>
 
                 {authEnabled && !isLoggedIn ? (
@@ -127,7 +127,7 @@ export default function InvitePage() {
                       onClick={joinCampaign}
                       disabled={joining}
                       style={{
-                        background: '#7c6cfc', border: 'none', borderRadius: '10px', color: '#fff',
+                        background: 'var(--accent)', border: 'none', borderRadius: '10px', color: '#fff',
                         padding: '12px 28px', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
                         opacity: joining ? 0.6 : 1,
                       }}

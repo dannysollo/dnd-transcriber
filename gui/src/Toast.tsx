@@ -69,7 +69,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
-                background: '#1a1d27',
+                background: 'var(--bg-elevated)',
                 border: `1px solid ${s.border}`,
                 borderLeft: `3px solid ${KIND_TEXT[t.kind]}`,
                 borderRadius: 10,

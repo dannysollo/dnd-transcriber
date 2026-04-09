@@ -226,7 +226,7 @@ export default function CorrectionsPage() {
         {/* Left: editor */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Tabs */}
-          <div style={{ display: 'flex', borderBottom: '1px solid #2a2d3a' }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border-default)' }}>
             {(['corrections', 'patterns'] as const).map(t => (
               <button
                 key={t}
@@ -234,8 +234,8 @@ export default function CorrectionsPage() {
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  borderBottom: activeTab === t ? '2px solid #7c6cfc' : '2px solid transparent',
-                  color: activeTab === t ? '#a89cff' : '#64748b',
+                  borderBottom: activeTab === t ? '2px solid var(--accent)' : '2px solid transparent',
+                  color: activeTab === t ? 'var(--accent-text)' : '#64748b',
                   padding: '10px 16px',
                   fontSize: '13px',
                   fontWeight: activeTab === t ? 600 : 400,
@@ -276,8 +276,8 @@ export default function CorrectionsPage() {
 
               {/* List */}
               <div style={{
-                background: '#1a1d27',
-                border: '1px solid #2a2d3a',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
                 borderRadius: '10px',
                 overflow: 'auto',
                 maxHeight: '480px',
@@ -291,7 +291,7 @@ export default function CorrectionsPage() {
                     display: 'flex',
                     alignItems: 'center',
                     padding: '8px 14px',
-                    borderBottom: '1px solid #1e2130',
+                    borderBottom: '1px solid var(--border-subtle)',
                     gap: '8px',
                   }}>
                     {editKey === wrong ? (
@@ -352,8 +352,8 @@ export default function CorrectionsPage() {
 
               {/* Patterns list */}
               <div style={{
-                background: '#1a1d27',
-                border: '1px solid #2a2d3a',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
                 borderRadius: '10px',
                 overflow: 'auto',
                 maxHeight: '480px',
@@ -365,13 +365,13 @@ export default function CorrectionsPage() {
                 ) : patterns.map((p, i) => (
                   <div key={i} style={{
                     padding: '10px 14px',
-                    borderBottom: '1px solid #1e2130',
+                    borderBottom: '1px solid var(--border-subtle)',
                     display: 'flex',
                     gap: '8px',
                     alignItems: 'flex-start',
                   }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: 'monospace', fontSize: '11px', color: '#a89cff', wordBreak: 'break-all' }}>
+                      <div style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--accent-text)', wordBreak: 'break-all' }}>
                         {p.match}
                       </div>
                       <div style={{ fontSize: '12px', color: '#4ade80', marginTop: '2px' }}>
@@ -388,14 +388,14 @@ export default function CorrectionsPage() {
 
         {/* Re-merge All section */}
         <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div style={{ borderTop: '1px solid #1e2130', paddingTop: '14px' }}>
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px' }}>
             {!showMergeConfirm ? (
               <button
                 onClick={() => setShowMergeConfirm(true)}
                 disabled={mergeAllRunning}
                 style={{
-                  background: mergeAllRunning ? '#2a2d3a' : 'rgba(251,191,36,0.12)',
-                  border: `1px solid ${mergeAllRunning ? '#2a2d3a' : 'rgba(251,191,36,0.3)'}`,
+                  background: mergeAllRunning ? 'var(--border-default)' : 'rgba(251,191,36,0.12)',
+                  border: `1px solid ${mergeAllRunning ? 'var(--border-default)' : 'rgba(251,191,36,0.3)'}`,
                   borderRadius: '8px',
                   color: mergeAllRunning ? '#64748b' : '#fbbf24',
                   padding: '8px 18px',
@@ -452,7 +452,7 @@ export default function CorrectionsPage() {
                     onClick={() => setShowMergeConfirm(false)}
                     style={{
                       background: 'transparent',
-                      border: '1px solid #2a2d3a',
+                      border: '1px solid var(--border-default)',
                       borderRadius: '8px',
                       color: '#64748b',
                       padding: '7px 16px',
@@ -472,13 +472,13 @@ export default function CorrectionsPage() {
               <div style={{
                 marginTop: '10px',
                 background: '#0d0f18',
-                border: '1px solid #1e2130',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '10px',
                 overflow: 'hidden',
               }}>
                 <div style={{
                   padding: '8px 12px',
-                  borderBottom: '1px solid #1e2130',
+                  borderBottom: '1px solid var(--border-subtle)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
@@ -488,7 +488,7 @@ export default function CorrectionsPage() {
                 }}>
                   Output
                   {mergeAllRunning && (
-                    <span style={{ width: 10, height: 10, border: '2px solid rgba(124,108,252,0.3)', borderTopColor: '#7c6cfc', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                    <span style={{ width: 10, height: 10, border: '2px solid rgba(124,108,252,0.3)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
                   )}
                   {mergeAllDone && mergeAllExitCode !== null && (
                     <span style={{ color: mergeAllExitCode === 0 ? '#4ade80' : '#f87171', fontWeight: 700 }}>
@@ -534,8 +534,8 @@ export default function CorrectionsPage() {
               style={{
                 width: '100%',
                 height: '160px',
-                background: '#1a1d27',
-                border: '1px solid #2a2d3a',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
                 borderRadius: '10px',
                 color: '#e2e8f0',
                 padding: '12px',
@@ -550,7 +550,7 @@ export default function CorrectionsPage() {
               disabled={testing || !testText.trim()}
               style={{
                 marginTop: '8px',
-                background: '#7c6cfc',
+                background: 'var(--accent)',
                 border: 'none',
                 borderRadius: '8px',
                 color: '#fff',
@@ -567,12 +567,12 @@ export default function CorrectionsPage() {
 
           {testResult && (
             <div style={{
-              background: '#1a1d27',
-              border: '1px solid #2a2d3a',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-default)',
               borderRadius: '10px',
               overflow: 'hidden',
             }}>
-              <div style={{ padding: '10px 14px', borderBottom: '1px solid #1e2130', fontSize: '12px', color: '#64748b' }}>
+              <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', fontSize: '12px', color: '#64748b' }}>
                 {testResult.changed
                   ? `${testResult.diffs.length} change(s) made`
                   : 'No changes'}
@@ -588,7 +588,7 @@ export default function CorrectionsPage() {
                 </div>
               )}
               {testResult.changed && (
-                <div style={{ padding: '12px 14px', borderTop: '1px solid #1e2130' }}>
+                <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border-subtle)' }}>
                   <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Result:</div>
                   <pre style={{
                     fontFamily: 'monospace',
@@ -612,8 +612,8 @@ export default function CorrectionsPage() {
 }
 
 const inputStyle: React.CSSProperties = {
-  background: '#13151f',
-  border: '1px solid #2a2d3a',
+  background: 'var(--bg-surface)',
+  border: '1px solid var(--border-default)',
   borderRadius: '8px',
   color: '#e2e8f0',
   padding: '7px 10px',
@@ -624,7 +624,7 @@ const inputStyle: React.CSSProperties = {
 }
 
 const addBtnStyle: React.CSSProperties = {
-  background: '#7c6cfc',
+  background: 'var(--accent)',
   border: 'none',
   borderRadius: '8px',
   color: '#fff',

@@ -104,8 +104,8 @@ export default function ShareView() {
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  borderBottom: tab === t.id ? '2px solid #7c6cfc' : '2px solid transparent',
-                  color: tab === t.id ? '#a89cff' : '#64748b',
+                  borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
+                  color: tab === t.id ? 'var(--accent-text)' : '#64748b',
                   padding: '12px 20px',
                   fontSize: 14,
                   fontWeight: tab === t.id ? 600 : 400,
@@ -152,7 +152,7 @@ export default function ShareView() {
 
 const pageStyle: React.CSSProperties = {
   minHeight: '100vh',
-  background: '#0f1117',
+  background: 'var(--bg-base)',
   color: '#e2e8f0',
   fontFamily: 'Inter, system-ui, sans-serif',
 }

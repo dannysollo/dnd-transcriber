@@ -306,8 +306,8 @@ export default function SessionsPage() {
               onClick={() => setSortKey(k)}
               style={{
                 background: sortKey === k ? 'rgba(124,108,252,0.15)' : 'transparent',
-                border: `1px solid ${sortKey === k ? 'rgba(124,108,252,0.4)' : '#2a2d3a'}`,
-                borderRadius: 6, color: sortKey === k ? '#a89cff' : '#475569',
+                border: `1px solid ${sortKey === k ? 'rgba(124,108,252,0.4)' : 'var(--border-default)'}`,
+                borderRadius: 6, color: sortKey === k ? 'var(--accent-text)' : '#475569',
                 padding: '4px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
                 textTransform: 'capitalize',
               }}
@@ -327,7 +327,7 @@ export default function SessionsPage() {
               onKeyDown={e => e.key === 'Enter' && createSession()}
               placeholder="2026-03-15"
               style={{
-                background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '8px',
+                background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '8px',
                 color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', flex: 1, outline: 'none',
               }}
             />
@@ -335,7 +335,7 @@ export default function SessionsPage() {
               onClick={createSession}
               disabled={creating || !newName.trim()}
               style={{
-                background: '#7c6cfc', border: 'none', borderRadius: '8px', color: '#fff',
+                background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
                 padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                 opacity: (creating || !newName.trim()) ? 0.5 : 1, whiteSpace: 'nowrap',
               }}
@@ -361,7 +361,7 @@ export default function SessionsPage() {
 
       {!activeCampaign ? (
         <div style={{
-          background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '12px',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px',
           padding: '48px', textAlign: 'center',
         }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>⚔️</div>
@@ -372,7 +372,7 @@ export default function SessionsPage() {
         <div style={{ color: '#64748b', fontSize: '14px' }}>Loading...</div>
       ) : sessions.length === 0 ? (
         <div style={{
-          background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: '12px',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px',
           padding: '48px', textAlign: 'center', color: '#64748b',
         }}>
           No sessions yet. Create one above.
@@ -390,7 +390,7 @@ export default function SessionsPage() {
                 <div
                   key={s.name}
                   style={{
-                    background: '#1a1d27',
+                    background: 'var(--bg-elevated)',
                     border: '1px solid rgba(248,113,113,0.4)',
                     borderRadius: '10px',
                     padding: '14px 20px',
@@ -415,7 +415,7 @@ export default function SessionsPage() {
                   <button
                     onClick={() => setConfirmDelete(null)}
                     style={{
-                      background: 'transparent', border: '1px solid #2a2d3a',
+                      background: 'transparent', border: '1px solid var(--border-default)',
                       borderRadius: '6px', color: '#94a3b8', padding: '5px 14px',
                       fontSize: '13px', cursor: 'pointer',
                     }}
@@ -436,8 +436,8 @@ export default function SessionsPage() {
                 onDragOver={handleDragOver}
                 onDrop={e => handleDrop(e, s.name)}
                 style={{
-                  background: isDragOver ? 'rgba(124,108,252,0.06)' : '#1a1d27',
-                  border: isDragOver ? '1px solid #7c6cfc' : '1px solid #2a2d3a',
+                  background: isDragOver ? 'rgba(124,108,252,0.06)' : 'var(--bg-elevated)',
+                  border: isDragOver ? '1px solid var(--accent)' : '1px solid var(--border-default)',
                   boxShadow: isDragOver ? '0 0 0 2px rgba(124,108,252,0.25)' : 'none',
                   borderRadius: '10px',
                   padding: '14px 20px',
@@ -461,7 +461,7 @@ export default function SessionsPage() {
                       }}
                       onBlur={() => renameSession(s.name, renameValue)}
                       style={{
-                        background: '#0f1117', border: '1px solid #7c6cfc', borderRadius: '6px',
+                        background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: '6px',
                         color: '#e2e8f0', padding: '4px 8px', fontSize: '14px', fontWeight: 600, outline: 'none',
                       }}
                     />
@@ -550,7 +550,7 @@ export default function SessionsPage() {
 function Badge({ label }: { label: string }) {
   return (
     <span style={{
-      background: 'rgba(124,108,252,0.1)', color: '#7c6cfc',
+      background: 'rgba(124,108,252,0.1)', color: 'var(--accent)',
       borderRadius: '4px', padding: '2px 7px', fontSize: '10px', fontWeight: 600,
     }}>
       {label}
@@ -605,7 +605,7 @@ function ActionBtn({ children, onClick, title, loading, danger }: {
       disabled={loading}
       style={{
         background: 'transparent',
-        border: `1px solid ${danger ? 'rgba(248,113,113,0.3)' : '#2a2d3a'}`,
+        border: `1px solid ${danger ? 'rgba(248,113,113,0.3)' : 'var(--border-default)'}`,
         borderRadius: '6px',
         color: danger ? '#f87171' : '#94a3b8',
         padding: '4px 8px',

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
 import { useToast } from '../Toast'
+import { useTheme } from '../ThemeContext'
 
 
 export default function SettingsPage() {
@@ -9,6 +10,7 @@ export default function SettingsPage() {
   const { loading: campaignLoading, activeCampaign } = useCampaign()
   const { authEnabled, isLoggedIn } = useAuth()
   const { toast } = useToast()
+  const { theme, font, setTheme, setFont, themes, fonts } = useTheme()
   const [config, setConfig] = useState<Record<string, any> | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -86,15 +88,15 @@ export default function SettingsPage() {
     })
   }
 
-  if (campaignLoading) return <div style={{ padding: '32px', color: '#64748b' }}>Loading...</div>
+  if (campaignLoading) return <div style={{ padding: '32px', color: 'var(--text-muted)' }}>Loading...</div>
   if (authEnabled && (!isLoggedIn || !activeCampaign)) {
     return (
-      <div style={{ padding: '32px', color: '#64748b', fontSize: '14px' }}>
+      <div style={{ padding: '32px', color: 'var(--text-muted)', fontSize: '14px' }}>
         Select a campaign to view settings.
       </div>
     )
   }
-  if (loading) return <div style={{ padding: '32px', color: '#64748b' }}>Loading...</div>
+  if (loading) return <div style={{ padding: '32px', color: 'var(--text-muted)' }}>Loading...</div>
   if (!config) return null
 
   const players = config.players || {}
@@ -103,14 +105,14 @@ export default function SettingsPage() {
     <div className="page-content" style={{ padding: '32px', maxWidth: '720px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>Settings</h1>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>Transcription and player configuration</p>
+          <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)' }}>Settings</h1>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>Transcription and player configuration</p>
         </div>
         <button
           onClick={save}
           disabled={saving}
           style={{
-            background: '#7c6cfc',
+            background: 'var(--accent)',
             border: 'none',
             borderRadius: '8px',
             color: '#fff',
@@ -123,6 +125,82 @@ export default function SettingsPage() {
           {saving ? 'Saving...' : saved ? '✓ Saved' : 'Save'}
         </button>
       </div>
+
+      {/* Appearance */}
+      <Section title="Appearance">
+        <div style={{ padding: '16px' }}>
+          {/* Theme picker */}
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px', fontWeight: 600 }}>Color Theme</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              {themes.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setTheme(t.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    border: theme.id === t.id ? `2px solid ${t.accent}` : '2px solid var(--border-default)',
+                    background: theme.id === t.id ? `${t.accentMuted}` : 'var(--bg-elevated)',
+                    cursor: 'pointer',
+                    color: theme.id === t.id ? t.accentText : 'var(--text-secondary)',
+                    fontSize: '12px',
+                    fontWeight: theme.id === t.id ? 700 : 400,
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: '50%',
+                    background: t.accent,
+                    flexShrink: 0,
+                    boxShadow: theme.id === t.id ? `0 0 6px ${t.accent}` : 'none',
+                  }} />
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Font picker */}
+          <div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px', fontWeight: 600 }}>Heading Font</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {fonts.map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setFont(f.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: font.id === f.id ? '2px solid var(--accent)' : '2px solid var(--border-default)',
+                    background: font.id === f.id ? 'var(--accent-muted)' : 'var(--bg-elevated)',
+                    cursor: 'pointer',
+                    color: font.id === f.id ? 'var(--accent-text)' : 'var(--text-secondary)',
+                    fontSize: '13px',
+                    fontWeight: font.id === f.id ? 600 : 400,
+                    fontFamily: f.family,
+                    transition: 'all 0.15s ease',
+                    textAlign: 'left',
+                  }}
+                >
+                  {f.label}
+                  <span style={{ fontSize: '11px', opacity: 0.5, fontFamily: "'Inter', system-ui, sans-serif", fontWeight: 400 }}>
+                    {font.id === f.id ? '✓ Active' : ''}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Section>
 
       {/* Whisper / transcription */}
       <Section title="Transcription">
@@ -149,7 +227,7 @@ export default function SettingsPage() {
       {/* Players */}
       <Section title="Players">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 80px 32px', gap: '8px', padding: '0 4px', fontSize: '11px', fontWeight: 600, color: '#64748b', letterSpacing: '0.04em' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 80px 32px', gap: '8px', padding: '0 4px', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
             <span>Discord Username</span>
             <span>Display Name</span>
             <span>Character</span>
@@ -162,12 +240,12 @@ export default function SettingsPage() {
               gridTemplateColumns: '1fr 1fr 1fr 80px 32px',
               gap: '8px',
               padding: '8px',
-              background: '#13151f',
-              border: '1px solid #2a2d3a',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-default)',
               borderRadius: '8px',
               alignItems: 'center',
             }}>
-              <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{username}</span>
+              <span style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{username}</span>
               <input
                 value={info.name || ''}
                 onChange={e => updatePlayer(username, 'name', e.target.value)}
@@ -200,7 +278,7 @@ export default function SettingsPage() {
             onClick={addPlayer}
             style={{
               background: 'transparent',
-              border: '1px dashed #2a2d3a',
+              border: '1px dashed var(--border-default)',
               borderRadius: '8px',
               color: '#475569',
               padding: '8px',
@@ -223,12 +301,12 @@ export default function SettingsPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+      <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
         {title}
       </div>
       <div style={{
-        background: '#1a1d27',
-        border: '1px solid #2a2d3a',
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border-default)',
         borderRadius: '10px',
         overflow: 'hidden',
       }}>
@@ -245,9 +323,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       alignItems: 'center',
       gap: '16px',
       padding: '12px 16px',
-      borderBottom: '1px solid #1e2130',
+      borderBottom: '1px solid var(--border-subtle)',
     }}>
-      <label style={{ fontSize: '13px', color: '#94a3b8', width: '200px', flexShrink: 0 }}>{label}</label>
+      <label style={{ fontSize: '13px', color: 'var(--text-secondary)', width: '200px', flexShrink: 0 }}>{label}</label>
       <div style={{ flex: 1 }}>{children}</div>
     </div>
   )
@@ -262,7 +340,7 @@ function Toggle({ value, onChange, description }: { value: boolean; onChange: (v
           width: '40px',
           height: '22px',
           borderRadius: '11px',
-          background: value ? '#7c6cfc' : '#2a2d3a',
+          background: value ? 'var(--accent)' : 'var(--border-default)',
           border: 'none',
           cursor: 'pointer',
           position: 'relative',
@@ -281,16 +359,16 @@ function Toggle({ value, onChange, description }: { value: boolean; onChange: (v
           transition: 'left 0.2s',
         }} />
       </button>
-      {description && <span style={{ fontSize: '12px', color: '#64748b' }}>{description}</span>}
+      {description && <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{description}</span>}
     </div>
   )
 }
 
 const inputStyle: React.CSSProperties = {
-  background: '#13151f',
-  border: '1px solid #2a2d3a',
+  background: 'var(--bg-surface)',
+  border: '1px solid var(--border-default)',
   borderRadius: '7px',
-  color: '#e2e8f0',
+  color: 'var(--text-primary)',
   padding: '7px 10px',
   fontSize: '13px',
   outline: 'none',
@@ -298,10 +376,10 @@ const inputStyle: React.CSSProperties = {
 }
 
 const selectStyle: React.CSSProperties = {
-  background: '#13151f',
-  border: '1px solid #2a2d3a',
+  background: 'var(--bg-surface)',
+  border: '1px solid var(--border-default)',
   borderRadius: '7px',
-  color: '#e2e8f0',
+  color: 'var(--text-primary)',
   padding: '7px 10px',
   fontSize: '13px',
   outline: 'none',
