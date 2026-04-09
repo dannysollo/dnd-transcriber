@@ -232,10 +232,14 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
 
 # ─── Merge per-speaker JSONs into markdown ────────────────────────────────────
 
-def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 1.5) -> str:
+def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 4.0) -> str:
     """
     Merge all speaker JSON files into a single timestamped markdown transcript,
     sorted by time. Format: **[MM:SS] Speaker:** text
+
+    A new line is started when the speaker changes OR when the same speaker has
+    been silent for longer than min_gap seconds (measured per-speaker, so other
+    speakers talking in between doesn't reset the clock).
     """
     all_segments = []
 
@@ -267,7 +271,7 @@ def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 1.5) -> str:
     current_speaker = None
     current_chunks: list[str] = []
     current_start = 0.0
-    last_end = 0.0
+    last_end_per_speaker: dict[str, float] = {}  # track gap per speaker independently
 
     def flush():
         if current_chunks:
@@ -276,22 +280,24 @@ def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 1.5) -> str:
             lines.append(f"**[{ts}] {current_speaker}:** {text}\n")
 
     for seg in all_segments:
-        speaker_changed = seg["speaker"] != current_speaker
-        long_gap = (seg["start"] - last_end) > min_gap
+        speaker = seg["speaker"]
+        speaker_changed = speaker != current_speaker
+        speaker_last_end = last_end_per_speaker.get(speaker, 0.0)
+        long_gap = (seg["start"] - speaker_last_end) > min_gap
 
-        if speaker_changed or (long_gap and current_chunks):
+        if speaker_changed or (long_gap and current_chunks and current_speaker == speaker):
             flush()
             current_chunks = [seg["text"]]
             current_start = seg["start"]
-            current_speaker = seg["speaker"]
+            current_speaker = speaker
         elif not current_chunks:
             current_chunks = [seg["text"]]
             current_start = seg["start"]
-            current_speaker = seg["speaker"]
+            current_speaker = speaker
         else:
             current_chunks.append(seg["text"])
 
-        last_end = seg["end"]
+        last_end_per_speaker[speaker] = seg["end"]
 
     flush()
     return "\n".join(lines)
