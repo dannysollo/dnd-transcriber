@@ -73,7 +73,9 @@ _HALLUCINATION_PHRASES = {
 
 # Segments where faster-whisper's no_speech_prob exceeds this threshold are
 # dropped as likely silence/noise rather than real speech.
-_NO_SPEECH_THRESHOLD = 0.6
+# 0.85 = only drop near-certain silence; lower values were too aggressive for
+# quiet speech (pauses, soft-spoken players, thinking mid-sentence).
+_NO_SPEECH_THRESHOLD = 0.85
 
 
 def transcribe_audio(model, wav_path: str, **kwargs) -> dict:
