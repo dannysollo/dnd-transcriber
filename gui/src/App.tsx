@@ -315,12 +315,9 @@ export default function App() {
               )}
             </NavLink>
           )}
-        </div>
-
-        {/* Settings nav item (bottom of nav, above user) */}
-        <div style={{ padding: '0 12px 8px' }}>
           <NavLink
             to="/settings"
+            className="sidebar-nav-item"
             style={({ isActive }) => ({
               display: 'flex',
               alignItems: 'center',
@@ -337,7 +334,7 @@ export default function App() {
             })}
           >
             <GearIcon />
-            <span>Settings</span>
+            <span style={{ flex: 1 }}>Settings</span>
           </NavLink>
         </div>
 
