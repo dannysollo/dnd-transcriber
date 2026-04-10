@@ -7,7 +7,7 @@ export default function SettingsPage() {
   return (
     <div className="page-content" style={{ padding: '32px', maxWidth: '720px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
       <div>
-        <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)' }}>Settings</h1>
+        <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)' }}>Preferences</h1>
         <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>Appearance and site preferences</p>
       </div>
 

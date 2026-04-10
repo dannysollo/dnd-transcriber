@@ -334,7 +334,7 @@ export default function App() {
             })}
           >
             <GearIcon />
-            <span style={{ flex: 1 }}>Settings</span>
+            <span style={{ flex: 1 }}>Preferences</span>
           </NavLink>
         </div>
 
