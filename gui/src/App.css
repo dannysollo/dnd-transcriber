@@ -90,11 +90,29 @@
 
   .app-main {
     flex: 1 1 0 !important;
-    overflow: auto !important;
+    overflow: hidden !important;
     min-height: 0 !important;
     /* Needed so content doesn't push the nav bar off screen */
     height: 0 !important;
     overscroll-behavior: contain !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Non-session pages: fill the routes wrapper and scroll internally */
+  .app-routes-wrapper > .page-content,
+  .app-routes-wrapper > div > .page-content {
+    overflow-y: auto !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+
+  /* SessionView: fill the routes wrapper */
+  .session-view-root {
+    flex: 1 !important;
+    min-height: 0 !important;
+    height: auto !important;
   }
 
   .mobile-campaign-bar {
@@ -102,7 +120,32 @@
   }
 
   .session-content {
-    padding: 12px !important;
+    padding: 10px 12px !important;
+  }
+
+  /* Compact session header on mobile */
+  .session-view-root > div:first-of-type {
+    padding: 8px 12px 8px !important;
+  }
+
+  /* Hide episode description on mobile — saves ~50px */
+  .session-description-block {
+    display: none !important;
+  }
+
+  /* Audio player: tighter on mobile */
+  .session-audio-panel {
+    padding: 6px 12px !important;
+    gap: 4px !important;
+  }
+
+  .session-audio-label {
+    display: none !important;
+  }
+
+  /* Tabs: less padding */
+  .session-view-root .session-tabs-row {
+    padding: 0 8px !important;
   }
 }
 

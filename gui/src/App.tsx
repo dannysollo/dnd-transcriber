@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Routes, Route, NavLink, useNavigate } from 'react-router-dom'
+import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import './App.css'
 import SessionsPage from './pages/SessionsPage'
 import SessionView from './pages/SessionView'
@@ -74,6 +74,8 @@ export default function App() {
   const [pendingEditCount, setPendingEditCount] = useState(0)
   const [workerLastSeen, setWorkerLastSeen] = useState<string | null>(null)
   const navigate = useNavigate()
+  const location = useLocation()
+  const isSessionView = location.pathname.startsWith('/sessions/')
 
   // Fetch worker heartbeat for DMs
   useEffect(() => {
@@ -387,18 +389,21 @@ export default function App() {
 
       {/* Main content */}
       <main className="app-main" style={{ flex: 1, overflow: 'auto' }}>
-        {/* Mobile campaign indicator */}
-        <div className="mobile-campaign-bar" style={{
-          display: 'none',
-          padding: '8px 16px',
-          background: 'var(--bg-surface)',
-          borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
-          fontSize: '12px',
-          color: 'var(--accent-text)',
-          fontWeight: 600,
-        }}>
-          {activeCampaign?.name ?? 'No campaign'}
-        </div>
+        {/* Mobile campaign indicator — hidden on session view (has its own header) */}
+        {!isSessionView && (
+          <div className="mobile-campaign-bar" style={{
+            display: 'none',
+            padding: '8px 16px',
+            background: 'var(--bg-surface)',
+            borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
+            fontSize: '12px',
+            color: 'var(--accent-text)',
+            fontWeight: 600,
+          }}>
+            {activeCampaign?.name ?? 'No campaign'}
+          </div>
+        )}
+        <div className="app-routes-wrapper" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <Routes>
           <Route path="/" element={<SessionsPage />} />
           <Route path="/sessions/:name" element={<SessionView />} />
@@ -412,6 +417,7 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </div>
       </main>
     </div>
   )

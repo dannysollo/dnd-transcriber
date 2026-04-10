@@ -567,7 +567,7 @@ export default function SessionView() {
   ]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div className="session-view-root" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Window drag overlay */}
       {isDragOver && (
         <div style={{
@@ -683,7 +683,7 @@ export default function SessionView() {
 
         {/* Episode description row */}
         {(description || editingDescription) ? (
-          <div style={{ marginTop: '10px', paddingLeft: '2px' }}>
+          <div className="session-description-block" style={{ marginTop: '10px', paddingLeft: '2px' }}>
             {editingDescription ? (
               <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                 <textarea
@@ -950,7 +950,7 @@ export default function SessionView() {
         borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
         flexShrink: 0,
       }}>
-      <div style={{ display: 'flex', gap: 0, padding: '0 20px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+      <div className="session-tabs-row" style={{ display: 'flex', gap: 0, padding: '0 20px', overflowX: 'auto', scrollbarWidth: 'none' }}>
         {tabs.map(t => (
           <button
             key={t.id}
@@ -1078,7 +1078,7 @@ export default function SessionView() {
 
       {/* Audio player panel */}
       {audioFiles.length > 0 && (
-        <div style={{
+        <div className="session-audio-panel" style={{
           borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
           background: '#0a0d14',
           flexShrink: 0,
@@ -1088,7 +1088,7 @@ export default function SessionView() {
           gap: '8px',
         }}>
           {/* Audio label */}
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <div className="session-audio-label" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <span style={{ fontSize: '10px', color: '#475569', fontWeight: 700, letterSpacing: '0.08em' }}>
               AUDIO
             </span>
