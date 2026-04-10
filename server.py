@@ -1530,6 +1530,7 @@ def campaign_list_sessions(
     for d in sorted(sessions_dir.iterdir(), reverse=True):
         if d.is_dir() and not d.name.startswith("."):
             stat = d.stat()
+            desc_path = d / "description.md"
             sessions.append({
                 "name": d.name,
                 "status": session_status(d),
@@ -1538,6 +1539,7 @@ def campaign_list_sessions(
                 "has_wiki": (d / "wiki_suggestions.md").exists() or (d / "wiki.md").exists(),
                 "created_at": datetime.utcfromtimestamp(stat.st_ctime).isoformat(),
                 "modified_at": datetime.utcfromtimestamp(stat.st_mtime).isoformat(),
+                "description": desc_path.read_text(encoding="utf-8").strip() if desc_path.exists() else None,
             })
     return sessions
 

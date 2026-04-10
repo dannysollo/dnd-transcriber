@@ -14,6 +14,7 @@ interface Session {
   has_wiki: boolean
   created_at: string | null
   modified_at: string | null
+  description: string | null
 }
 
 interface TranscriptionJob {
@@ -22,7 +23,6 @@ interface TranscriptionJob {
   created_at: string | null
   error_message: string | null
 }
-
 
 function relativeTime(iso: string | null): string {
   if (!iso) return ''
@@ -36,6 +36,43 @@ function relativeTime(iso: string | null): string {
   if (days < 7) return `${days}d ago`
   return new Date(iso + 'Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
+
+// SVG icons
+const MicIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>
+    <line x1="8" y1="22" x2="16" y2="22"/>
+  </svg>
+)
+const BookIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+  </svg>
+)
+const FolderIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+  </svg>
+)
+const PenIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+)
+const TrashIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+    <path d="M10 11v6"/><path d="M14 11v6"/>
+    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+  </svg>
+)
+const RefreshIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+  </svg>
+)
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([])
@@ -281,69 +318,71 @@ export default function SessionsPage() {
   }
 
   return (
-    <div className="page-content" style={{ padding: '32px', maxWidth: '900px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: '24px' }}>
-        {/* Row 1: Title + campaign name */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>
+    <div className="page-content" style={{ padding: '24px 28px', maxWidth: '860px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: '28px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+          <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>
             Sessions
             {!loading && sessions.length > 0 && (
-              <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 400, color: '#475569' }}>
+              <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}>
                 {sessions.length}
               </span>
             )}
           </h1>
-          <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
-            {activeCampaign ? activeCampaign.name : 'All recording sessions'}
-          </p>
+          <span style={{ fontSize: '13px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            {activeCampaign ? activeCampaign.name : 'All sessions'}
+          </span>
         </div>
 
-        {/* Row 2: Sort buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          {(['name', 'date_added', 'modified'] as SortKey[]).map(k => (
-            <button
-              key={k}
-              onClick={() => setSortKey(k)}
-              style={{
-                background: sortKey === k ? 'rgba(124,108,252,0.15)' : 'transparent',
-                border: `1px solid ${sortKey === k ? 'rgba(124,108,252,0.4)' : 'var(--border-default)'}`,
-                borderRadius: 6, color: sortKey === k ? 'var(--accent-text)' : '#475569',
-                padding: '4px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                textTransform: 'capitalize',
-              }}
-            >
-              {k === 'name' ? 'Name' : k === 'date_added' ? 'Date Added' : 'Modified'}
-            </button>
-          ))}
-        </div>
-
-        {/* Row 3: New session input */}
-        {(!authEnabled || (isLoggedIn && activeCampaign != null)) && (
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
-              type="text"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && createSession()}
-              placeholder="2026-03-15"
-              style={{
-                background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '8px',
-                color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', flex: 1, outline: 'none',
-              }}
-            />
-            <button
-              onClick={createSession}
-              disabled={creating || !newName.trim()}
-              className="btn-primary"
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              + New
-            </button>
+        {/* Sort + New session row */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, marginRight: 2 }}>Sort:</span>
+            {(['name', 'date_added', 'modified'] as SortKey[]).map(k => (
+              <button
+                key={k}
+                onClick={() => setSortKey(k)}
+                style={{
+                  background: sortKey === k ? 'rgba(var(--accent-rgb, 124,108,252),0.12)' : 'transparent',
+                  border: `1px solid ${sortKey === k ? 'var(--accent)' : 'var(--border-default)'}`,
+                  borderRadius: 5, color: sortKey === k ? 'var(--accent-text)' : 'var(--text-muted)',
+                  padding: '3px 9px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {k === 'name' ? 'Name' : k === 'date_added' ? 'Date Added' : 'Modified'}
+              </button>
+            ))}
           </div>
-        )}
+
+          {(!authEnabled || (isLoggedIn && activeCampaign != null)) && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && createSession()}
+                placeholder="Session name, e.g. 2026-03-15"
+                style={{
+                  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '8px',
+                  color: 'var(--text-primary)', padding: '8px 12px', fontSize: '13px', flex: 1, outline: 'none',
+                }}
+              />
+              <button
+                onClick={createSession}
+                disabled={creating || !newName.trim()}
+                className="btn-primary"
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                + New
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Hidden file input for uploads */}
+      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -357,66 +396,40 @@ export default function SessionsPage() {
       />
 
       {!activeCampaign ? (
-        <div style={{
-          background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px',
-          padding: '48px', textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>⚔️</div>
-          <div style={{ color: '#94a3b8', fontWeight: 600, marginBottom: 6 }}>No campaign selected</div>
-          <div style={{ color: '#475569', fontSize: 13 }}>Pick a campaign from the dropdown above to see its sessions.</div>
-        </div>
+        <EmptyState icon="⚔️" title="No campaign selected" body="Pick a campaign from the dropdown above to see its sessions." />
       ) : loading ? (
-        <div style={{ color: '#64748b', fontSize: '14px' }}>Loading...</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Loading...</div>
       ) : sessions.length === 0 ? (
-        <div style={{
-          background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px',
-          padding: '48px', textAlign: 'center', color: '#64748b',
-        }}>
-          No sessions yet. Create one above.
-        </div>
+        <EmptyState icon="📜" title="No sessions yet" body="Create your first session above to get started." />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {sortedSessions.map(s => {
             const isRenaming = renamingSession === s.name
             const isDragOver = dragOverSession === s.name
             const isUploading = uploadingFor === s.name
+            const job = jobMap[s.name]
+            const timestamp = sortKey === 'date_added' ? s.created_at : s.modified_at
+            const timestampLabel = sortKey === 'date_added' ? 'Added' : 'Modified'
 
-            // Inline delete confirmation
             if (confirmDelete === s.name) {
               return (
                 <div
                   key={s.name}
                   className="session-card"
-                  style={{
-                    border: '1px solid rgba(239,68,68,0.4)',
-                    padding: '14px 20px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                  }}
+                  style={{ border: '1px solid rgba(239,68,68,0.4)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}
                 >
                   <span style={{ flex: 1, fontSize: '14px', color: 'var(--danger)' }}>
                     Delete <strong>{s.name}</strong>?
                   </span>
-                  <button
-                    onClick={() => deleteSession(s.name)}
-                    className="btn-danger"
-                    style={{ padding: '5px 14px', fontSize: '13px', borderRadius: '6px' }}
-                  >
+                  <button onClick={() => deleteSession(s.name)} className="btn-danger" style={{ padding: '5px 14px', fontSize: '13px', borderRadius: '6px' }}>
                     Yes, delete
                   </button>
-                  <button
-                    onClick={() => setConfirmDelete(null)}
-                    className="btn-ghost"
-                    style={{ padding: '5px 14px', fontSize: '13px', borderRadius: '6px' }}
-                  >
+                  <button onClick={() => setConfirmDelete(null)} className="btn-ghost" style={{ padding: '5px 14px', fontSize: '13px', borderRadius: '6px' }}>
                     Cancel
                   </button>
                 </div>
               )
             }
-
-            const job = jobMap[s.name]
 
             return (
               <div
@@ -429,104 +442,131 @@ export default function SessionsPage() {
                 style={{
                   background: isDragOver ? 'rgba(124,108,252,0.06)' : undefined,
                   border: isDragOver ? '1px solid var(--accent)' : undefined,
-                  boxShadow: isDragOver ? '0 0 0 2px rgba(124,108,252,0.25)' : undefined,
-                  padding: '14px 20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
+                  boxShadow: isDragOver ? '0 0 0 2px rgba(124,108,252,0.2)' : undefined,
+                  padding: '18px 20px',
                   overflow: 'hidden',
                 }}
               >
-                {/* Name / rename */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {isRenaming ? (
-                    <input
-                      autoFocus
-                      value={renameValue}
-                      onChange={e => setRenameValue(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') renameSession(s.name, renameValue)
-                        if (e.key === 'Escape') setRenamingSession(null)
-                      }}
-                      onBlur={() => renameSession(s.name, renameValue)}
-                      style={{
-                        background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: '6px',
-                        color: '#e2e8f0', padding: '4px 8px', fontSize: '14px', fontWeight: 600, outline: 'none',
-                      }}
-                    />
-                  ) : (
-                    <div onClick={() => navigate(`/sessions/${s.name}`)} style={{ cursor: 'pointer', minWidth: 0, overflow: 'hidden' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>
-                      {(sortKey === 'date_added' ? s.created_at : s.modified_at) && (
-                        <div style={{ fontSize: '11px', color: '#334155', marginTop: 2 }}>
-                          {sortKey === 'date_added' ? 'Added' : 'Modified'} {relativeTime(sortKey === 'date_added' ? s.created_at : s.modified_at)}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Drag hint when hovering */}
-                {isDragOver && (
-                  <span style={{ fontSize: '12px', color: '#a78bfa' }}>
-                    Drop to upload
-                  </span>
-                )}
-
-                {/* Right side: badges + actions — stacks on mobile */}
-                <div className="session-row-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', minWidth: 0, flexShrink: 1 }}>
-
-                {/* Badges row */}
-                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', minWidth: 0 }}>
-                  {s.has_transcript && <Badge label="transcript" />}
-
-                  {/* Job status badge — hide when done (transcript badge covers it) */}
-                  {job && job.status !== 'done' && <JobStatusBadge job={job} onCancel={() => cancelJob(s.name)} />}
-                </div>
-
-                {/* Actions row */}
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  {(!authEnabled || isLoggedIn) && (
-                    <ActionBtn
-                      title={job && job.status === 'claimed' ? 'Reset stuck job and re-queue' : 'Queue transcription'}
-                      onClick={() => requestTranscription(s.name)}
-                    >
-                      {job && job.status === 'claimed' ? '🔁' : '🎙️'}
-                    </ActionBtn>
-                  )}
-                  {(!authEnabled || isLoggedIn) && s.has_transcript && (!authEnabled || activeCampaign?.role === 'dm') && (
-                    <ActionBtn
-                      title="Generate summary + wiki suggestions"
-                      onClick={() => requestWikiSummary(s.name)}
-                    >
-                      📖
-                    </ActionBtn>
-                  )}
-                  <ActionBtn
-                    title="Upload audio files"
-                    onClick={() => {
-                      setUploadingFor(s.name)
-                      fileInputRef.current?.click()
+                {isRenaming ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') renameSession(s.name, renameValue)
+                      if (e.key === 'Escape') setRenamingSession(null)
                     }}
-                    loading={isUploading}
-                  >
-                    {isUploading ? '⏳' : '📁'}
-                  </ActionBtn>
-                  <ActionBtn
-                    title="Rename session"
-                    onClick={() => { setRenamingSession(s.name); setRenameValue(s.name) }}
-                  >
-                    ✏️
-                  </ActionBtn>
-                  <ActionBtn
-                    title="Delete session"
-                    onClick={() => setConfirmDelete(s.name)}
-                    danger
-                  >
-                    🗑️
-                  </ActionBtn>
-                </div>
-                </div>{/* end session-row-right */}
+                    onBlur={() => renameSession(s.name, renameValue)}
+                    style={{
+                      background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: '6px',
+                      color: 'var(--text-primary)', padding: '6px 10px', fontSize: '15px', fontWeight: 600,
+                      outline: 'none', width: '100%', boxSizing: 'border-box',
+                    }}
+                  />
+                ) : (
+                  <>
+                    {/* Top row: title + badges */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: s.description ? 8 : 0 }}>
+                      <div
+                        onClick={() => navigate(`/sessions/${s.name}`)}
+                        style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+                      >
+                        <div style={{
+                          fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          lineHeight: 1.3,
+                        }}>
+                          {s.name}
+                        </div>
+                      </div>
+
+                      {/* Status badges — top right */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                        {s.has_transcript && (
+                          <span style={{
+                            background: 'rgba(var(--accent-rgb, 124,108,252),0.1)',
+                            color: 'var(--accent-text)',
+                            borderRadius: '4px', padding: '2px 7px',
+                            fontSize: '10px', fontWeight: 700, letterSpacing: '0.03em',
+                            textTransform: 'uppercase',
+                          }}>
+                            Transcript
+                          </span>
+                        )}
+                        {job && job.status !== 'done' && (
+                          <JobStatusBadge job={job} onCancel={() => cancelJob(s.name)} />
+                        )}
+                        {isDragOver && (
+                          <span style={{ fontSize: '11px', color: 'var(--accent-text)', fontStyle: 'italic' }}>
+                            Drop to upload
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Description blurb */}
+                    {s.description && (
+                      <p
+                        onClick={() => navigate(`/sessions/${s.name}`)}
+                        style={{
+                          margin: '0 0 12px 0',
+                          fontSize: '13px',
+                          color: 'var(--text-secondary)',
+                          fontStyle: 'italic',
+                          lineHeight: 1.55,
+                          cursor: 'pointer',
+                          // Clamp to 2 lines
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {s.description}
+                      </p>
+                    )}
+
+                    {/* Bottom row: timestamp + actions */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: s.description ? 0 : 10 }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        {timestamp ? `${timestampLabel} ${relativeTime(timestamp)}` : ''}
+                      </span>
+
+                      {/* Action buttons */}
+                      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                        {(!authEnabled || isLoggedIn) && (
+                          <ActionBtn
+                            title={job && job.status === 'claimed' ? 'Reset stuck job and re-queue' : 'Queue transcription'}
+                            onClick={() => requestTranscription(s.name)}
+                          >
+                            {job && job.status === 'claimed' ? <RefreshIcon /> : <MicIcon />}
+                          </ActionBtn>
+                        )}
+                        {(!authEnabled || isLoggedIn) && s.has_transcript && (!authEnabled || activeCampaign?.role === 'dm') && (
+                          <ActionBtn title="Generate summary + wiki" onClick={() => requestWikiSummary(s.name)}>
+                            <BookIcon />
+                          </ActionBtn>
+                        )}
+                        <ActionBtn
+                          title="Upload audio files"
+                          onClick={() => { setUploadingFor(s.name); fileInputRef.current?.click() }}
+                          loading={isUploading}
+                        >
+                          <FolderIcon />
+                        </ActionBtn>
+                        <ActionBtn
+                          title="Rename session"
+                          onClick={() => { setRenamingSession(s.name); setRenameValue(s.name) }}
+                        >
+                          <PenIcon />
+                        </ActionBtn>
+                        <ActionBtn title="Delete session" onClick={() => setConfirmDelete(s.name)} danger>
+                          <TrashIcon />
+                        </ActionBtn>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )
           })}
@@ -536,22 +576,24 @@ export default function SessionsPage() {
   )
 }
 
-function Badge({ label }: { label: string }) {
+function EmptyState({ icon, title, body }: { icon: string; title: string; body: string }) {
   return (
-    <span style={{
-      background: 'rgba(124,108,252,0.1)', color: 'var(--accent)',
-      borderRadius: '4px', padding: '2px 7px', fontSize: '10px', fontWeight: 600,
+    <div style={{
+      background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px',
+      padding: '56px 32px', textAlign: 'center',
     }}>
-      {label}
-    </span>
+      <div style={{ fontSize: 36, marginBottom: 14 }}>{icon}</div>
+      <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>{title}</div>
+      <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{body}</div>
+    </div>
   )
 }
 
 const JOB_BADGE: Record<string, { bg: string; text: string; label: string }> = {
-  pending:   { bg: 'rgba(251,191,36,0.15)',  text: '#fbbf24', label: '⏳ Queued' },
-  claimed:   { bg: 'rgba(59,130,246,0.15)',  text: '#60a5fa', label: '🔄 Transcribing' },
-  done:      { bg: 'rgba(34,197,94,0.15)',   text: '#4ade80', label: '✅ Done' },
-  error:     { bg: 'rgba(248,113,113,0.15)', text: '#f87171', label: '❌ Error' },
+  pending:   { bg: 'rgba(251,191,36,0.12)',  text: '#fbbf24', label: 'Queued' },
+  claimed:   { bg: 'rgba(59,130,246,0.12)',  text: '#60a5fa', label: 'Transcribing' },
+  done:      { bg: 'rgba(34,197,94,0.12)',   text: '#4ade80', label: 'Done' },
+  error:     { bg: 'rgba(248,113,113,0.12)', text: '#f87171', label: 'Error' },
 }
 
 function JobStatusBadge({ job, onCancel }: { job: TranscriptionJob; onCancel?: () => void }) {
@@ -563,9 +605,10 @@ function JobStatusBadge({ job, onCancel }: { job: TranscriptionJob; onCancel?: (
       <div
         title={job.status === 'error' ? (job.error_message ?? undefined) : undefined}
         style={{
-          background: b.bg, color: b.text, borderRadius: '20px',
-          padding: '3px 10px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
-          cursor: job.status === 'error' ? 'help' : 'default',
+          background: b.bg, color: b.text, borderRadius: '4px',
+          padding: '2px 8px', fontSize: '10px', fontWeight: 700,
+          letterSpacing: '0.03em', textTransform: 'uppercase',
+          whiteSpace: 'nowrap', cursor: job.status === 'error' ? 'help' : 'default',
         }}
       >
         {b.label}
@@ -575,8 +618,8 @@ function JobStatusBadge({ job, onCancel }: { job: TranscriptionJob; onCancel?: (
           onClick={e => { e.stopPropagation(); onCancel() }}
           title="Cancel job"
           style={{
-            background: 'transparent', border: 'none', color: '#64748b',
-            cursor: 'pointer', fontSize: '13px', padding: '0 2px', lineHeight: 1,
+            background: 'transparent', border: 'none', color: 'var(--text-muted)',
+            cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1,
           }}
         >✕</button>
       )}
@@ -594,13 +637,17 @@ function ActionBtn({ children, onClick, title, loading, danger }: {
       disabled={loading}
       style={{
         background: 'transparent',
-        border: `1px solid ${danger ? 'rgba(248,113,113,0.3)' : 'var(--border-default)'}`,
+        border: `1px solid ${danger ? 'rgba(248,113,113,0.25)' : 'var(--border-default)'}`,
         borderRadius: '6px',
-        color: danger ? '#f87171' : '#94a3b8',
-        padding: '4px 8px',
+        color: danger ? '#f87171' : 'var(--text-muted)',
+        padding: '5px 7px',
         fontSize: '13px',
         cursor: 'pointer',
         opacity: loading ? 0.5 : 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: 'all 0.15s ease',
       }}
     >
       {children}
