@@ -312,7 +312,11 @@ def corrections_report(name: str):
     from merge import merge_transcripts
 
     # Raw text: merge without any corrections applied
-    raw_text = merge_transcripts(str(session_dir))
+    speakers_dir = session_dir / "speakers"
+    if speakers_dir.exists() and any(speakers_dir.glob("*.json")):
+        raw_text = merge_transcripts(str(session_dir))
+    else:
+        raw_text = transcript_path.read_text(encoding="utf-8")
     corrected_text = transcript_path.read_text(encoding="utf-8")
 
     raw_lines = raw_text.splitlines()
@@ -2090,7 +2094,12 @@ def campaign_corrections_report(
     corrections = config.get("corrections") or {}
     patterns = config.get("patterns") or []
     from merge import merge_transcripts
-    raw_text = merge_transcripts(str(session_dir))
+    speakers_dir = session_dir / "speakers"
+    if speakers_dir.exists() and any(speakers_dir.glob("*.json")):
+        raw_text = merge_transcripts(str(session_dir))
+    else:
+        # No speaker JSONs — worker produced transcript.md directly; use it as the base
+        raw_text = transcript_path.read_text(encoding="utf-8")
     corrected_text = transcript_path.read_text(encoding="utf-8")
     raw_lines = raw_text.splitlines()
 
