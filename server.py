@@ -1531,7 +1531,7 @@ def campaign_list_sessions(
     sessions_dir = get_sessions_dir(slug)
     sessions_dir.mkdir(parents=True, exist_ok=True)
     sessions = []
-    for d in sorted(sessions_dir.iterdir(), reverse=True):
+    for d in sorted(sessions_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
         if d.is_dir() and not d.name.startswith("."):
             stat = d.stat()
             desc_path = d / "description.md"

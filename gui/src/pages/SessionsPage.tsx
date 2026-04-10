@@ -278,7 +278,7 @@ export default function SessionsPage() {
 
   const sortedSessions = [...sessions].sort((a, b) => {
     if (sortKey === 'name') return a.name.localeCompare(b.name)
-    if (sortKey === 'date_added') return new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+    if (sortKey === 'date_added') return new Date(b.modified_at ?? 0).getTime() - new Date(a.modified_at ?? 0).getTime()
     if (sortKey === 'modified') return new Date(b.modified_at ?? 0).getTime() - new Date(a.modified_at ?? 0).getTime()
     return 0
   })
