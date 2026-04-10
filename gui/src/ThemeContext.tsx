@@ -112,6 +112,8 @@ export const themes: ThemeDefinition[] = [
     accentHover: '#e04535',
     accentMuted: 'rgba(192,57,43,0.18)',
     accentText:  '#f0806a',
+    secondaryAccent:     '#c9a84c',
+    secondaryAccentText: '#f0ddc0',
     textPrimary:  '#f0ddc0',
     textSecondary:'#c0987a',
     textMuted:    '#806048',
