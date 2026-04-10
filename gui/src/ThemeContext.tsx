@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 export interface ThemeDefinition {
   id: string
   label: string
+  description: string
   bg: string
   surface: string
   elevated: string
@@ -12,6 +13,13 @@ export interface ThemeDefinition {
   accentHover: string
   accentMuted: string
   accentText: string
+  secondaryAccent?: string
+  secondaryAccentText?: string
+  textPrimary: string
+  textSecondary: string
+  textMuted: string
+  borderSubtle: string
+  borderDefault: string
   danger: string
 }
 
@@ -23,88 +31,140 @@ export interface FontDefinition {
 
 export const themes: ThemeDefinition[] = [
   {
+    // Blood red accent on warm bone/parchment text — classic D&D danger feel
+    id: 'crimson-bone',
+    label: 'Crimson & Bone',
+    description: 'Blood red on warm parchment',
+    bg: '#0e0b09',
+    surface: '#16100d',
+    elevated: '#1d1510',
+    overlay: '#241a13',
+    card: '#201812',
+    accent: '#b83232',
+    accentHover: '#d94040',
+    accentMuted: 'rgba(184,50,50,0.15)',
+    accentText: '#e08070',
+    textPrimary: '#e8d5bc',
+    textSecondary: '#b89e84',
+    textMuted: '#7a6355',
+    borderSubtle: '#2a1e17',
+    borderDefault: '#332419',
+    danger: '#e53e3e',
+  },
+  {
+    // Deep purple accent on cool silver-blue text — arcane spell energy
     id: 'arcane',
-    label: 'Arcane',
-    bg: '#0f1117',
-    surface: '#13151f',
-    elevated: '#191c2a',
-    overlay: '#1e2130',
-    card: '#1b1e2e',
+    label: 'Arcane Void',
+    description: 'Violet magic on silver starlight',
+    bg: '#090b14',
+    surface: '#0e1120',
+    elevated: '#12162a',
+    overlay: '#171b32',
+    card: '#141830',
     accent: '#7c6cfc',
     accentHover: '#9d8fff',
-    accentMuted: 'rgba(124,108,252,0.15)',
-    accentText: '#a89cff',
-    danger: '#ef4444',
+    accentMuted: 'rgba(124,108,252,0.18)',
+    accentText: '#b8aeff',
+    secondaryAccent: '#e879f9',
+    secondaryAccentText: '#f0abfc',
+    textPrimary: '#c8d0ec',
+    textSecondary: '#7a88b0',
+    textMuted: '#505870',
+    borderSubtle: '#1c2040',
+    borderDefault: '#222648',
+    danger: '#f87171',
   },
   {
-    id: 'crimson',
-    label: 'Crimson',
-    bg: '#0d0a0a',
-    surface: '#16100f',
-    elevated: '#1c1411',
-    overlay: '#221814',
-    card: '#1f1613',
-    accent: '#c0392b',
-    accentHover: '#e74c3c',
-    accentMuted: 'rgba(192,57,43,0.15)',
-    accentText: '#e8816f',
-    danger: '#ef4444',
+    // Aged gold accent on warm ivory/parchment — wizard's library, scholarly
+    id: 'gold-parchment',
+    label: 'Gold & Parchment',
+    description: 'Candlelight gold on aged ivory',
+    bg: '#0f0d07',
+    surface: '#17140a',
+    elevated: '#1e1b0f',
+    overlay: '#252114',
+    card: '#221e12',
+    accent: '#c9a030',
+    accentHover: '#e0b84a',
+    accentMuted: 'rgba(201,160,48,0.18)',
+    accentText: '#ddc070',
+    secondaryAccent: '#9b6b3a',
+    secondaryAccentText: '#c4966a',
+    textPrimary: '#ecddc0',
+    textSecondary: '#b8a07a',
+    textMuted: '#80704a',
+    borderSubtle: '#2c2614',
+    borderDefault: '#342e18',
+    danger: '#e05c2a',
   },
   {
-    id: 'teal',
-    label: 'Teal',
-    bg: '#060f0f',
-    surface: '#0d1a1a',
-    elevated: '#112020',
-    overlay: '#162626',
-    card: '#142424',
-    accent: '#0d9488',
-    accentHover: '#14b8a6',
-    accentMuted: 'rgba(13,148,136,0.15)',
-    accentText: '#2dd4bf',
-    danger: '#ef4444',
+    // Teal accent with amber highlights on pale aqua text — sea/storm mage
+    id: 'teal-ember',
+    label: 'Teal & Ember',
+    description: 'Ocean teal with amber fire',
+    bg: '#060d0e',
+    surface: '#0b1618',
+    elevated: '#101e20',
+    overlay: '#152628',
+    card: '#122224',
+    accent: '#0e9f94',
+    accentHover: '#18c4b8',
+    accentMuted: 'rgba(14,159,148,0.15)',
+    accentText: '#34d8cc',
+    secondaryAccent: '#e07820',
+    secondaryAccentText: '#f0a050',
+    textPrimary: '#c8e8e5',
+    textSecondary: '#6aaca8',
+    textMuted: '#406a68',
+    borderSubtle: '#152e2c',
+    borderDefault: '#1c3836',
+    danger: '#e05c3a',
   },
   {
-    id: 'gold',
-    label: 'Gold',
-    bg: '#110f08',
-    surface: '#1a1610',
-    elevated: '#201c13',
-    overlay: '#262116',
-    card: '#231f14',
-    accent: '#c9a84c',
-    accentHover: '#d4b866',
-    accentMuted: 'rgba(201,168,76,0.15)',
-    accentText: '#ddc97a',
-    danger: '#ef4444',
+    // Forest green on pale sage — druid, nature, the wilds
+    id: 'forest',
+    label: 'Ironwood',
+    description: 'Forest green on pale sage',
+    bg: '#080c08',
+    surface: '#0d130d',
+    elevated: '#111a11',
+    overlay: '#162016',
+    card: '#131e13',
+    accent: '#4a9460',
+    accentHover: '#64b87c',
+    accentMuted: 'rgba(74,148,96,0.15)',
+    accentText: '#80d098',
+    secondaryAccent: '#8a6a30',
+    secondaryAccentText: '#c09050',
+    textPrimary: '#cce0cc',
+    textSecondary: '#7aaa80',
+    textMuted: '#4a6850',
+    borderSubtle: '#1a2a1a',
+    borderDefault: '#203020',
+    danger: '#d94040',
   },
   {
-    id: 'amethyst',
-    label: 'Amethyst',
-    bg: '#0a0a14',
-    surface: '#10101e',
-    elevated: '#151525',
-    overlay: '#1a1a2e',
-    card: '#181828',
-    accent: '#8b5cf6',
-    accentHover: '#a78bfa',
-    accentMuted: 'rgba(139,92,246,0.15)',
-    accentText: '#c4b5fd',
-    danger: '#ef4444',
-  },
-  {
+    // Steel blue on pale cold text — castle, iron, the north
     id: 'midnight',
-    label: 'Midnight',
-    bg: '#080c14',
-    surface: '#0d1424',
-    elevated: '#101a2e',
-    overlay: '#142038',
-    card: '#131c32',
-    accent: '#3b82f6',
-    accentHover: '#60a5fa',
-    accentMuted: 'rgba(59,130,246,0.15)',
-    accentText: '#93c5fd',
-    danger: '#ef4444',
+    label: 'Midnight Steel',
+    description: 'Cold blue on pale silver',
+    bg: '#07090f',
+    surface: '#0c1020',
+    elevated: '#111628',
+    overlay: '#161c30',
+    card: '#131a2e',
+    accent: '#3a7bd5',
+    accentHover: '#5898f0',
+    accentMuted: 'rgba(58,123,213,0.18)',
+    accentText: '#88b8f8',
+    secondaryAccent: '#7090b0',
+    secondaryAccentText: '#a0c0d8',
+    textPrimary: '#c0cce0',
+    textSecondary: '#6878a0',
+    textMuted: '#404e6a',
+    borderSubtle: '#181e38',
+    borderDefault: '#1e2640',
+    danger: '#f06060',
   },
 ]
 
@@ -141,16 +201,18 @@ function applyTheme(t: ThemeDefinition, f: FontDefinition) {
   root.style.setProperty('--bg-elevated', t.elevated)
   root.style.setProperty('--bg-overlay', t.overlay)
   root.style.setProperty('--bg-card', t.card)
-  root.style.setProperty('--border-subtle', t.overlay)
-  root.style.setProperty('--border-default', adjustColor(t.overlay, 8))
-  root.style.setProperty('--border-strong', adjustColor(t.overlay, 16))
-  root.style.setProperty('--text-primary', '#e2e8f0')
-  root.style.setProperty('--text-secondary', '#94a3b8')
-  root.style.setProperty('--text-muted', '#64748b')
+  root.style.setProperty('--border-subtle', t.borderSubtle)
+  root.style.setProperty('--border-default', t.borderDefault)
+  root.style.setProperty('--border-strong', adjustColor(t.borderDefault, 12))
+  root.style.setProperty('--text-primary', t.textPrimary)
+  root.style.setProperty('--text-secondary', t.textSecondary)
+  root.style.setProperty('--text-muted', t.textMuted)
   root.style.setProperty('--accent', t.accent)
   root.style.setProperty('--accent-hover', t.accentHover)
   root.style.setProperty('--accent-muted', t.accentMuted)
   root.style.setProperty('--accent-text', t.accentText)
+  root.style.setProperty('--accent2', t.secondaryAccent ?? t.accent)
+  root.style.setProperty('--accent2-text', t.secondaryAccentText ?? t.accentText)
   root.style.setProperty('--success', '#4ade80')
   root.style.setProperty('--error', '#f87171')
   root.style.setProperty('--warning', '#fbbf24')

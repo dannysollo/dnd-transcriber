@@ -16,37 +16,73 @@ export default function SettingsPage() {
           {/* Theme picker */}
           <div style={{ marginBottom: '20px' }}>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px', fontWeight: 600 }}>Color Theme</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-              {themes.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setTheme(t.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    border: theme.id === t.id ? `2px solid ${t.accent}` : '2px solid var(--border-default)',
-                    background: theme.id === t.id ? `${t.accentMuted}` : 'var(--bg-elevated)',
-                    cursor: 'pointer',
-                    color: theme.id === t.id ? t.accentText : 'var(--text-secondary)',
-                    fontSize: '12px',
-                    fontWeight: theme.id === t.id ? 700 : 400,
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <span style={{
-                    width: 16,
-                    height: 16,
-                    borderRadius: '50%',
-                    background: t.accent,
-                    flexShrink: 0,
-                    boxShadow: theme.id === t.id ? `0 0 6px ${t.accent}` : 'none',
-                  }} />
-                  {t.label}
-                </button>
-              ))}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+              {themes.map(t => {
+                const active = theme.id === t.id
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTheme(t.id)}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      gap: '8px',
+                      padding: '12px 14px',
+                      borderRadius: '10px',
+                      border: active ? `2px solid ${t.accent}` : `2px solid ${t.borderDefault}`,
+                      background: active ? t.card : t.surface,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      textAlign: 'left',
+                    }}
+                  >
+                    {/* Palette swatch row */}
+                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                      <span style={{
+                        width: 18, height: 18, borderRadius: '50%',
+                        background: t.accent,
+                        boxShadow: active ? `0 0 8px ${t.accent}80` : 'none',
+                        flexShrink: 0,
+                      }} />
+                      {t.secondaryAccent && (
+                        <span style={{
+                          width: 14, height: 14, borderRadius: '50%',
+                          background: t.secondaryAccent,
+                          flexShrink: 0,
+                          opacity: 0.85,
+                        }} />
+                      )}
+                      {/* Text color swatch */}
+                      <span style={{
+                        width: 12, height: 12, borderRadius: '3px',
+                        background: t.textPrimary,
+                        flexShrink: 0,
+                        opacity: 0.7,
+                      }} />
+                    </div>
+                    {/* Label + description */}
+                    <div>
+                      <div style={{
+                        fontSize: '13px',
+                        fontWeight: active ? 700 : 500,
+                        color: active ? t.accentText : t.textSecondary,
+                        lineHeight: 1.2,
+                      }}>
+                        {t.label}
+                      </div>
+                      <div style={{
+                        fontSize: '11px',
+                        color: t.textMuted,
+                        marginTop: '2px',
+                        fontStyle: 'italic',
+                      }}>
+                        {t.description}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
