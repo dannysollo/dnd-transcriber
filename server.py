@@ -94,6 +94,26 @@ def get_sessions_dir(campaign_slug: Optional[str] = None) -> Path:
     return BASE_DIR / config.get("sessions_dir", "sessions")
 
 
+def get_or_create_session_created_at(session_dir: Path) -> str:
+    """Return ISO timestamp for session creation. Reads created_at.txt if it exists,
+    otherwise tries to parse date from session name (M-D-YYYY prefix), falls back to mtime."""
+    created_at_file = session_dir / "created_at.txt"
+    if created_at_file.exists():
+        return created_at_file.read_text(encoding="utf-8").strip()
+    # Try to parse date from session name: handles "3-22-2026" or "3-22-2026-something"
+    name = session_dir.name
+    m = re.match(r'^(\d{1,2})-(\d{1,2})-(\d{4})', name)
+    if m:
+        month, day, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        # 6 PM CDT = 23:00 UTC
+        ts = datetime(year, month, day, 23, 0, 0).isoformat()
+    else:
+        ts = datetime.utcfromtimestamp(session_dir.stat().st_mtime).isoformat()
+    # Persist so future calls are stable
+    created_at_file.write_text(ts, encoding="utf-8")
+    return ts
+
+
 AUDIO_EXTS = ("*.flac", "*.mp3", "*.ogg", "*.wav", "*.m4a")
 AUDIO_EXTENSIONS = {".flac", ".mp3", ".ogg", ".wav", ".m4a"}
 AUDIO_MIME = {
@@ -157,6 +177,7 @@ def create_session(body: CreateSessionBody):
     if session_dir.exists():
         raise HTTPException(400, f"Session '{body.name}' already exists")
     (session_dir / "raw").mkdir(parents=True)
+    (session_dir / "created_at.txt").write_text(datetime.utcnow().isoformat(), encoding="utf-8")
     return {"name": body.name, "status": "empty"}
 
 
@@ -1541,7 +1562,7 @@ def campaign_list_sessions(
                 "has_transcript": (d / "transcript.md").exists(),
                 "has_summary": (d / "summary.md").exists(),
                 "has_wiki": (d / "wiki_suggestions.md").exists() or (d / "wiki.md").exists(),
-                "created_at": datetime.utcfromtimestamp(stat.st_ctime).isoformat(),
+                "created_at": get_or_create_session_created_at(d),
                 "modified_at": datetime.utcfromtimestamp(stat.st_mtime).isoformat(),
                 "description": desc_path.read_text(encoding="utf-8").strip() if desc_path.exists() else None,
             })
@@ -1611,6 +1632,7 @@ def campaign_create_session(
     if session_dir.exists():
         raise HTTPException(400, f"Session '{body.name}' already exists")
     (session_dir / "raw").mkdir(parents=True)
+    (session_dir / "created_at.txt").write_text(datetime.utcnow().isoformat(), encoding="utf-8")
     return {"name": body.name, "status": "empty"}
 
 
