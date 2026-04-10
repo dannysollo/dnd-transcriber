@@ -166,10 +166,10 @@ export default function App() {
         width: '200px',
         flexShrink: 0,
         background: 'var(--bg-surface)',
-        borderRight: '1px solid var(--border-subtle)',
+        borderRight: '1px solid color-mix(in srgb, var(--accent3) 60%, transparent)',
       }}>
         {/* Logo */}
-        <div className="sidebar-logo" style={{ padding: '20px 16px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div className="sidebar-logo" style={{ padding: '20px 16px 16px', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
           <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-heading)' }}>DnD Transcriber</div>
           {!authEnabled && (
             <div style={{
@@ -184,7 +184,7 @@ export default function App() {
 
         {/* Campaign selector */}
         {!campaignLoading && campaigns.length > 0 && (
-          <div className="sidebar-campaign" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-subtle)', position: 'relative' }}>
+          <div className="sidebar-campaign" style={{ padding: '8px 12px', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', position: 'relative' }}>
             <div
               onClick={() => setCampaignDropdownOpen(o => !o)}
               style={{
@@ -225,7 +225,7 @@ export default function App() {
             {campaignDropdownOpen && campaigns.length > 1 && (
               <div style={{
                 position: 'absolute', left: '12px', right: '12px', top: '100%',
-                background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
+                background: 'var(--bg-elevated)', border: '1px solid var(--accent3)',
                 borderRadius: '6px', zIndex: 100, overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
               }}>
                 {campaigns.map(c => (
@@ -339,7 +339,7 @@ export default function App() {
         </div>
 
         {/* User / auth section */}
-        <div className="sidebar-user" style={{ padding: '12px', borderTop: '1px solid var(--border-subtle)' }}>
+        <div className="sidebar-user" style={{ padding: '12px', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
           {loading ? null : isLoggedIn && user ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div
@@ -361,7 +361,7 @@ export default function App() {
               <button
                 onClick={logout}
                 style={{
-                  background: 'transparent', border: '1px solid var(--border-default)',
+                  background: 'transparent', border: '1px solid color-mix(in srgb, var(--accent3) 70%, transparent)',
                   borderRadius: '6px', color: 'var(--text-muted)', padding: '4px 0',
                   fontSize: '11px', cursor: 'pointer', width: '100%',
                 }}
@@ -393,7 +393,7 @@ export default function App() {
           display: 'none',
           padding: '8px 16px',
           background: 'var(--bg-surface)',
-          borderBottom: '1px solid var(--border-subtle)',
+          borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
           fontSize: '12px',
           color: 'var(--accent-text)',
           fontWeight: 600,

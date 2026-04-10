@@ -107,7 +107,7 @@ export default function SettingsPage() {
             <div style={{
               padding: '14px',
               borderRadius: '8px',
-              border: '1px solid var(--border-default)',
+              border: '1px solid var(--accent3)',
               background: 'var(--bg-elevated)',
               display: 'flex',
               flexDirection: 'column',
@@ -124,7 +124,7 @@ export default function SettingsPage() {
                       type="color"
                       value={customConfig.primaryHex}
                       onChange={e => setCustomConfig({ ...customConfig, primaryHex: e.target.value })}
-                      style={{ width: 36, height: 36, borderRadius: '6px', border: '1px solid var(--border-default)', cursor: 'pointer', padding: 2 }}
+                      style={{ width: 36, height: 36, borderRadius: '6px', border: '1px solid var(--accent3)', cursor: 'pointer', padding: 2 }}
                     />
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
                       {customConfig.primaryHex}
@@ -140,7 +140,7 @@ export default function SettingsPage() {
                       type="color"
                       value={customConfig.secondaryHex || '#e67e22'}
                       onChange={e => setCustomConfig({ ...customConfig, secondaryHex: e.target.value })}
-                      style={{ width: 36, height: 36, borderRadius: '6px', border: '1px solid var(--border-default)', cursor: 'pointer', padding: 2 }}
+                      style={{ width: 36, height: 36, borderRadius: '6px', border: '1px solid var(--accent3)', cursor: 'pointer', padding: 2 }}
                     />
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
                       {customConfig.secondaryHex || '#e67e22'}
@@ -156,7 +156,7 @@ export default function SettingsPage() {
                       type="color"
                       value={customConfig.tertiaryHex || '#3d1a5a'}
                       onChange={e => setCustomConfig({ ...customConfig, tertiaryHex: e.target.value })}
-                      style={{ width: 36, height: 36, borderRadius: '6px', border: '1px solid var(--border-default)', cursor: 'pointer', padding: 2 }}
+                      style={{ width: 36, height: 36, borderRadius: '6px', border: '1px solid var(--accent3)', cursor: 'pointer', padding: 2 }}
                     />
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
                       {customConfig.tertiaryHex || '#3d1a5a'}
@@ -175,7 +175,7 @@ export default function SettingsPage() {
                         style={{
                           padding: '4px 10px',
                           borderRadius: '6px',
-                          border: customConfig.bgWarmth === w ? '2px solid var(--accent)' : '2px solid var(--border-default)',
+                          border: customConfig.bgWarmth === w ? '2px solid var(--accent)' : '2px solid var(--accent3)',
                           background: customConfig.bgWarmth === w ? 'var(--accent-muted)' : 'var(--bg-base)',
                           color: customConfig.bgWarmth === w ? 'var(--accent-text)' : 'var(--text-muted)',
                           fontSize: '12px',
@@ -207,7 +207,7 @@ export default function SettingsPage() {
                 gap: '12px',
                 padding: '8px 12px',
                 borderRadius: '8px',
-                border: font.id === f.id ? '2px solid var(--accent)' : '2px solid var(--border-default)',
+                border: font.id === f.id ? '2px solid var(--accent)' : '2px solid var(--accent3)',
                 background: font.id === f.id ? 'var(--accent-muted)' : 'var(--bg-elevated)',
                 cursor: 'pointer',
                 color: font.id === f.id ? 'var(--accent-text)' : 'var(--text-secondary)',
@@ -238,7 +238,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       </div>
       <div style={{
         background: 'var(--bg-elevated)',
-        border: '1px solid var(--border-default)',
+        border: '1px solid var(--accent3)',
         borderRadius: '10px',
         overflow: 'hidden',
       }}>

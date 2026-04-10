@@ -40,7 +40,7 @@
     height: auto !important;
     flex-direction: row !important;
     border-right: none !important;
-    border-top: 1px solid #1e2130 !important;
+    border-top: 1px solid var(--accent3) !important;
     overflow: hidden !important;
     flex-shrink: 0 !important;
     padding: 0 !important;

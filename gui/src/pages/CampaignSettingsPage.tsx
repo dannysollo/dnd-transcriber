@@ -294,7 +294,7 @@ export default function CampaignSettingsPage() {
       <div style={{ fontSize: '12px', color: '#475569', marginBottom: '24px' }}>/{campaign.slug}</div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0' }}>
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', paddingBottom: '0' }}>
         {(['settings', 'config', 'people', ...(myRole === 'dm' ? ['worker'] : [])] as ('settings' | 'config' | 'people' | 'worker')[]).map(t => (
           <button
             key={t}
@@ -470,7 +470,7 @@ export default function CampaignSettingsPage() {
                     <div key={username} style={{
                       display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 80px 32px',
                       gap: '8px', padding: '8px', background: 'var(--bg-surface)',
-                      border: '1px solid var(--border-default)', borderRadius: '8px', alignItems: 'center',
+                      border: '1px solid var(--accent3)', borderRadius: '8px', alignItems: 'center',
                     }}>
                       <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{username}</span>
                       <input
@@ -504,7 +504,7 @@ export default function CampaignSettingsPage() {
                   <button
                     onClick={addConfigPlayer}
                     style={{
-                      background: 'transparent', border: '1px dashed var(--border-default)', borderRadius: '8px',
+                      background: 'transparent', border: '1px dashed var(--accent3)', borderRadius: '8px',
                       color: '#475569', padding: '8px', fontSize: '12px', cursor: 'pointer', textAlign: 'center',
                     }}
                   >
@@ -527,7 +527,7 @@ export default function CampaignSettingsPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {members.map(m => (
                 <div key={m.id} style={{
-                  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px',
+                  background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '10px',
                   padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px',
                 }}>
                   {m.avatar && (
@@ -545,7 +545,7 @@ export default function CampaignSettingsPage() {
                     onChange={e => changeRole(m.user_id, e.target.value)}
                     disabled={m.user_id === user?.id || myRole !== 'dm'}
                     style={{
-                      background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: '6px',
+                      background: 'var(--bg-base)', border: '1px solid var(--accent3)', borderRadius: '6px',
                       color: 'var(--text-secondary)', padding: '4px 8px', fontSize: '12px',
                       opacity: myRole !== 'dm' ? 0.5 : 1,
                     }}
@@ -577,7 +577,7 @@ export default function CampaignSettingsPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {/* Create invite form */}
                 <div style={{
-                  background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px',
+                  background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '12px',
                   padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px',
                 }}>
                   <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Create Invite Link</div>
@@ -619,7 +619,7 @@ export default function CampaignSettingsPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {invites.map(i => (
                       <div key={i.id} style={{
-                        background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px',
+                        background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '10px',
                         padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px',
                       }}>
                         <div style={{ flex: 1 }}>
@@ -652,12 +652,12 @@ export default function CampaignSettingsPage() {
           <div style={{ fontSize: '13px', color: '#94a3b8', lineHeight: '1.5' }}>
             Install the worker package on the transcription machine, then paste this key into <code style={{ background: 'var(--bg-elevated)', padding: '1px 5px', borderRadius: '4px' }}>worker.yaml</code>.
           </div>
-          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0' }}>Worker API Key</div>
             {workerKey ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <code style={{
-                  flex: 1, background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: '6px',
+                  flex: 1, background: 'var(--bg-base)', border: '1px solid var(--accent3)', borderRadius: '6px',
                   padding: '8px 12px', fontSize: '12px', color: 'var(--accent-text)', fontFamily: 'monospace',
                   overflowX: 'auto', whiteSpace: 'nowrap',
                 }}>
@@ -705,7 +705,7 @@ export default function CampaignSettingsPage() {
 }
 
 const inputStyle: React.CSSProperties = {
-  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '8px',
+  background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '8px',
   color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', outline: 'none', width: '100%',
 }
 
@@ -726,7 +726,7 @@ function ConfigSection({ title, children }: { title: string; children: React.Rea
       <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
         {title}
       </div>
-      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '10px', overflow: 'hidden' }}>
         {children}
       </div>
     </div>
@@ -735,7 +735,7 @@ function ConfigSection({ title, children }: { title: string; children: React.Rea
 
 function ConfigField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
       <label style={{ fontSize: '13px', color: '#94a3b8', width: '200px', flexShrink: 0 }}>{label}</label>
       <div style={{ flex: 1 }}>{children}</div>
     </div>
@@ -749,7 +749,7 @@ function ConfigToggle({ value, onChange, description }: { value: boolean; onChan
         onClick={() => onChange(!value)}
         style={{
           width: '40px', height: '22px', borderRadius: '11px',
-          background: value ? 'var(--accent)' : 'var(--border-default)',
+          background: value ? 'var(--accent)' : 'var(--accent3)',
           border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s',
         }}
       >
@@ -765,11 +765,11 @@ function ConfigToggle({ value, onChange, description }: { value: boolean; onChan
 }
 
 const configInputStyle: React.CSSProperties = {
-  background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '7px',
+  background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '7px',
   color: '#e2e8f0', padding: '7px 10px', fontSize: '13px', outline: 'none', width: '100%',
 }
 
 const configSelectStyle: React.CSSProperties = {
-  background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '7px',
+  background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '7px',
   color: '#e2e8f0', padding: '7px 10px', fontSize: '13px', outline: 'none', width: '100%',
 }

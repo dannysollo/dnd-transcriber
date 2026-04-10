@@ -542,7 +542,7 @@ export default function SessionView() {
       {/* Header */}
       <div style={{
         padding: '16px 28px 12px',
-        borderBottom: '1px solid var(--border-subtle)',
+        borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
         flexShrink: 0,
       }}>
         {/* Top row: back, title, actions */}
@@ -564,7 +564,7 @@ export default function SessionView() {
           >
             ← Sessions
           </button>
-          <div style={{ height: '14px', width: '1px', background: 'var(--border-default)', flexShrink: 0 }} />
+          <div style={{ height: '14px', width: '1px', background: 'var(--accent3)', flexShrink: 0 }} />
           <h1 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{name}</h1>
           <div style={{ flex: 1 }} />
 
@@ -622,7 +622,7 @@ export default function SessionView() {
                   style={{
                     flex: 1,
                     background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-default)',
+                    border: '1px solid var(--accent3)',
                     borderRadius: '8px',
                     color: 'var(--text-primary)',
                     padding: '8px 12px',
@@ -821,7 +821,7 @@ export default function SessionView() {
       <div style={{
         display: 'flex',
         flexDirection: 'column',
-        borderBottom: '1px solid var(--border-subtle)',
+        borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
         flexShrink: 0,
       }}>
       <div style={{ display: 'flex', gap: 0, padding: '0 20px', overflowX: 'auto', scrollbarWidth: 'none' }}>
@@ -850,7 +850,7 @@ export default function SessionView() {
         </div>
 
         {tab === 'transcript' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
             {!editMode && (
               <>
                 <input
@@ -860,7 +860,7 @@ export default function SessionView() {
                   placeholder="Search transcript..."
                   style={{
                     background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-default)',
+                    border: '1px solid var(--accent3)',
                     borderRadius: '8px',
                     color: '#e2e8f0',
                     padding: '6px 12px',
@@ -903,7 +903,7 @@ export default function SessionView() {
                 }}
                 style={{
                   background: editMode ? 'rgba(251,191,36,0.15)' : 'transparent',
-                  border: `1px solid ${editMode ? 'rgba(251,191,36,0.4)' : 'var(--border-default)'}`,
+                  border: `1px solid ${editMode ? 'rgba(251,191,36,0.4)' : 'var(--accent3)'}`,
                   borderRadius: '8px',
                   color: editMode ? '#fbbf24' : '#64748b',
                   padding: '6px 12px',
@@ -953,7 +953,7 @@ export default function SessionView() {
       {/* Audio player panel — transcript tab only */}
       {tab === 'transcript' && audioFiles.length > 0 && (
         <div style={{
-          borderBottom: '1px solid var(--border-subtle)',
+          borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
           background: '#0a0d14',
           flexShrink: 0,
           padding: '10px 28px',
@@ -993,7 +993,7 @@ export default function SessionView() {
                   if (audioRef.current) audioRef.current.playbackRate = rate
                 }}
                 style={{
-                  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
+                  background: 'var(--bg-elevated)', border: '1px solid var(--accent3)',
                   borderRadius: '6px', color: '#94a3b8',
                   padding: '4px 6px', fontSize: '11px', fontWeight: 600,
                   cursor: 'pointer', outline: 'none', flexShrink: 0,
@@ -1275,7 +1275,7 @@ function TranscriptView({
             onClick={saveAll}
             disabled={savingAll}
             style={{
-              background: savingAll ? 'var(--border-default)' : 'rgba(251,191,36,0.2)',
+              background: savingAll ? 'var(--accent3)' : 'rgba(251,191,36,0.2)',
               border: '1px solid rgba(251,191,36,0.4)',
               borderRadius: '6px',
               color: savingAll ? '#64748b' : '#fbbf24',
@@ -1315,7 +1315,7 @@ function TranscriptView({
               {/* Line number */}
               <span style={{
                 fontSize: '10px',
-                color: 'var(--border-default)',
+                color: 'var(--accent3)',
                 fontFamily: 'monospace',
                 flexShrink: 0,
                 width: '36px',
@@ -1670,7 +1670,7 @@ function MarkdownEditView({
           <button
             onClick={enterEdit}
             style={{
-              background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '8px',
+              background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '8px',
               color: '#64748b', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
             }}
           >
@@ -1684,7 +1684,7 @@ function MarkdownEditView({
             <button
               onClick={() => setEditMode(false)}
               style={{
-                background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '6px',
+                background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '6px',
                 color: '#64748b', padding: '5px 12px', fontSize: '12px', cursor: 'pointer',
               }}
             >
@@ -1912,7 +1912,7 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
           onClick={handleToggle}
           style={{
             background: showDiff ? 'rgba(124,108,252,0.2)' : 'rgba(30,33,48,0.8)',
-            border: `1px solid ${showDiff ? 'rgba(124,108,252,0.5)' : 'var(--border-default)'}`,
+            border: `1px solid ${showDiff ? 'rgba(124,108,252,0.5)' : 'var(--accent3)'}`,
             borderRadius: '8px',
             color: showDiff ? 'var(--accent-text)' : '#64748b',
             padding: '6px 14px',
@@ -1947,7 +1947,7 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
       {/* Diff panels */}
       {showDiff && (
         <div style={{
-          border: '1px solid var(--border-subtle)',
+          border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
           borderRadius: '10px',
           overflow: 'hidden',
           height: '400px',
@@ -1970,7 +1970,7 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
                   padding: '6px 10px',
                   background: 'rgba(239,68,68,0.08)',
                   borderBottom: '1px solid rgba(239,68,68,0.2)',
-                  borderRight: '1px solid var(--border-subtle)',
+                  borderRight: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
                   fontSize: '11px',
                   fontWeight: 700,
                   color: '#fca5a5',
@@ -1982,11 +1982,11 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
                 <div
                   ref={leftRef}
                   onScroll={() => syncScroll('left')}
-                  style={{ ...scrollAreaStyle, borderRight: '1px solid var(--border-subtle)', background: 'rgba(239,68,68,0.02)' }}
+                  style={{ ...scrollAreaStyle, borderRight: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', background: 'rgba(239,68,68,0.02)' }}
                 >
                   {displayItems.map((item, idx) =>
                     item.type === 'separator' ? (
-                      <div key={idx} style={{ padding: '2px 8px', color: '#475569', fontSize: '11px', background: '#0d1017', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)' }}>
+                      <div key={idx} style={{ padding: '2px 8px', color: '#475569', fontSize: '11px', background: '#0d1017', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
                         ···  {item.skipped} line{item.skipped !== 1 ? 's' : ''} hidden
                       </div>
                     ) : (
@@ -2035,7 +2035,7 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
                 >
                   {displayItems.map((item, idx) =>
                     item.type === 'separator' ? (
-                      <div key={idx} style={{ padding: '2px 8px', color: '#475569', fontSize: '11px', background: '#0d1017', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)' }}>
+                      <div key={idx} style={{ padding: '2px 8px', color: '#475569', fontSize: '11px', background: '#0d1017', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
                         ···  {item.skipped} line{item.skipped !== 1 ? 's' : ''} hidden
                       </div>
                     ) : (
@@ -2101,7 +2101,7 @@ function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: str
         return (
           <div key={key} style={{
             borderRadius: '8px',
-            border: '1px solid var(--border-subtle)',
+            border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
             overflow: 'hidden',
             opacity: dimmed ? 0.45 : 1,
           }}>
@@ -2154,7 +2154,7 @@ function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: str
             {isOpen && item.examples.length > 0 && (
               <div style={{
                 padding: '6px 12px 10px 32px',
-                borderTop: '1px solid var(--border-subtle)',
+                borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '6px',
@@ -2246,7 +2246,7 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
   }
 
   return (
-    <div style={{ borderBottom: '1px solid var(--border-subtle)', background: '#080a10', flexShrink: 0 }}>
+    <div style={{ borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', background: '#080a10', flexShrink: 0 }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -2303,7 +2303,7 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
                     placeholder="New name"
                     style={{
                       background: 'var(--bg-surface)',
-                      border: '1px solid var(--border-default)',
+                      border: '1px solid var(--accent3)',
                       borderRadius: '6px',
                       color: '#e2e8f0',
                       padding: '4px 8px',
@@ -2498,7 +2498,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
         <button
           onClick={() => { setWikiEditValue(wikiMarkdown ?? ''); setWikiPending(false); setWikiEditMode(true) }}
           style={{
-            background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '8px',
+            background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '8px',
             color: '#64748b', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
           }}
         >
@@ -2509,7 +2509,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           <span style={{ fontSize: '11px', color: requiresApproval ? '#fbbf24' : '#64748b' }}>
             {requiresApproval ? 'Will submit for DM review' : 'Saves directly'}
           </span>
-          <button onClick={() => setWikiEditMode(false)} style={{ background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '6px', color: '#64748b', padding: '5px 12px', fontSize: '12px', cursor: 'pointer' }}>Cancel</button>
+          <button onClick={() => setWikiEditMode(false)} style={{ background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '6px', color: '#64748b', padding: '5px 12px', fontSize: '12px', cursor: 'pointer' }}>Cancel</button>
           <button
             onClick={saveWikiEdit}
             disabled={wikiSaving}
@@ -2620,7 +2620,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
         {applying && <span style={{ fontSize: '11px', color: '#64748b' }}>Applying…</span>}
 
         {/* Separator */}
-        <div style={{ width: '1px', height: '18px', background: 'var(--border-subtle)', flexShrink: 0 }} />
+        <div style={{ width: '1px', height: '18px', background: 'color-mix(in srgb, var(--accent3) 50%, transparent)', flexShrink: 0 }} />
 
         {/* Generate button */}
         <button
@@ -2716,7 +2716,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', padding: '2px 0' }}>
             {corrections.map((c, i) => (
               <span key={i} style={{
-                background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
+                background: 'var(--bg-surface)', border: '1px solid var(--accent3)',
                 borderRadius: '5px', padding: '2px 7px', fontSize: '11px',
                 fontFamily: 'monospace', color: '#94a3b8',
               }}>
@@ -2735,7 +2735,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
       {applyOutput && (
         <pre style={{
           background: '#0a0d14',
-          border: '1px solid var(--border-subtle)',
+          border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
           borderRadius: '8px',
           padding: '12px 16px',
           fontSize: '11px',
@@ -2758,7 +2758,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           <div
             key={s.id}
             style={{
-              border: `1px solid ${isApplied ? 'rgba(52,211,153,0.3)' : 'var(--border-subtle)'}`,
+              border: `1px solid ${isApplied ? 'rgba(52,211,153,0.3)' : 'color-mix(in srgb, var(--accent3) 50%, transparent)'}`,
               borderRadius: '10px',
               background: isApplied ? 'rgba(52,211,153,0.05)' : '#0d1017',
               overflow: 'hidden',
@@ -2770,7 +2770,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px' }}>
               <span style={{
                 background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-default)',
+                border: '1px solid var(--accent3)',
                 borderRadius: '6px',
                 padding: '2px 8px',
                 fontSize: '11px',
@@ -2824,7 +2824,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
               display: 'flex',
               gap: '8px',
               padding: '8px 16px',
-              borderTop: '1px solid var(--border-subtle)',
+              borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
               background: 'rgba(0,0,0,0.2)',
               alignItems: 'center',
             }}>
@@ -2854,7 +2854,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
                     disabled={applying}
                     style={{
                       background: isSkipped ? 'rgba(100,116,139,0.15)' : 'transparent',
-                      border: `1px solid ${isSkipped ? '#475569' : 'var(--border-default)'}`,
+                      border: `1px solid ${isSkipped ? '#475569' : 'var(--accent3)'}`,
                       borderRadius: '6px',
                       color: isSkipped ? '#94a3b8' : '#475569',
                       padding: '4px 12px',
@@ -2920,7 +2920,7 @@ function SpecialInstructionsRow({ notes, onNotesChange, onNotesBlur, notesSaving
             placeholder="e.g. Aella and Danny are on the same mic — attribute ambiguous lines to Danny unless clearly in character."
             rows={3}
             style={{
-              width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
+              width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--accent3)',
               borderRadius: '7px', color: '#e2e8f0', padding: '8px 10px',
               fontSize: '12px', lineHeight: 1.5, resize: 'vertical',
               outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
@@ -2928,7 +2928,7 @@ function SpecialInstructionsRow({ notes, onNotesChange, onNotesBlur, notesSaving
           />
           {generating && generateLog && generateLog.length > 0 && (
             <pre style={{
-              background: '#0a0d14', border: '1px solid var(--border-subtle)', borderRadius: '7px',
+              background: '#0a0d14', border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', borderRadius: '7px',
               padding: '8px 12px', fontSize: '11px', color: '#94a3b8',
               fontFamily: 'monospace', whiteSpace: 'pre-wrap',
               maxHeight: '140px', overflowY: 'auto', margin: 0,
@@ -2968,7 +2968,7 @@ function GenerateWikiPanel({
   return (
     <div style={{
       background: '#0d1017',
-      border: '1px solid var(--border-subtle)',
+      border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
       borderRadius: '10px',
       padding: compact ? '10px 14px' : '14px 16px',
       display: 'flex',
@@ -3027,7 +3027,7 @@ function GenerateWikiPanel({
               placeholder="e.g. Aella and Danny are on the same mic — attribute ambiguous lines to Danny unless clearly in character."
               rows={3}
               style={{
-                width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
+                width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--accent3)',
                 borderRadius: '7px', color: '#e2e8f0', padding: '8px 10px',
                 fontSize: '12px', lineHeight: 1.5, resize: 'vertical',
                 outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
@@ -3036,7 +3036,7 @@ function GenerateWikiPanel({
           </div>
           {generating && generateLog.length > 0 && (
             <pre style={{
-              background: '#0a0d14', border: '1px solid var(--border-subtle)', borderRadius: '8px',
+              background: '#0a0d14', border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', borderRadius: '8px',
               padding: '10px 14px', fontSize: '11px', color: '#94a3b8',
               fontFamily: 'monospace', whiteSpace: 'pre-wrap',
               maxHeight: '180px', overflowY: 'auto', margin: 0,
@@ -3095,7 +3095,7 @@ function ChangesView({
         alignItems: 'center',
         flexWrap: 'wrap',
         background: '#0d1017',
-        border: '1px solid var(--border-subtle)',
+        border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
         borderRadius: '10px',
         padding: '12px 16px',
         fontSize: '13px',

@@ -226,7 +226,7 @@ export default function CorrectionsPage() {
         {/* Left: editor */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Tabs */}
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border-default)' }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--accent3)' }}>
             {(['corrections', 'patterns'] as const).map(t => (
               <button
                 key={t}
@@ -277,7 +277,7 @@ export default function CorrectionsPage() {
               {/* List */}
               <div style={{
                 background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-default)',
+                border: '1px solid var(--accent3)',
                 borderRadius: '10px',
                 overflow: 'auto',
                 maxHeight: '480px',
@@ -291,7 +291,7 @@ export default function CorrectionsPage() {
                     display: 'flex',
                     alignItems: 'center',
                     padding: '8px 14px',
-                    borderBottom: '1px solid var(--border-subtle)',
+                    borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
                     gap: '8px',
                   }}>
                     {editKey === wrong ? (
@@ -353,7 +353,7 @@ export default function CorrectionsPage() {
               {/* Patterns list */}
               <div style={{
                 background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-default)',
+                border: '1px solid var(--accent3)',
                 borderRadius: '10px',
                 overflow: 'auto',
                 maxHeight: '480px',
@@ -365,7 +365,7 @@ export default function CorrectionsPage() {
                 ) : patterns.map((p, i) => (
                   <div key={i} style={{
                     padding: '10px 14px',
-                    borderBottom: '1px solid var(--border-subtle)',
+                    borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
                     display: 'flex',
                     gap: '8px',
                     alignItems: 'flex-start',
@@ -388,14 +388,14 @@ export default function CorrectionsPage() {
 
         {/* Re-merge All section */}
         <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px' }}>
+          <div style={{ borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', paddingTop: '14px' }}>
             {!showMergeConfirm ? (
               <button
                 onClick={() => setShowMergeConfirm(true)}
                 disabled={mergeAllRunning}
                 style={{
-                  background: mergeAllRunning ? 'var(--border-default)' : 'rgba(251,191,36,0.12)',
-                  border: `1px solid ${mergeAllRunning ? 'var(--border-default)' : 'rgba(251,191,36,0.3)'}`,
+                  background: mergeAllRunning ? 'var(--accent3)' : 'rgba(251,191,36,0.12)',
+                  border: `1px solid ${mergeAllRunning ? 'var(--accent3)' : 'rgba(251,191,36,0.3)'}`,
                   borderRadius: '8px',
                   color: mergeAllRunning ? '#64748b' : '#fbbf24',
                   padding: '8px 18px',
@@ -452,7 +452,7 @@ export default function CorrectionsPage() {
                     onClick={() => setShowMergeConfirm(false)}
                     style={{
                       background: 'transparent',
-                      border: '1px solid var(--border-default)',
+                      border: '1px solid var(--accent3)',
                       borderRadius: '8px',
                       color: '#64748b',
                       padding: '7px 16px',
@@ -472,13 +472,13 @@ export default function CorrectionsPage() {
               <div style={{
                 marginTop: '10px',
                 background: '#0d0f18',
-                border: '1px solid var(--border-subtle)',
+                border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
                 borderRadius: '10px',
                 overflow: 'hidden',
               }}>
                 <div style={{
                   padding: '8px 12px',
-                  borderBottom: '1px solid var(--border-subtle)',
+                  borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
@@ -535,7 +535,7 @@ export default function CorrectionsPage() {
                 width: '100%',
                 height: '160px',
                 background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-default)',
+                border: '1px solid var(--accent3)',
                 borderRadius: '10px',
                 color: '#e2e8f0',
                 padding: '12px',
@@ -568,11 +568,11 @@ export default function CorrectionsPage() {
           {testResult && (
             <div style={{
               background: 'var(--bg-elevated)',
-              border: '1px solid var(--border-default)',
+              border: '1px solid var(--accent3)',
               borderRadius: '10px',
               overflow: 'hidden',
             }}>
-              <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', fontSize: '12px', color: '#64748b' }}>
+              <div style={{ padding: '10px 14px', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', fontSize: '12px', color: '#64748b' }}>
                 {testResult.changed
                   ? `${testResult.diffs.length} change(s) made`
                   : 'No changes'}
@@ -588,7 +588,7 @@ export default function CorrectionsPage() {
                 </div>
               )}
               {testResult.changed && (
-                <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border-subtle)' }}>
+                <div style={{ padding: '12px 14px', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
                   <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Result:</div>
                   <pre style={{
                     fontFamily: 'monospace',
@@ -613,7 +613,7 @@ export default function CorrectionsPage() {
 
 const inputStyle: React.CSSProperties = {
   background: 'var(--bg-surface)',
-  border: '1px solid var(--border-default)',
+  border: '1px solid var(--accent3)',
   borderRadius: '8px',
   color: '#e2e8f0',
   padding: '7px 10px',

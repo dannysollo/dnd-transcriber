@@ -101,7 +101,7 @@ a, button {
 .btn-ghost {
   background: transparent;
   color: var(--text-secondary);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--accent3);
   border-radius: 8px;
   padding: 8px 16px;
   font-size: 13px;
@@ -192,6 +192,6 @@ select:focus {
   background: var(--bg-base);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-default);
+  background: var(--accent3);
   border-radius: 3px;
 }

@@ -93,7 +93,7 @@ export default function CampaignsPage() {
 
       {showCreate && (
         <div style={{
-          background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px',
+          background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '12px',
           padding: '24px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '12px',
         }}>
           <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0' }}>New Campaign</div>
@@ -126,7 +126,7 @@ export default function CampaignsPage() {
             <button
               onClick={() => setShowCreate(false)}
               style={{
-                background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '8px',
+                background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '8px',
                 color: '#94a3b8', padding: '8px 16px', fontSize: '13px', cursor: 'pointer',
               }}
             >
@@ -140,7 +140,7 @@ export default function CampaignsPage() {
         <div style={{ color: '#64748b', fontSize: '14px' }}>Loading...</div>
       ) : campaigns.length === 0 ? (
         <div style={{
-          background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px',
+          background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '12px',
           padding: '48px', textAlign: 'center', color: '#64748b',
         }}>
           No campaigns yet. Create one above.
@@ -151,12 +151,12 @@ export default function CampaignsPage() {
             <div
               key={c.id}
               style={{
-                background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px',
+                background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '10px',
                 padding: '16px 20px', transition: 'border-color 0.15s',
                 display: 'flex', alignItems: 'center', gap: '12px',
               }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = '#3a3d4a')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-default)')}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent2)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--accent3)')}
             >
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: '15px', fontWeight: 600, color: '#e2e8f0', marginBottom: 2 }}>{c.name}</div>
@@ -172,7 +172,7 @@ export default function CampaignsPage() {
                     <span style={{ fontSize: '11px', color: '#475569' }}>👥 {c.member_count} member{c.member_count !== 1 ? 's' : ''}</span>
                   )}
                   {c.role && (
-                    <span style={{ fontSize: '10px', color: '#475569', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-default)', borderRadius: 4, padding: '1px 6px' }}>{c.role}</span>
+                    <span style={{ fontSize: '10px', color: '#475569', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--accent3)', borderRadius: 4, padding: '1px 6px' }}>{c.role}</span>
                   )}
                 </div>
               </div>
@@ -190,7 +190,7 @@ export default function CampaignsPage() {
                 <button
                   onClick={() => navigate(`/campaigns/${c.slug}/settings`)}
                   style={{
-                    background: 'transparent', border: '1px solid var(--border-default)',
+                    background: 'transparent', border: '1px solid var(--accent3)',
                     borderRadius: 7, color: '#64748b', padding: '5px 12px', fontSize: '12px',
                     cursor: 'pointer',
                   }}
@@ -207,7 +207,7 @@ export default function CampaignsPage() {
 }
 
 const inputStyle: React.CSSProperties = {
-  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '8px',
+  background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '8px',
   color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', outline: 'none', width: '100%',
 }
 
