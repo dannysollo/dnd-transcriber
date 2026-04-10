@@ -268,10 +268,10 @@ export default function App() {
                 fontSize: '13px',
                 textDecoration: 'none',
                 transition: 'all 0.15s ease',
-                background: isActive ? 'var(--accent-muted)' : 'transparent',
-                color: isActive ? 'var(--accent-text)' : 'var(--text-secondary)',
+                background: isActive ? 'color-mix(in srgb, var(--accent2) 12%, transparent)' : 'transparent',
+                color: isActive ? 'var(--accent2-text)' : 'var(--text-secondary)',
                 fontWeight: isActive ? 600 : 400,
-                borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
+                borderLeft: isActive ? '3px solid var(--accent2)' : '3px solid transparent',
                 paddingLeft: isActive ? '9px' : '9px',
               })}
             >
@@ -294,10 +294,10 @@ export default function App() {
                 fontSize: '13px',
                 textDecoration: 'none',
                 transition: 'all 0.15s ease',
-                background: isActive ? 'var(--accent-muted)' : 'transparent',
-                color: isActive ? 'var(--accent-text)' : 'var(--text-secondary)',
+                background: isActive ? 'color-mix(in srgb, var(--accent2) 12%, transparent)' : 'transparent',
+                color: isActive ? 'var(--accent2-text)' : 'var(--text-secondary)',
                 fontWeight: isActive ? 600 : 400,
-                borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
+                borderLeft: isActive ? '3px solid var(--accent2)' : '3px solid transparent',
               })}
               className="sidebar-nav-item"
             >
@@ -327,10 +327,10 @@ export default function App() {
               fontSize: '13px',
               textDecoration: 'none',
               transition: 'all 0.15s ease',
-              background: isActive ? 'var(--accent-muted)' : 'transparent',
-              color: isActive ? 'var(--accent-text)' : 'var(--text-secondary)',
+              background: isActive ? 'color-mix(in srgb, var(--accent2) 12%, transparent)' : 'transparent',
+              color: isActive ? 'var(--accent2-text)' : 'var(--text-secondary)',
               fontWeight: isActive ? 600 : 400,
-              borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
+              borderLeft: isActive ? '3px solid var(--accent2)' : '3px solid transparent',
             })}
           >
             <GearIcon />

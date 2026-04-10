@@ -344,9 +344,9 @@ export default function SessionsPage() {
                 key={k}
                 onClick={() => setSortKey(k)}
                 style={{
-                  background: sortKey === k ? 'rgba(var(--accent-rgb, 124,108,252),0.12)' : 'transparent',
-                  border: `1px solid ${sortKey === k ? 'var(--accent)' : 'var(--border-default)'}`,
-                  borderRadius: 5, color: sortKey === k ? 'var(--accent-text)' : 'var(--text-muted)',
+                  background: sortKey === k ? 'color-mix(in srgb, var(--accent2) 12%, transparent)' : 'transparent',
+                  border: `1px solid ${sortKey === k ? 'var(--accent2)' : 'var(--border-default)'}`,
+                  borderRadius: 5, color: sortKey === k ? 'var(--accent2-text)' : 'var(--text-muted)',
                   padding: '3px 9px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
                   transition: 'all 0.15s ease',
                 }}
@@ -484,8 +484,9 @@ export default function SessionsPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                         {s.has_transcript && (
                           <span style={{
-                            background: 'rgba(var(--accent-rgb, 124,108,252),0.1)',
-                            color: 'var(--accent-text)',
+                            background: 'color-mix(in srgb, var(--accent2) 15%, transparent)',
+                            color: 'var(--accent2-text)',
+                            border: '1px solid color-mix(in srgb, var(--accent2) 35%, transparent)',
                             borderRadius: '4px', padding: '2px 7px',
                             fontSize: '10px', fontWeight: 700, letterSpacing: '0.03em',
                             textTransform: 'uppercase',
