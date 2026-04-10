@@ -21,6 +21,7 @@ export interface ThemeDefinition {
   borderSubtle: string
   borderDefault: string
   danger: string
+  custom?: boolean
 }
 
 export interface FontDefinition {
@@ -29,141 +30,208 @@ export interface FontDefinition {
   family: string
 }
 
+/** Generate a full theme from primary hue + optional secondary hue + background warmth */
+export function generateTheme(
+  primaryHex: string,
+  secondaryHex: string | null,
+  bgWarmth: 'warm' | 'neutral' | 'cool',
+): Omit<ThemeDefinition, 'id' | 'label' | 'description' | 'custom'> {
+  // Parse primary hex to HSL
+  const [pH, pS, pL] = hexToHsl(primaryHex)
+  const [sH, sS, sL] = secondaryHex ? hexToHsl(secondaryHex) : [pH, pS, pL]
+
+  // Background tint hue — slightly rotate toward warm/cool
+  const bgHue = bgWarmth === 'warm' ? pH - 10 : bgWarmth === 'cool' ? pH + 30 : pH
+  const bgSat = bgWarmth === 'neutral' ? 8 : 12
+
+  return {
+    bg:           hsl(bgHue, bgSat, 5),
+    surface:      hsl(bgHue, bgSat, 7.5),
+    elevated:     hsl(bgHue, bgSat, 10),
+    overlay:      hsl(bgHue, bgSat, 12),
+    card:         hsl(bgHue, bgSat, 9),
+    accent:       hsl(pH, Math.min(pS, 70), Math.max(pL, 45)),
+    accentHover:  hsl(pH, Math.min(pS, 70), Math.min(pL + 12, 70)),
+    accentMuted:  `rgba(${hslToRgb(pH, Math.min(pS, 70), Math.max(pL, 45)).join(',')},0.18)`,
+    accentText:   hsl(pH, Math.min(pS - 10, 60), Math.min(pL + 20, 85)),
+    secondaryAccent:     secondaryHex ? hsl(sH, Math.min(sS, 65), Math.max(sL, 40)) : undefined,
+    secondaryAccentText: secondaryHex ? hsl(sH, Math.min(sS - 10, 55), Math.min(sL + 22, 82)) : undefined,
+    textPrimary:  bgWarmth === 'warm' ? hsl(bgHue, 22, 88) : bgWarmth === 'cool' ? hsl(bgHue, 18, 86) : hsl(bgHue, 12, 87),
+    textSecondary: bgWarmth === 'warm' ? hsl(bgHue, 16, 60) : bgWarmth === 'cool' ? hsl(bgHue, 14, 58) : hsl(bgHue, 8, 58),
+    textMuted:    bgWarmth === 'warm' ? hsl(bgHue, 10, 38) : hsl(bgHue, 8, 36),
+    borderSubtle: hsl(bgHue, bgSat, 14),
+    borderDefault: hsl(bgHue, bgSat, 18),
+    danger:       '#e05050',
+  }
+}
+
+function hsl(h: number, s: number, l: number): string {
+  h = ((h % 360) + 360) % 360
+  return `hsl(${Math.round(h)},${Math.round(s)}%,${Math.round(l)}%)`
+}
+
+function hexToHsl(hex: string): [number, number, number] {
+  const r = parseInt(hex.slice(1, 3), 16) / 255
+  const g = parseInt(hex.slice(3, 5), 16) / 255
+  const b = parseInt(hex.slice(5, 7), 16) / 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  const l = (max + min) / 2
+  if (max === min) return [0, 0, l * 100]
+  const d = max - min
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+  let h = 0
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6
+  else if (max === g) h = ((b - r) / d + 2) / 6
+  else h = ((r - g) / d + 4) / 6
+  return [h * 360, s * 100, l * 100]
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  h = ((h % 360) + 360) % 360
+  s /= 100; l /= 100
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+  }
+  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)]
+}
+
 export const themes: ThemeDefinition[] = [
   {
-    // Blood red accent on warm bone/parchment text — classic D&D danger feel
     id: 'crimson-bone',
     label: 'Crimson & Bone',
     description: 'Blood red on warm parchment',
-    bg: '#0e0b09',
-    surface: '#16100d',
-    elevated: '#1d1510',
-    overlay: '#241a13',
-    card: '#201812',
-    accent: '#b83232',
-    accentHover: '#d94040',
-    accentMuted: 'rgba(184,50,50,0.15)',
-    accentText: '#e08070',
-    textPrimary: '#e8d5bc',
-    textSecondary: '#b89e84',
-    textMuted: '#7a6355',
-    borderSubtle: '#2a1e17',
-    borderDefault: '#332419',
-    danger: '#e53e3e',
+    // Warm brown-tinted darks — clearly brown/sepia, not blue-grey
+    bg:      '#130b07',
+    surface: '#1d1009',
+    elevated:'#27160d',
+    overlay: '#301c11',
+    card:    '#241409',
+    accent:  '#c0392b',
+    accentHover: '#e04535',
+    accentMuted: 'rgba(192,57,43,0.18)',
+    accentText:  '#f0806a',
+    textPrimary:  '#f0ddc0',
+    textSecondary:'#c0987a',
+    textMuted:    '#806048',
+    borderSubtle: '#2e1a0f',
+    borderDefault:'#3e2416',
+    danger: '#e53030',
   },
   {
-    // Deep purple accent on cool silver-blue text — arcane spell energy
     id: 'arcane',
     label: 'Arcane Void',
     description: 'Violet magic on silver starlight',
-    bg: '#090b14',
-    surface: '#0e1120',
-    elevated: '#12162a',
-    overlay: '#171b32',
-    card: '#141830',
-    accent: '#7c6cfc',
+    // Cold blue-indigo tints — clearly cool/cosmic
+    bg:      '#07080f',
+    surface: '#0d0f1e',
+    elevated:'#13162a',
+    overlay: '#181c32',
+    card:    '#111428',
+    accent:  '#7c6cfc',
     accentHover: '#9d8fff',
     accentMuted: 'rgba(124,108,252,0.18)',
-    accentText: '#b8aeff',
-    secondaryAccent: '#e879f9',
+    accentText:  '#b8aeff',
+    secondaryAccent:     '#e879f9',
     secondaryAccentText: '#f0abfc',
-    textPrimary: '#c8d0ec',
-    textSecondary: '#7a88b0',
-    textMuted: '#505870',
-    borderSubtle: '#1c2040',
-    borderDefault: '#222648',
+    textPrimary:   '#ccd4f0',
+    textSecondary: '#7080b0',
+    textMuted:     '#484e70',
+    borderSubtle: '#181c38',
+    borderDefault:'#202448',
     danger: '#f87171',
   },
   {
-    // Aged gold accent on warm ivory/parchment — wizard's library, scholarly
     id: 'gold-parchment',
     label: 'Gold & Parchment',
     description: 'Candlelight gold on aged ivory',
-    bg: '#0f0d07',
-    surface: '#17140a',
-    elevated: '#1e1b0f',
-    overlay: '#252114',
-    card: '#221e12',
-    accent: '#c9a030',
-    accentHover: '#e0b84a',
-    accentMuted: 'rgba(201,160,48,0.18)',
-    accentText: '#ddc070',
-    secondaryAccent: '#9b6b3a',
-    secondaryAccentText: '#c4966a',
-    textPrimary: '#ecddc0',
-    textSecondary: '#b8a07a',
-    textMuted: '#80704a',
-    borderSubtle: '#2c2614',
-    borderDefault: '#342e18',
-    danger: '#e05c2a',
+    // Warm amber/ochre darks — old book feel
+    bg:      '#110e05',
+    surface: '#1c1709',
+    elevated:'#25200e',
+    overlay: '#2e2814',
+    card:    '#221e0c',
+    accent:  '#d4a017',
+    accentHover: '#f0be30',
+    accentMuted: 'rgba(212,160,23,0.2)',
+    accentText:  '#f0cc70',
+    secondaryAccent:     '#a05820',
+    secondaryAccentText: '#d08850',
+    textPrimary:  '#f4e4c0',
+    textSecondary:'#c0a068',
+    textMuted:    '#806040',
+    borderSubtle: '#2e2610',
+    borderDefault:'#3c3018',
+    danger: '#e06030',
   },
   {
-    // Teal accent with amber highlights on pale aqua text — sea/storm mage
     id: 'teal-ember',
     label: 'Teal & Ember',
     description: 'Ocean teal with amber fire',
-    bg: '#060d0e',
-    surface: '#0b1618',
-    elevated: '#101e20',
-    overlay: '#152628',
-    card: '#122224',
-    accent: '#0e9f94',
-    accentHover: '#18c4b8',
-    accentMuted: 'rgba(14,159,148,0.15)',
-    accentText: '#34d8cc',
-    secondaryAccent: '#e07820',
-    secondaryAccentText: '#f0a050',
-    textPrimary: '#c8e8e5',
-    textSecondary: '#6aaca8',
-    textMuted: '#406a68',
-    borderSubtle: '#152e2c',
-    borderDefault: '#1c3836',
-    danger: '#e05c3a',
+    // Deep teal-green darks — sea/nature
+    bg:      '#050d0d',
+    surface: '#091616',
+    elevated:'#0e2020',
+    overlay: '#132828',
+    card:    '#0c1c1c',
+    accent:  '#12b8aa',
+    accentHover: '#20dccb',
+    accentMuted: 'rgba(18,184,170,0.15)',
+    accentText:  '#40e8da',
+    secondaryAccent:     '#e08020',
+    secondaryAccentText: '#f8b050',
+    textPrimary:  '#c8ecec',
+    textSecondary:'#60b0b0',
+    textMuted:    '#3c7070',
+    borderSubtle: '#0f2c2c',
+    borderDefault:'#163838',
+    danger: '#e04040',
   },
   {
-    // Forest green on pale sage — druid, nature, the wilds
     id: 'forest',
     label: 'Ironwood',
     description: 'Forest green on pale sage',
-    bg: '#080c08',
-    surface: '#0d130d',
-    elevated: '#111a11',
-    overlay: '#162016',
-    card: '#131e13',
-    accent: '#4a9460',
-    accentHover: '#64b87c',
-    accentMuted: 'rgba(74,148,96,0.15)',
-    accentText: '#80d098',
-    secondaryAccent: '#8a6a30',
-    secondaryAccentText: '#c09050',
-    textPrimary: '#cce0cc',
-    textSecondary: '#7aaa80',
-    textMuted: '#4a6850',
-    borderSubtle: '#1a2a1a',
-    borderDefault: '#203020',
+    // Deep forest darks — clearly green-tinted
+    bg:      '#050d07',
+    surface: '#091409',
+    elevated:'#0f1c10',
+    overlay: '#142416',
+    card:    '#0c180d',
+    accent:  '#3aaa58',
+    accentHover: '#52cc70',
+    accentMuted: 'rgba(58,170,88,0.15)',
+    accentText:  '#70e090',
+    secondaryAccent:     '#907840',
+    secondaryAccentText: '#c8a860',
+    textPrimary:  '#c8e8cc',
+    textSecondary:'#68a870',
+    textMuted:    '#406848',
+    borderSubtle: '#142818',
+    borderDefault:'#1c3420',
     danger: '#d94040',
   },
   {
-    // Steel blue on pale cold text — castle, iron, the north
     id: 'midnight',
     label: 'Midnight Steel',
-    description: 'Cold blue on pale silver',
-    bg: '#07090f',
-    surface: '#0c1020',
-    elevated: '#111628',
-    overlay: '#161c30',
-    card: '#131a2e',
-    accent: '#3a7bd5',
-    accentHover: '#5898f0',
-    accentMuted: 'rgba(58,123,213,0.18)',
-    accentText: '#88b8f8',
-    secondaryAccent: '#7090b0',
-    secondaryAccentText: '#a0c0d8',
-    textPrimary: '#c0cce0',
-    textSecondary: '#6878a0',
-    textMuted: '#404e6a',
-    borderSubtle: '#181e38',
-    borderDefault: '#1e2640',
+    description: 'Cold steel blue on pale silver',
+    // Desaturated blue-grey — cold and metallic
+    bg:      '#060810',
+    surface: '#0a0e1c',
+    elevated:'#101626',
+    overlay: '#151d30',
+    card:    '#0e1424',
+    accent:  '#4888e0',
+    accentHover: '#6aa4f8',
+    accentMuted: 'rgba(72,136,224,0.18)',
+    accentText:  '#90c0f8',
+    secondaryAccent:     '#8098b8',
+    secondaryAccentText: '#b0c8e0',
+    textPrimary:  '#c8d4e8',
+    textSecondary:'#6878a8',
+    textMuted:    '#404e70',
+    borderSubtle: '#161e38',
+    borderDefault:'#1c2640',
     danger: '#f06060',
   },
 ]
@@ -176,6 +244,12 @@ export const fonts: FontDefinition[] = [
   { id: 'crimson-pro', label: 'Crimson Pro', family: "'Crimson Pro', serif" },
 ]
 
+interface CustomThemeConfig {
+  primaryHex: string
+  secondaryHex: string
+  bgWarmth: 'warm' | 'neutral' | 'cool'
+}
+
 interface ThemeContextValue {
   theme: ThemeDefinition
   font: FontDefinition
@@ -183,6 +257,14 @@ interface ThemeContextValue {
   setFont: (id: string) => void
   themes: ThemeDefinition[]
   fonts: FontDefinition[]
+  customConfig: CustomThemeConfig
+  setCustomConfig: (cfg: CustomThemeConfig) => void
+}
+
+const DEFAULT_CUSTOM: CustomThemeConfig = {
+  primaryHex: '#9b59b6',
+  secondaryHex: '#e67e22',
+  bgWarmth: 'neutral',
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
@@ -192,9 +274,22 @@ const ThemeContext = createContext<ThemeContextValue>({
   setFont: () => {},
   themes,
   fonts,
+  customConfig: DEFAULT_CUSTOM,
+  setCustomConfig: () => {},
 })
 
-function applyTheme(t: ThemeDefinition, f: FontDefinition) {
+function buildCustomTheme(cfg: CustomThemeConfig): ThemeDefinition {
+  const generated = generateTheme(cfg.primaryHex, cfg.secondaryHex || null, cfg.bgWarmth)
+  return {
+    id: 'custom',
+    label: 'Custom',
+    description: 'Your custom palette',
+    custom: true,
+    ...generated,
+  }
+}
+
+export function applyTheme(t: ThemeDefinition, f: FontDefinition) {
   const root = document.documentElement
   root.style.setProperty('--bg-base', t.bg)
   root.style.setProperty('--bg-surface', t.surface)
@@ -221,8 +316,10 @@ function applyTheme(t: ThemeDefinition, f: FontDefinition) {
   root.style.setProperty('--font-body', f.family)
 }
 
-// Simple helper to lighten a hex color by adding brightness
+// Simple helper to lighten a hex color
 function adjustColor(hex: string, amount: number): string {
+  // Handle hsl() values too
+  if (hex.startsWith('hsl')) return hex
   const result = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex)
   if (!result) return hex
   const r = Math.min(255, parseInt(result[1], 16) + amount)
@@ -238,8 +335,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [fontId, setFontId] = useState<string>(() => {
     return localStorage.getItem('dnd-font') || 'system'
   })
+  const [customConfig, setCustomConfigState] = useState<CustomThemeConfig>(() => {
+    try {
+      const saved = localStorage.getItem('dnd-custom-theme')
+      return saved ? JSON.parse(saved) : DEFAULT_CUSTOM
+    } catch { return DEFAULT_CUSTOM }
+  })
 
-  const currentTheme = themes.find(t => t.id === themeId) ?? themes[0]
+  const customTheme = buildCustomTheme(customConfig)
+  const allThemes = [...themes, customTheme]
+
+  const currentTheme = themeId === 'custom'
+    ? customTheme
+    : (themes.find(t => t.id === themeId) ?? themes[0])
   const currentFont = fonts.find(f => f.id === fontId) ?? fonts[0]
 
   useEffect(() => {
@@ -256,8 +364,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setFontId(id)
   }
 
+  const setCustomConfig = (cfg: CustomThemeConfig) => {
+    localStorage.setItem('dnd-custom-theme', JSON.stringify(cfg))
+    setCustomConfigState(cfg)
+  }
+
   return (
-    <ThemeContext.Provider value={{ theme: currentTheme, font: currentFont, setTheme, setFont, themes, fonts }}>
+    <ThemeContext.Provider value={{
+      theme: currentTheme, font: currentFont,
+      setTheme, setFont, themes: allThemes, fonts,
+      customConfig, setCustomConfig,
+    }}>
       {children}
     </ThemeContext.Provider>
   )
