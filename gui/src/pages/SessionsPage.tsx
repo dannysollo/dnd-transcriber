@@ -443,7 +443,7 @@ export default function SessionsPage() {
                   background: isDragOver ? 'rgba(124,108,252,0.06)' : undefined,
                   border: isDragOver ? '1px solid var(--accent)' : undefined,
                   boxShadow: isDragOver ? '0 0 0 2px rgba(124,108,252,0.2)' : undefined,
-                  padding: '18px 20px',
+                  padding: '13px 16px',
                   overflow: 'hidden',
                 }}
               >
@@ -466,7 +466,7 @@ export default function SessionsPage() {
                 ) : (
                   <>
                     {/* Top row: title + badges */}
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: s.description ? 8 : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: s.description ? 5 : 0 }}>
                       <div
                         onClick={() => navigate(`/sessions/${s.name}`)}
                         style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
@@ -509,7 +509,7 @@ export default function SessionsPage() {
                       <p
                         onClick={() => navigate(`/sessions/${s.name}`)}
                         style={{
-                          margin: '0 0 12px 0',
+                          margin: '0 0 8px 0',
                           fontSize: '13px',
                           color: 'var(--text-secondary)',
                           fontStyle: 'italic',
