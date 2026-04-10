@@ -3,7 +3,6 @@ import { Routes, Route, NavLink, useNavigate } from 'react-router-dom'
 import './App.css'
 import SessionsPage from './pages/SessionsPage'
 import SessionView from './pages/SessionView'
-import PipelinePage from './pages/PipelinePage'
 import CorrectionsPage from './pages/CorrectionsPage'
 import LoginPage from './pages/LoginPage'
 import CampaignsPage from './pages/CampaignsPage'
@@ -403,7 +402,6 @@ export default function App() {
         <Routes>
           <Route path="/" element={<SessionsPage />} />
           <Route path="/sessions/:name" element={<SessionView />} />
-          <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/corrections" element={<CorrectionsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />

@@ -398,9 +398,23 @@ export default function SessionsPage() {
       {!activeCampaign ? (
         <EmptyState icon="⚔️" title="No campaign selected" body="Pick a campaign from the dropdown above to see its sessions." />
       ) : loading ? (
-        <div style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Loading...</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {[0,1,2].map(i => (
+            <div key={i} className="session-card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div className="skeleton" style={{ height: 18, width: '60%' }} />
+              <div className="skeleton" style={{ height: 13, width: '85%' }} />
+              <div className="skeleton" style={{ height: 12, width: '30%' }} />
+            </div>
+          ))}
+        </div>
       ) : sessions.length === 0 ? (
-        <EmptyState icon="📜" title="No sessions yet" body="Create your first session above to get started." />
+        <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '32px', marginBottom: '12px' }}>📜</div>
+          <h3 style={{ margin: '0 0 8px', color: 'var(--text-secondary)', fontSize: '16px' }}>No sessions yet</h3>
+          <p style={{ margin: 0, fontSize: '13px', maxWidth: '280px', marginLeft: 'auto', marginRight: 'auto' }}>
+            Create your first session above to start transcribing D&amp;D sessions.
+          </p>
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {sortedSessions.map(s => {

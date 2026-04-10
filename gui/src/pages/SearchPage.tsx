@@ -22,8 +22,8 @@ interface SearchResponse {
 }
 
 const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
-  transcript: { label: 'Transcript', color: '#a78bfa' },
-  summary:    { label: 'Summary',    color: '#60a5fa' },
+  transcript: { label: 'Transcript', color: 'var(--accent)' },
+  summary:    { label: 'Summary',    color: 'var(--accent2)' },
   wiki:       { label: 'Wiki',       color: '#4ade80' },
 }
 
@@ -34,7 +34,7 @@ function highlightQuery(text: string, query: string) {
   return (
     <>
       {text.slice(0, idx)}
-      <mark style={{ background: 'rgba(167,139,250,0.35)', color: '#e2e8f0', borderRadius: 2, padding: '0 2px' }}>
+      <mark style={{ background: 'color-mix(in srgb, var(--accent) 30%, transparent)', color: '#e2e8f0', borderRadius: 2, padding: '0 2px' }}>
         {text.slice(idx, idx + query.length)}
       </mark>
       {text.slice(idx + query.length)}
@@ -87,7 +87,7 @@ export default function SearchPage() {
       {/* Header */}
       <div style={{ padding: '24px 24px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
         <h2 style={{ margin: '0 0 16px', fontSize: 20, fontWeight: 600, color: '#e2e8f0' }}>
-          🔍 Search Sessions
+          Search Sessions
         </h2>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
@@ -101,7 +101,7 @@ export default function SearchPage() {
               flex: 1,
               padding: '10px 14px',
               borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.12)',
+              border: '1px solid var(--accent3)',
               background: 'rgba(255,255,255,0.05)',
               color: '#e2e8f0',
               fontSize: 15,
@@ -158,7 +158,7 @@ export default function SearchPage() {
                 key={sessionResult.session}
                 style={{
                   marginBottom: 20,
-                  border: '1px solid rgba(255,255,255,0.07)',
+                  border: '1px solid var(--accent3)',
                   borderRadius: 10,
                   overflow: 'hidden',
                   background: 'rgba(255,255,255,0.02)',
@@ -177,8 +177,8 @@ export default function SearchPage() {
                   }}
                   onClick={() => navigate(`/sessions/${sessionResult.session}`)}
                 >
-                  <span style={{ fontWeight: 600, color: '#c4b5fd', fontSize: 14 }}>
-                    📜 {sessionResult.session}
+                  <span style={{ fontWeight: 600, color: 'var(--accent-text)', fontSize: 14 }}>
+                    {sessionResult.session}
                   </span>
                   <span style={{ fontSize: 12, color: '#64748b' }}>
                     {sessionResult.hit_count} hit{sessionResult.hit_count !== 1 ? 's' : ''} →

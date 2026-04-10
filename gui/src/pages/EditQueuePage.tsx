@@ -258,9 +258,9 @@ export default function EditQueuePage() {
   }
 
   const editTypeLabel = (e: PendingEdit) => {
-    if (e.edit_type === 'summary' || e.line_number === -2) return '📋 Summary'
-    if (e.edit_type === 'wiki' || e.line_number === -3) return '📖 Wiki'
-    return `📝 Line ${e.line_number}`
+    if (e.edit_type === 'summary' || e.line_number === -2) return 'Summary'
+    if (e.edit_type === 'wiki' || e.line_number === -3) return 'Wiki'
+    return `Line ${e.line_number}`
   }
 
   return (
@@ -296,7 +296,7 @@ export default function EditQueuePage() {
                 opacity: Object.values(processing).some(Boolean) ? 0.5 : 1,
               }}
             >
-              ✓ Approve All ({edits.length})
+              Approve All ({edits.length})
             </button>
           )}
         </div>
@@ -371,7 +371,7 @@ export default function EditQueuePage() {
                           opacity: processing[edit.id] ? 0.5 : 1,
                         }}
                       >
-                        ✓ Approve
+                        Approve
                       </button>
                       <button
                         onClick={() => reject(edit.id)}
@@ -383,7 +383,7 @@ export default function EditQueuePage() {
                           opacity: processing[edit.id] ? 0.5 : 1,
                         }}
                       >
-                        ✕ Reject
+                        Reject
                       </button>
                     </div>
                   </div>

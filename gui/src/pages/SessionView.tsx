@@ -17,10 +17,15 @@ const SPEAKER_PALETTE = [
   '#f87171', // red
 ]
 
+function speakerHash(name: string): number {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (Math.imul(31, h) + name.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+
 function getSpeakerColor(speaker: string, colorMap: Map<string, string>): string {
   if (!colorMap.has(speaker)) {
-    const idx = colorMap.size % SPEAKER_PALETTE.length
-    colorMap.set(speaker, SPEAKER_PALETTE[idx])
+    colorMap.set(speaker, SPEAKER_PALETTE[speakerHash(speaker) % SPEAKER_PALETTE.length])
   }
   return colorMap.get(speaker)!
 }
@@ -171,6 +176,11 @@ export default function SessionView() {
   const [existingShares, setExistingShares] = useState<{ token: string; created_at: string; expires_at: string | null; expired: boolean }[]>([])
   const [sharesLoading, setSharesLoading] = useState(false)
   const [playbackRate, setPlaybackRate] = useState(1)
+  // ── Pipeline run ─────────────────────────────────────────────────────────
+  const [pipelineRunning, setPipelineRunning] = useState(false)
+  const [pipelineLog, setPipelineLog] = useState<string[]>([])
+  const [pipelinePanel, setPipelinePanel] = useState(false)
+  const [pipelineStep, setPipelineStep] = useState<'full' | 'transcribe' | 'wiki'>('full')
   // ── Generate (summary + wiki) ─────────────────────────────────────────────
   const [generating, setGenerating] = useState(false)
   const [generateLog, setGenerateLog] = useState<string[]>([])
@@ -182,7 +192,7 @@ export default function SessionView() {
   const audioRef = useRef<HTMLAudioElement>(null)
   const pendingSeekRef = useRef<number | null>(null)
   const dragCounter = useRef(0)
-  const speakerColors = new Map<string, string>()
+  const speakerColors = useMemo(() => new Map<string, string>(), [name])
 
   const handleDownloadTranscript = () => {
     if (!transcript) return
@@ -476,6 +486,52 @@ export default function SessionView() {
     }
   }
 
+  const runFullPipeline = async () => {
+    setPipelineRunning(true)
+    setPipelineLog([])
+    try {
+      const r = await fetch(apiUrl('/pipeline/run'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session: name, transcribe_only: pipelineStep === 'transcribe', wiki_only: false }),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        toast(err.detail || 'Failed to start pipeline', 'error')
+        setPipelineRunning(false)
+        return
+      }
+      const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
+      const ws = new WebSocket(`${protocol}://${location.host}/ws/progress`)
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data)
+        if (msg.type === 'log') {
+          const line: string = msg.line
+          if (line.startsWith('__EXIT__')) {
+            const code = parseInt(line.replace('__EXIT__', ''))
+            ws.close()
+            setPipelineRunning(false)
+            if (code === 0) {
+              load()
+              toast('Pipeline complete', 'success')
+            } else {
+              toast('Pipeline failed — check logs', 'error')
+            }
+          } else {
+            setPipelineLog(prev => [...prev, line])
+          }
+        } else if (msg.type === 'status' && !msg.running) {
+          ws.close()
+          setPipelineRunning(false)
+        }
+      }
+      ws.onerror = () => { setPipelineRunning(false); toast('WebSocket error during pipeline', 'error') }
+    } catch {
+      setPipelineRunning(false)
+      toast('Failed to start pipeline', 'error')
+    }
+  }
+
   const seekTo = (seconds: number) => {
     if (audioRef.current) {
       audioRef.current.currentTime = seconds
@@ -608,6 +664,21 @@ export default function SessionView() {
         >
           {merging ? 'Merging...' : 'Re-merge'}
         </button>
+        <button
+          onClick={() => setPipelinePanel(p => !p)}
+          style={{
+            background: pipelineRunning ? 'rgba(251,191,36,0.15)' : 'rgba(124,108,252,0.15)',
+            border: `1px solid ${pipelineRunning ? 'rgba(251,191,36,0.3)' : 'rgba(124,108,252,0.3)'}`,
+            borderRadius: '8px',
+            color: pipelineRunning ? '#fbbf24' : 'var(--accent-text)',
+            padding: '6px 14px',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          {pipelineRunning ? 'Running...' : 'Run Pipeline'}
+        </button>
         </div>{/* end top row */}
 
         {/* Episode description row */}
@@ -671,6 +742,61 @@ export default function SessionView() {
           </button>
         ) : null}
       </div>
+
+      {/* Pipeline panel */}
+      {pipelinePanel && (
+        <div style={{
+          borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
+          background: 'var(--bg-elevated)',
+          padding: '16px 28px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {[
+              { id: 'full', label: 'Full Pipeline', desc: 'Transcribe + Wiki' },
+              { id: 'transcribe', label: 'Transcribe Only', desc: 'Stop after merge' },
+              { id: 'wiki', label: 'Wiki Only', desc: 'Skip transcription' },
+            ].map(opt => {
+              const active = pipelineStep === opt.id
+              return (
+                <button key={opt.id} onClick={() => setPipelineStep(opt.id as any)}
+                  style={{
+                    background: active ? 'rgba(124,108,252,0.15)' : 'transparent',
+                    border: `1px solid ${active ? 'rgba(124,108,252,0.4)' : 'var(--accent3)'}`,
+                    borderRadius: '8px', padding: '8px 14px', cursor: 'pointer', textAlign: 'left',
+                  }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: active ? 'var(--accent-text)' : 'var(--text-primary)' }}>{opt.label}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{opt.desc}</div>
+                </button>
+              )
+            })}
+            <button
+              onClick={() => {
+                if (pipelineStep === 'wiki') { generateAnalysis() }
+                else { runFullPipeline() }
+                setPipelinePanel(false)
+              }}
+              disabled={pipelineRunning || generating}
+              className="btn-primary"
+              style={{ marginLeft: 'auto', padding: '8px 20px', fontSize: '13px' }}
+            >
+              Run
+            </button>
+          </div>
+          {pipelineLog.length > 0 && (
+            <div style={{
+              background: '#0d0f18', borderRadius: '8px', padding: '10px 14px',
+              fontFamily: 'monospace', fontSize: '11px', lineHeight: 1.7,
+              maxHeight: '160px', overflowY: 'auto', color: '#94a3b8',
+            }}>
+              {pipelineLog.map((line, i) => <div key={i} style={{ whiteSpace: 'pre-wrap' }}>{line || '\u00a0'}</div>)}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Share modal */}
       {shareModalOpen && (
@@ -950,8 +1076,8 @@ export default function SessionView() {
         <SpeakersPanel sessionName={name!} onRename={() => { load(); setChangesLoaded(false); setChangesReport(null) }} />
       )}
 
-      {/* Audio player panel — transcript tab only */}
-      {tab === 'transcript' && audioFiles.length > 0 && (
+      {/* Audio player panel */}
+      {audioFiles.length > 0 && (
         <div style={{
           borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
           background: '#0a0d14',
@@ -1011,7 +1137,15 @@ export default function SessionView() {
       {/* Content */}
       <div ref={sessionContentRef} className="session-content" style={{ flex: 1, overflow: 'auto', padding: '24px 28px' }}>
         {loading ? (
-          <div style={{ color: '#64748b' }}>Loading...</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '820px' }}>
+            {[0,1,2,3].map(i => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="skeleton" style={{ height: 14, width: '20%' }} />
+                <div className="skeleton" style={{ height: 16, width: '90%' }} />
+                <div className="skeleton" style={{ height: 16, width: '75%' }} />
+              </div>
+            ))}
+          </div>
         ) : tab === 'transcript' ? (
           transcript ? (
             <TranscriptView
