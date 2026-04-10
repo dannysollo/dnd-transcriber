@@ -219,7 +219,7 @@ export default function SettingsPage() {
               }}
             >
               {f.label}
-              <span style={{ fontSize: '11px', opacity: 0.5, fontFamily: 'system-ui, sans-serif', fontWeight: 400, marginLeft: 'auto' }}>
+              <span style={{ fontSize: '11px', opacity: 0.5, fontFamily: f.family, fontWeight: 400, marginLeft: 'auto' }}>
                 {font.id === f.id ? '✓ Active' : 'The quick brown fox'}
               </span>
             </button>
