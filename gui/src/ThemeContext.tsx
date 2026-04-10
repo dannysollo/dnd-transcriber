@@ -15,6 +15,7 @@ export interface ThemeDefinition {
   accentText: string
   secondaryAccent?: string
   secondaryAccentText?: string
+  tertiaryAccent?: string
   textPrimary: string
   textSecondary: string
   textMuted: string
@@ -56,6 +57,8 @@ export function generateTheme(
     accentText:   hsl(pH, Math.min(pS - 10, 60), Math.min(pL + 20, 85)),
     secondaryAccent:     secondaryHex ? hsl(sH, Math.min(sS, 65), Math.max(sL, 40)) : undefined,
     secondaryAccentText: secondaryHex ? hsl(sH, Math.min(sS - 10, 55), Math.min(sL + 22, 82)) : undefined,
+    // tertiary: mid-dark version of primary hue — card borders, tab lines, input focus
+    tertiaryAccent: hsl(pH, Math.min(pS * 0.6, 40), 20),
     textPrimary:  bgWarmth === 'warm' ? hsl(bgHue, 22, 88) : bgWarmth === 'cool' ? hsl(bgHue, 18, 86) : hsl(bgHue, 12, 87),
     textSecondary: bgWarmth === 'warm' ? hsl(bgHue, 16, 60) : bgWarmth === 'cool' ? hsl(bgHue, 14, 58) : hsl(bgHue, 8, 58),
     textMuted:    bgWarmth === 'warm' ? hsl(bgHue, 10, 38) : hsl(bgHue, 8, 36),
@@ -114,6 +117,7 @@ export const themes: ThemeDefinition[] = [
     accentText:  '#f0806a',
     secondaryAccent:     '#c9a84c',
     secondaryAccentText: '#f0ddc0',
+    tertiaryAccent: '#5a1a10',
     textPrimary:  '#f0ddc0',
     textSecondary:'#c0987a',
     textMuted:    '#806048',
@@ -137,6 +141,7 @@ export const themes: ThemeDefinition[] = [
     accentText:  '#b8aeff',
     secondaryAccent:     '#e879f9',
     secondaryAccentText: '#f0abfc',
+    tertiaryAccent: '#2a1e6e',
     textPrimary:   '#ccd4f0',
     textSecondary: '#7080b0',
     textMuted:     '#484e70',
@@ -160,6 +165,7 @@ export const themes: ThemeDefinition[] = [
     accentText:  '#f0cc70',
     secondaryAccent:     '#a05820',
     secondaryAccentText: '#d08850',
+    tertiaryAccent: '#5a3e08',
     textPrimary:  '#f4e4c0',
     textSecondary:'#c0a068',
     textMuted:    '#806040',
@@ -183,6 +189,7 @@ export const themes: ThemeDefinition[] = [
     accentText:  '#40e8da',
     secondaryAccent:     '#e08020',
     secondaryAccentText: '#f8b050',
+    tertiaryAccent: '#0a3e3a',
     textPrimary:  '#c8ecec',
     textSecondary:'#60b0b0',
     textMuted:    '#3c7070',
@@ -206,6 +213,7 @@ export const themes: ThemeDefinition[] = [
     accentText:  '#70e090',
     secondaryAccent:     '#907840',
     secondaryAccentText: '#c8a860',
+    tertiaryAccent: '#14401e',
     textPrimary:  '#c8e8cc',
     textSecondary:'#68a870',
     textMuted:    '#406848',
@@ -229,6 +237,7 @@ export const themes: ThemeDefinition[] = [
     accentText:  '#90c0f8',
     secondaryAccent:     '#8098b8',
     secondaryAccentText: '#b0c8e0',
+    tertiaryAccent: '#18285e',
     textPrimary:  '#c8d4e8',
     textSecondary:'#6878a8',
     textMuted:    '#404e70',
@@ -249,6 +258,7 @@ export const fonts: FontDefinition[] = [
 interface CustomThemeConfig {
   primaryHex: string
   secondaryHex: string
+  tertiaryHex: string
   bgWarmth: 'warm' | 'neutral' | 'cool'
 }
 
@@ -266,6 +276,7 @@ interface ThemeContextValue {
 const DEFAULT_CUSTOM: CustomThemeConfig = {
   primaryHex: '#9b59b6',
   secondaryHex: '#e67e22',
+  tertiaryHex: '#3d1a5a',
   bgWarmth: 'neutral',
 }
 
@@ -288,6 +299,7 @@ function buildCustomTheme(cfg: CustomThemeConfig): ThemeDefinition {
     description: 'Your custom palette',
     custom: true,
     ...generated,
+    tertiaryAccent: cfg.tertiaryHex || generated.tertiaryAccent,
   }
 }
 
@@ -310,6 +322,10 @@ export function applyTheme(t: ThemeDefinition, f: FontDefinition) {
   root.style.setProperty('--accent-text', t.accentText)
   root.style.setProperty('--accent2', t.secondaryAccent ?? t.accent)
   root.style.setProperty('--accent2-text', t.secondaryAccentText ?? t.accentText)
+  root.style.setProperty('--accent3', t.tertiaryAccent ?? t.borderDefault)
+  root.style.setProperty('--accent3-muted', t.tertiaryAccent
+    ? `color-mix(in srgb, ${t.tertiaryAccent} 60%, transparent)`
+    : t.borderDefault)
   root.style.setProperty('--success', '#4ade80')
   root.style.setProperty('--error', '#f87171')
   root.style.setProperty('--warning', '#fbbf24')

@@ -42,6 +42,7 @@ export default function SettingsPage() {
                     <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: t.surface }} />
                     <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: t.accent }} />
                     {t.secondaryAccent && <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: t.secondaryAccent }} />}
+                    {t.tertiaryAccent && <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: t.tertiaryAccent, opacity: 0.85 }} />}
                     <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: t.textPrimary, opacity: 0.5 }} />
                   </div>
                   {/* Label */}
@@ -87,6 +88,7 @@ export default function SettingsPage() {
                     <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: t.surface }} />
                     <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: t.accent }} />
                     <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: t.secondaryAccent ?? t.accentText }} />
+                    <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: t.tertiaryAccent ?? t.borderDefault, opacity: 0.85 }} />
                     <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: t.textPrimary, opacity: 0.5 }} />
                   </div>
                   <div style={{ fontSize: '13px', fontWeight: active ? 700 : 500, color: active ? t.accentText : t.textSecondary }}>
@@ -142,6 +144,22 @@ export default function SettingsPage() {
                     />
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
                       {customConfig.secondaryHex || '#e67e22'}
+                    </span>
+                  </div>
+                </label>
+
+                {/* Tertiary color */}
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Structural accent</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="color"
+                      value={customConfig.tertiaryHex || '#3d1a5a'}
+                      onChange={e => setCustomConfig({ ...customConfig, tertiaryHex: e.target.value })}
+                      style={{ width: 36, height: 36, borderRadius: '6px', border: '1px solid var(--border-default)', cursor: 'pointer', padding: 2 }}
+                    />
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                      {customConfig.tertiaryHex || '#3d1a5a'}
                     </span>
                   </div>
                 </label>
