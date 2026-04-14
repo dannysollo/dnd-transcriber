@@ -188,8 +188,12 @@ export default function SessionView() {
   const [analysisNotes, setAnalysisNotes] = useState<string>('')
   const [notesSaving, setNotesSaving] = useState(false)
   const [importingTranscript, setImportingTranscript] = useState(false)
+  const [audioDuration, setAudioDuration] = useState(0)
+  const [audioPlaying, setAudioPlaying] = useState(false)
+  const [mainAudioVisible, setMainAudioVisible] = useState(true)
   const importInputRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
+  const audioPanelRef = useRef<HTMLDivElement | null>(null)
   const pendingSeekRef = useRef<number | null>(null)
   const dragCounter = useRef(0)
   const speakerColors = useMemo(() => new Map<string, string>(), [name])
@@ -404,6 +408,18 @@ export default function SessionView() {
       window.removeEventListener('drop', onDrop)
     }
   }, [name])
+
+  // Track audio panel visibility for sticky mini-player
+  useEffect(() => {
+    const el = audioPanelRef.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([entry]) => setMainAudioVisible(entry.isIntersecting),
+      { threshold: 0.1 }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [audioFiles.length]) // re-run when audio files load
 
   const doMerge = async () => {
     setMerging(true)
@@ -624,61 +640,83 @@ export default function SessionView() {
           <h1 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{name}</h1>
           <div style={{ flex: 1 }} />
 
-        <button
-          onClick={async () => {
-            setShareModalOpen(true); setShareToken(null); setShareCopied(false)
-            setSharesLoading(true)
-            try {
-              const r = await fetch(apiUrl(`/sessions/${name}/shares`))
-              if (r.ok) setExistingShares(await r.json())
-            } catch { /* ignore */ } finally { setSharesLoading(false) }
-          }}
-          style={{
-            background: 'rgba(96,165,250,0.12)',
-            border: '1px solid rgba(96,165,250,0.25)',
-            borderRadius: '8px',
-            color: '#93c5fd',
-            padding: '6px 14px',
-            fontSize: '12px',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          Share
-        </button>
+          {/* Edit mode badge */}
+          {editMode && tab === 'transcript' && (
+            <span style={{
+              background: 'rgba(251,191,36,0.15)',
+              border: '1px solid rgba(251,191,36,0.4)',
+              borderRadius: '6px',
+              color: '#fbbf24',
+              padding: '3px 10px',
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+              flexShrink: 0,
+            }}>
+              EDITING
+            </span>
+          )}
 
-        <button
-          onClick={doMerge}
-          disabled={merging}
-          style={{
-            background: 'rgba(124,108,252,0.15)',
-            border: '1px solid rgba(124,108,252,0.3)',
-            borderRadius: '8px',
-            color: 'var(--accent-text)',
-            padding: '6px 14px',
-            fontSize: '12px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            opacity: merging ? 0.5 : 1,
-          }}
-        >
-          {merging ? 'Merging...' : 'Re-merge'}
-        </button>
-        <button
-          onClick={() => setPipelinePanel(p => !p)}
-          style={{
-            background: pipelineRunning ? 'rgba(251,191,36,0.15)' : 'rgba(124,108,252,0.15)',
-            border: `1px solid ${pipelineRunning ? 'rgba(251,191,36,0.3)' : 'rgba(124,108,252,0.3)'}`,
-            borderRadius: '8px',
-            color: pipelineRunning ? '#fbbf24' : 'var(--accent-text)',
-            padding: '6px 14px',
-            fontSize: '12px',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          {pipelineRunning ? 'Running...' : 'Run Pipeline'}
-        </button>
+          <button
+            onClick={async () => {
+              setShareModalOpen(true); setShareToken(null); setShareCopied(false)
+              setSharesLoading(true)
+              try {
+                const r = await fetch(apiUrl(`/sessions/${name}/shares`))
+                if (r.ok) setExistingShares(await r.json())
+              } catch { /* ignore */ } finally { setSharesLoading(false) }
+            }}
+            style={{
+              background: 'rgba(96,165,250,0.12)',
+              border: '1px solid rgba(96,165,250,0.25)',
+              borderRadius: '8px',
+              color: '#93c5fd',
+              padding: '6px 14px',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Share
+          </button>
+
+          {/* Re-merge and Run Pipeline — secondary actions, shown when NOT in transcript edit mode */}
+          {!(editMode && tab === 'transcript') && (
+            <>
+              <button
+                onClick={doMerge}
+                disabled={merging}
+                style={{
+                  background: 'rgba(124,108,252,0.15)',
+                  border: '1px solid rgba(124,108,252,0.3)',
+                  borderRadius: '8px',
+                  color: 'var(--accent-text)',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  opacity: merging ? 0.5 : 1,
+                }}
+              >
+                {merging ? 'Merging...' : 'Re-merge'}
+              </button>
+              <button
+                onClick={() => setPipelinePanel(p => !p)}
+                style={{
+                  background: pipelineRunning ? 'rgba(251,191,36,0.15)' : 'rgba(124,108,252,0.15)',
+                  border: `1px solid ${pipelineRunning ? 'rgba(251,191,36,0.3)' : 'rgba(124,108,252,0.3)'}`,
+                  borderRadius: '8px',
+                  color: pipelineRunning ? '#fbbf24' : 'var(--accent-text)',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {pipelineRunning ? 'Running...' : 'Run Pipeline'}
+              </button>
+            </>
+          )}
         </div>{/* end top row */}
 
         {/* Episode description row */}
@@ -977,6 +1015,7 @@ export default function SessionView() {
 
         {tab === 'transcript' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
+            {/* View mode: search bar */}
             {!editMode && (
               <>
                 <input
@@ -1000,18 +1039,48 @@ export default function SessionView() {
                   const q = search.toLowerCase()
                   const count = transcript.split('\n').filter(l => l.toLowerCase().includes(q)).length
                   return (
-                    <span style={{ fontSize: '11px', color: count > 0 ? '#a78bfa' : '#475569', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '11px', color: count > 0 ? 'var(--accent2)' : '#475569', whiteSpace: 'nowrap' }}>
                       {count > 0 ? `${count} match${count !== 1 ? 'es' : ''}` : 'no matches'}
                     </span>
                   )
                 })()}
               </>
             )}
+
+            {/* Edit mode: download + import tools */}
+            {editMode && transcript && (
+              <>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginRight: '4px', flexShrink: 0 }}>Edit tools:</span>
+                <button
+                  onClick={handleDownloadTranscript}
+                  className="btn-ghost"
+                  style={{ fontSize: '12px', padding: '5px 12px', flexShrink: 0 }}
+                >
+                  Download
+                </button>
+                <label
+                  className="btn-ghost"
+                  style={{ fontSize: '12px', padding: '5px 12px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                >
+                  {importingTranscript ? 'Importing...' : 'Import'}
+                  <input
+                    ref={importInputRef}
+                    type="file"
+                    accept=".md,.txt"
+                    style={{ display: 'none' }}
+                    onChange={handleImportTranscript}
+                  />
+                </label>
+              </>
+            )}
+
+            <div style={{ flex: 1 }} />
+
+            {/* Edit/Done toggle — always rightmost */}
             {transcript && (
               <button
                 onClick={() => {
-                  // Find the topmost visible line element to use as scroll anchor
-                  if (sessionContentRef.current) {
+                  if (!editMode && sessionContentRef.current) {
                     const container = sessionContentRef.current
                     const containerTop = container.getBoundingClientRect().top
                     const lineEls = container.querySelectorAll('[data-line-idx]')
@@ -1031,42 +1100,19 @@ export default function SessionView() {
                   background: editMode ? 'rgba(251,191,36,0.15)' : 'transparent',
                   border: `1px solid ${editMode ? 'rgba(251,191,36,0.4)' : 'var(--accent3)'}`,
                   borderRadius: '8px',
-                  color: editMode ? '#fbbf24' : '#64748b',
-                  padding: '6px 12px',
+                  color: editMode ? '#fbbf24' : 'var(--text-muted)',
+                  padding: '5px 14px',
                   fontSize: '12px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
+                  transition: 'all 0.15s',
                 }}
               >
-                {editMode ? 'Exit Edit' : 'Edit Transcript'}
+                {editMode ? 'Done Editing' : 'Edit'}
               </button>
             )}
-            {transcript && (
-              <button
-                onClick={handleDownloadTranscript}
-                title="Download transcript as markdown"
-                className="btn-ghost"
-                style={{ fontSize: '12px', padding: '5px 12px', flexShrink: 0 }}
-              >
-                Download
-              </button>
-            )}
-            <label
-              title="Import transcript from markdown file"
-              className="btn-ghost"
-              style={{ fontSize: '12px', padding: '5px 12px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-            >
-              {importingTranscript ? 'Importing...' : 'Import'}
-              <input
-                ref={importInputRef}
-                type="file"
-                accept=".md,.txt"
-                style={{ display: 'none' }}
-                onChange={handleImportTranscript}
-              />
-            </label>
           </div>
         )}
       </div>
@@ -1078,7 +1124,7 @@ export default function SessionView() {
 
       {/* Audio player panel */}
       {audioFiles.length > 0 && (
-        <div className="session-audio-panel" style={{
+        <div ref={audioPanelRef} className="session-audio-panel" style={{
           borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
           background: '#0a0d14',
           flexShrink: 0,
@@ -1103,12 +1149,18 @@ export default function SessionView() {
                 controls
                 onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
                 onLoadedMetadata={() => {
-                  if (audioRef.current) audioRef.current.playbackRate = playbackRate
+                  if (audioRef.current) {
+                    audioRef.current.playbackRate = playbackRate
+                    setAudioDuration(audioRef.current.duration || 0)
+                  }
                   if (pendingSeekRef.current !== null) {
                     seekTo(pendingSeekRef.current)
                     pendingSeekRef.current = null
                   }
                 }}
+                onPlay={() => setAudioPlaying(true)}
+                onPause={() => setAudioPlaying(false)}
+                onEnded={() => setAudioPlaying(false)}
                 style={{ flex: 1, height: '36px', accentColor: 'var(--accent)' }}
               />
               <select
@@ -1212,8 +1264,99 @@ export default function SessionView() {
           />
         )}
       </div>
+
+      {/* Sticky mini audio player — appears when main player scrolls out of view */}
+      {audioFiles.length > 0 && !mainAudioVisible && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: 'color-mix(in srgb, var(--bg-page) 92%, transparent)',
+          backdropFilter: 'blur(8px)',
+          borderTop: '1px solid color-mix(in srgb, var(--accent3) 60%, transparent)',
+          padding: '8px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          zIndex: 200,
+          // On mobile, sit above bottom nav
+        }} className="sticky-mini-player">
+          {/* Play/pause */}
+          <button
+            onClick={() => {
+              if (!audioRef.current) return
+              if (audioPlaying) audioRef.current.pause()
+              else audioRef.current.play()
+            }}
+            style={{
+              background: 'var(--accent)',
+              border: 'none',
+              borderRadius: '50%',
+              width: 32,
+              height: 32,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              flexShrink: 0,
+              color: 'white',
+              fontSize: 13,
+            }}
+          >
+            {audioPlaying ? '⏸' : '▶'}
+          </button>
+
+          {/* Time */}
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, minWidth: '72px' }}>
+            {formatTime(currentTime)}{audioDuration > 0 ? ` / ${formatTime(audioDuration)}` : ''}
+          </span>
+
+          {/* Progress bar */}
+          <input
+            type="range"
+            min={0}
+            max={audioDuration || 100}
+            value={currentTime}
+            step={1}
+            onChange={e => {
+              const t = parseFloat(e.target.value)
+              if (audioRef.current) audioRef.current.currentTime = t
+            }}
+            style={{ flex: 1, accentColor: 'var(--accent)', cursor: 'pointer', minWidth: 0 }}
+          />
+
+          {/* Speed */}
+          <select
+            value={playbackRate}
+            onChange={e => {
+              const rate = parseFloat(e.target.value)
+              setPlaybackRate(rate)
+              if (audioRef.current) audioRef.current.playbackRate = rate
+            }}
+            style={{
+              background: 'var(--bg-elevated)', border: '1px solid var(--accent3)',
+              borderRadius: '6px', color: 'var(--text-muted)',
+              padding: '3px 6px', fontSize: '11px', fontWeight: 600,
+              cursor: 'pointer', outline: 'none', flexShrink: 0,
+            }}
+          >
+            {[1, 1.5, 2, 3].map(r => (
+              <option key={r} value={r}>{r}×</option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   )
+}
+
+function formatTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 function TranscriptView({

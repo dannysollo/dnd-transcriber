@@ -180,4 +180,9 @@
     flex-wrap: wrap !important;
     justify-content: flex-start !important;
   }
+
+  /* Sticky mini player: sit above the bottom nav bar (≈60px) */
+  .sticky-mini-player {
+    bottom: 60px !important;
+  }
 }
