@@ -5,6 +5,8 @@ import { useAuth } from '../AuthContext'
 import { useToast } from '../Toast'
 
 type SortKey = 'name' | 'date_added' | 'modified'
+type ReviewStatus = 'unreviewed' | 'reviewed' | 'published'
+type FilterKey = 'all' | 'transcript' | 'summary' | 'wiki' | 'reviewed' | 'published' | 'unreviewed'
 
 interface Session {
   name: string
@@ -12,6 +14,7 @@ interface Session {
   has_transcript: boolean
   has_summary: boolean
   has_wiki: boolean
+  review_status: ReviewStatus
   created_at: string | null
   modified_at: string | null
   description: string | null
@@ -74,6 +77,18 @@ const RefreshIcon = () => (
   </svg>
 )
 
+const REVIEW_CYCLE: Record<ReviewStatus, ReviewStatus> = {
+  unreviewed: 'reviewed',
+  reviewed: 'published',
+  published: 'unreviewed',
+}
+
+const REVIEW_BADGE: Record<ReviewStatus, { bg: string; color: string; label: string }> = {
+  unreviewed: { bg: 'rgba(100,116,139,0.12)', color: '#94a3b8', label: 'Unreviewed' },
+  reviewed:   { bg: 'rgba(251,191,36,0.12)',  color: '#fbbf24', label: 'Reviewed' },
+  published:  { bg: 'rgba(34,197,94,0.12)',   color: '#4ade80', label: 'Published' },
+}
+
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
@@ -86,6 +101,7 @@ export default function SessionsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [jobMap, setJobMap] = useState<Record<string, TranscriptionJob>>({})
   const [sortKey, setSortKey] = useState<SortKey>('date_added')
+  const [filterKey, setFilterKey] = useState<FilterKey>('all')
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragCounters = useRef<Record<string, number>>({})
@@ -181,6 +197,22 @@ export default function SessionsPage() {
       toast('Wiki summary generation started', 'success')
     } else {
       toast('Failed to start wiki summary generation', 'error')
+    }
+  }
+
+  const updateReviewStatus = async (sessionName: string, currentStatus: ReviewStatus) => {
+    const nextStatus = REVIEW_CYCLE[currentStatus]
+    const r = await fetch(apiUrl(`/sessions/${sessionName}/review-status`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ review_status: nextStatus }),
+    })
+    if (r.ok) {
+      setSessions(prev => prev.map(s =>
+        s.name === sessionName ? { ...s, review_status: nextStatus } : s
+      ))
+    } else {
+      toast('Failed to update review status', 'error')
     }
   }
 
@@ -283,6 +315,17 @@ export default function SessionsPage() {
     return 0
   })
 
+  const filteredSessions = sortedSessions.filter(s => {
+    if (filterKey === 'all') return true
+    if (filterKey === 'transcript') return s.has_transcript
+    if (filterKey === 'summary') return s.has_summary
+    if (filterKey === 'wiki') return s.has_wiki
+    if (filterKey === 'reviewed') return s.review_status === 'reviewed'
+    if (filterKey === 'published') return s.review_status === 'published'
+    if (filterKey === 'unreviewed') return s.review_status === 'unreviewed'
+    return true
+  })
+
   const handleDragEnter = (e: React.DragEvent, name: string) => {
     e.preventDefault()
     dragCounters.current[name] = (dragCounters.current[name] || 0) + 1
@@ -335,7 +378,7 @@ export default function SessionsPage() {
           </span>
         </div>
 
-        {/* Sort + New session row */}
+        {/* Sort + Filter + New session row */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, marginRight: 2 }}>Sort:</span>
@@ -352,6 +395,44 @@ export default function SessionsPage() {
                 }}
               >
                 {k === 'name' ? 'Name' : k === 'date_added' ? 'Date Added' : 'Modified'}
+              </button>
+            ))}
+          </div>
+
+          {/* Filter row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, marginRight: 2 }}>Filter:</span>
+            {([
+              ['all', 'All'],
+              ['transcript', 'Transcript'],
+              ['summary', 'Summary'],
+              ['wiki', 'Wiki'],
+              ['unreviewed', 'Unreviewed'],
+              ['reviewed', 'Reviewed'],
+              ['published', 'Published'],
+            ] as [FilterKey, string][]).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setFilterKey(k)}
+                style={{
+                  background: filterKey === k ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
+                  border: `1px solid ${filterKey === k ? 'var(--accent)' : 'var(--border-default)'}`,
+                  borderRadius: 5, color: filterKey === k ? 'var(--accent-text)' : 'var(--text-muted)',
+                  padding: '3px 9px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {label}
+                {k !== 'all' && sessions.length > 0 && (
+                  <span style={{ marginLeft: 4, opacity: 0.6 }}>
+                    {k === 'transcript' ? sessions.filter(s => s.has_transcript).length
+                      : k === 'summary' ? sessions.filter(s => s.has_summary).length
+                      : k === 'wiki' ? sessions.filter(s => s.has_wiki).length
+                      : k === 'reviewed' ? sessions.filter(s => s.review_status === 'reviewed').length
+                      : k === 'published' ? sessions.filter(s => s.review_status === 'published').length
+                      : sessions.filter(s => s.review_status === 'unreviewed').length}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -417,7 +498,18 @@ export default function SessionsPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {sortedSessions.map(s => {
+          {filteredSessions.length === 0 && sessions.length > 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 24px', color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: 13 }}>No sessions match this filter.</div>
+              <button
+                onClick={() => setFilterKey('all')}
+                style={{ marginTop: 10, background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13 }}
+              >
+                Clear filter
+              </button>
+            </div>
+          ) : null}
+          {filteredSessions.map(s => {
             const isRenaming = renamingSession === s.name
             const isDragOver = dragOverSession === s.name
             const isUploading = uploadingFor === s.name
@@ -495,18 +587,22 @@ export default function SessionsPage() {
                       </div>
 
                       {/* Status badges — top right */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                         {s.has_transcript && (
-                          <span style={{
-                            background: 'color-mix(in srgb, var(--accent2) 15%, transparent)',
-                            color: 'var(--accent2-text)',
-                            border: '1px solid color-mix(in srgb, var(--accent2) 35%, transparent)',
-                            borderRadius: '4px', padding: '2px 7px',
-                            fontSize: '10px', fontWeight: 700, letterSpacing: '0.03em',
-                            textTransform: 'uppercase',
-                          }}>
-                            Transcript
-                          </span>
+                          <ContentBadge label="T" title="Transcript" color="var(--accent2)" />
+                        )}
+                        {s.has_summary && (
+                          <ContentBadge label="S" title="Summary" color="var(--accent)" />
+                        )}
+                        {s.has_wiki && (
+                          <ContentBadge label="W" title="Wiki" color="#22c55e" />
+                        )}
+                        {s.review_status !== 'unreviewed' && (!authEnabled || isLoggedIn) && (
+                          <ReviewStatusBadge
+                            status={s.review_status}
+                            onClick={() => updateReviewStatus(s.name, s.review_status)}
+                            isDm={!authEnabled || activeCampaign?.role === 'dm'}
+                          />
                         )}
                         {job && job.status !== 'done' && (
                           <JobStatusBadge job={job} onCancel={() => cancelJob(s.name)} />
@@ -548,7 +644,15 @@ export default function SessionsPage() {
                       </span>
 
                       {/* Action buttons */}
-                      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', gap: '4px', flexShrink: 0, alignItems: 'center' }}>
+                        {(!authEnabled || (isLoggedIn && activeCampaign?.role === 'dm')) && (
+                          <ActionBtn
+                            title={`Mark as ${REVIEW_CYCLE[s.review_status ?? 'unreviewed']} (currently ${s.review_status ?? 'unreviewed'})`}
+                            onClick={() => updateReviewStatus(s.name, s.review_status ?? 'unreviewed')}
+                          >
+                            <ReviewIcon status={s.review_status ?? 'unreviewed'} />
+                          </ActionBtn>
+                        )}
                         {(!authEnabled || isLoggedIn) && (
                           <ActionBtn
                             title={job && job.status === 'claimed' ? 'Reset stuck job and re-queue' : 'Queue transcription'}
@@ -667,5 +771,83 @@ function ActionBtn({ children, onClick, title, loading, danger }: {
     >
       {children}
     </button>
+  )
+}
+
+/** Small colored letter badge for Transcript / Summary / Wiki */
+function ContentBadge({ label, title, color }: { label: string; title: string; color: string }) {
+  return (
+    <span
+      title={title}
+      style={{
+        background: `color-mix(in srgb, ${color} 15%, transparent)`,
+        color: color,
+        border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`,
+        borderRadius: '4px',
+        padding: '2px 6px',
+        fontSize: '10px',
+        fontWeight: 700,
+        letterSpacing: '0.05em',
+        textTransform: 'uppercase',
+        userSelect: 'none',
+      }}
+    >
+      {label}
+    </span>
+  )
+}
+
+/** Clickable review status badge */
+function ReviewStatusBadge({ status, onClick, isDm }: { status: ReviewStatus; onClick: () => void; isDm: boolean }) {
+  const b = REVIEW_BADGE[status]
+  return (
+    <span
+      onClick={isDm ? e => { e.stopPropagation(); onClick() } : undefined}
+      title={isDm ? `Click to advance review status (currently: ${b.label})` : b.label}
+      style={{
+        background: b.bg,
+        color: b.color,
+        border: `1px solid color-mix(in srgb, ${b.color} 40%, transparent)`,
+        borderRadius: '4px',
+        padding: '2px 7px',
+        fontSize: '10px',
+        fontWeight: 700,
+        letterSpacing: '0.03em',
+        textTransform: 'uppercase',
+        cursor: isDm ? 'pointer' : 'default',
+        userSelect: 'none',
+        transition: 'all 0.15s ease',
+      }}
+    >
+      {b.label}
+    </span>
+  )
+}
+
+/** Small icon for the review status action button */
+function ReviewIcon({ status }: { status: ReviewStatus }) {
+  // Checkmark states: empty circle → single check → double check
+  if (status === 'published') {
+    // Double check — already published, clicking resets to unreviewed
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="17 9 11 15 8 12"/>
+        <polyline points="22 9 16 15 13 12"/>
+      </svg>
+    )
+  }
+  if (status === 'reviewed') {
+    // Single check — reviewed, clicking marks as published
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    )
+  }
+  // Empty circle — unreviewed, clicking marks as reviewed
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+    </svg>
   )
 }

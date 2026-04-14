@@ -94,6 +94,22 @@ def get_sessions_dir(campaign_slug: Optional[str] = None) -> Path:
     return BASE_DIR / config.get("sessions_dir", "sessions")
 
 
+def get_session_review_status(session_dir: Path) -> str:
+    """Return the user-set review status for a session. Defaults to 'unreviewed'."""
+    f = session_dir / "review_status.txt"
+    if f.exists():
+        val = f.read_text(encoding="utf-8").strip()
+        if val in ("unreviewed", "reviewed", "published"):
+            return val
+    return "unreviewed"
+
+
+def set_session_review_status(session_dir: Path, status: str) -> None:
+    if status not in ("unreviewed", "reviewed", "published"):
+        raise ValueError(f"Invalid review status: {status}")
+    (session_dir / "review_status.txt").write_text(status, encoding="utf-8")
+
+
 def get_or_create_session_created_at(session_dir: Path) -> str:
     """Return ISO timestamp for session creation. Reads created_at.txt if it exists,
     otherwise tries to parse date from session name (M-D-YYYY prefix), falls back to mtime."""
@@ -1565,6 +1581,7 @@ def campaign_list_sessions(
                 "created_at": get_or_create_session_created_at(d),
                 "modified_at": datetime.utcfromtimestamp(stat.st_mtime).isoformat(),
                 "description": desc_path.read_text(encoding="utf-8").strip() if desc_path.exists() else None,
+                "review_status": get_session_review_status(d),
             })
     return sessions
 
@@ -1675,6 +1692,28 @@ def campaign_rename_session(
         raise HTTPException(400, f"Session '{body.new_name}' already exists")
     old_path.rename(new_path)
     return {"name": body.new_name, "status": session_status(new_path)}
+
+
+class ReviewStatusBody(BaseModel):
+    review_status: str
+
+
+@app.put("/campaigns/{slug}/sessions/{name}/review-status")
+def campaign_set_review_status(
+    slug: str,
+    name: str,
+    body: ReviewStatusBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    sessions_dir = get_sessions_dir(slug)
+    session_dir = sessions_dir / name
+    if not session_dir.exists():
+        raise HTTPException(404, f"Session '{name}' not found")
+    try:
+        set_session_review_status(session_dir, body.review_status)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"review_status": body.review_status}
 
 
 @app.delete("/campaigns/{slug}/sessions/{name}", status_code=204)
