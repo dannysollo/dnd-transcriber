@@ -233,6 +233,11 @@ def run_analysis(transcript: str, config: dict, notes: str = "") -> tuple[str, s
     if not full_text:
         raise RuntimeError("claude -p returned empty output")
 
+    # Strip any conversational preamble before the first ## heading
+    first_heading = re.search(r'^##', full_text, re.MULTILINE)
+    if first_heading and first_heading.start() > 0:
+        full_text = full_text[first_heading.start():].strip()
+
     # Extract blurb block
     blurb = ""
     blurb_match = re.search(r'BLURB_START\s*(.*?)\s*BLURB_END', full_text, re.DOTALL)
