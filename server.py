@@ -1018,29 +1018,25 @@ def _pipeline_thread(session: str, transcribe_only: bool, wiki_only: bool,
     pipeline_state["session"] = session
     pipeline_state["log"] = []
 
-    cmd = [sys.executable, str(APP_DIR / "pipeline.py"), session]
-    if transcribe_only:
-        cmd.append("--transcribe-only")
-    if wiki_only:
-        cmd.append("--wiki-only")
-    if campaign_slug:
-        cmd.extend(["--campaign", campaign_slug])
-
     try:
-        proc = subprocess.Popen(
-            cmd,
-            cwd=str(BASE_DIR),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-        for line in proc.stdout:
-            line = line.rstrip()
-            pipeline_state["log"].append(line)
-            log_queue.put(line)
-        proc.wait()
-        log_queue.put(f"__EXIT__{proc.returncode}")
+        if wiki_only:
+            # Write the analysis_pending flag so the worker picks it up
+            sessions_dir = get_sessions_dir(campaign_slug)
+            session_dir = sessions_dir / session
+            if not session_dir.exists():
+                log_queue.put(f"ERROR: session directory not found: {session_dir}")
+                log_queue.put("__EXIT__1")
+                return
+            flag = session_dir / ANALYSIS_FLAG
+            flag.touch()
+            log_queue.put(f"[pipeline] queued analysis for {session} — worker will process shortly")
+            log_queue.put("__EXIT__0")
+        else:
+            # Transcription is handled by the local worker process (worker/main.py).
+            # Queueing is done by the worker's own job-claim mechanism.
+            log_queue.put("[pipeline] transcription jobs are managed by the worker process")
+            log_queue.put("[pipeline] start or check the local worker to process transcription")
+            log_queue.put("__EXIT__0")
     except Exception as e:
         log_queue.put(f"ERROR: {e}")
         log_queue.put("__EXIT__1")
