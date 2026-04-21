@@ -1014,7 +1014,7 @@ export default function SessionView() {
         </div>
 
         {tab === 'transcript' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-surface)' }}>
             {/* View mode: search bar */}
             {!editMode && (
               <>
@@ -1187,7 +1187,7 @@ export default function SessionView() {
       )}
 
       {/* Content */}
-      <div ref={sessionContentRef} className="session-content" style={{ flex: 1, overflow: 'auto', padding: '24px 28px' }}>
+      <div ref={sessionContentRef} className="session-content" style={{ flex: 1, overflow: 'auto', padding: '24px 28px', paddingBottom: !mainAudioVisible && audioFiles.length > 0 ? '80px' : '24px' }}>
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '820px' }}>
             {[0,1,2,3].map(i => (
@@ -1270,7 +1270,7 @@ export default function SessionView() {
         <div style={{
           position: 'fixed',
           bottom: 0,
-          left: 0,
+          left: 0,   /* overridden to sidebar-width on desktop via CSS */
           right: 0,
           background: 'color-mix(in srgb, var(--bg-page) 92%, transparent)',
           backdropFilter: 'blur(8px)',

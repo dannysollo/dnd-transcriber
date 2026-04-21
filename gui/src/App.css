@@ -186,3 +186,10 @@
     bottom: 60px !important;
   }
 }
+
+/* Desktop: offset sticky mini player by sidebar width so it doesn't cover the logout button */
+@media (min-width: 769px) {
+  .sticky-mini-player {
+    left: 200px !important;
+  }
+}
