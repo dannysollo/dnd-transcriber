@@ -3137,19 +3137,30 @@ ANALYSIS_FLAG = "analysis_pending"
 
 @app.get("/campaigns/{slug}/worker/analysis-jobs")
 def worker_list_analysis_jobs(slug: str, db: Session = Depends(get_db), request: Request = None):
-    """Return sessions with a pending analysis flag."""
+    """Return sessions with a pending analysis flag. Transcript is corrections-applied."""
     require_worker_key(slug)(request, db)
     sessions_dir = get_sessions_dir(slug)
+    config = load_config(slug)
+    corrections = config.get("corrections") or {}
+    patterns = config.get("patterns") or []
     pending = []
     if sessions_dir.exists():
         for session_dir in sessions_dir.iterdir():
             if session_dir.is_dir() and (session_dir / ANALYSIS_FLAG).exists():
-                transcript = session_dir / "transcript.md"
-                notes = session_dir / "analysis_notes.md"
+                transcript_path = session_dir / "transcript.md"
+                notes_path = session_dir / "analysis_notes.md"
+                transcript_text = transcript_path.read_text(encoding="utf-8") if transcript_path.exists() else ""
+                # Apply corrections and patterns so Claude sees the cleaned-up text
+                if transcript_text and (corrections or patterns):
+                    from merge import apply_corrections, apply_patterns
+                    if corrections:
+                        transcript_text = apply_corrections(transcript_text, corrections)
+                    if patterns:
+                        transcript_text = apply_patterns(transcript_text, patterns)
                 pending.append({
                     "session_name": session_dir.name,
-                    "transcript": transcript.read_text(encoding="utf-8") if transcript.exists() else "",
-                    "notes": notes.read_text(encoding="utf-8") if notes.exists() else "",
+                    "transcript": transcript_text,
+                    "notes": notes_path.read_text(encoding="utf-8") if notes_path.exists() else "",
                 })
     return pending
 

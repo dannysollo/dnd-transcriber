@@ -216,6 +216,7 @@ def run_analysis(transcript: str, config: dict, notes: str = "") -> tuple[str, s
         ["claude", "-p",
          "--system-prompt", system_prompt,
          "--no-session-persistence",
+         "--allowedTools", "Read",
          "--output-format", "text"],
         input=message,
         stdout=subprocess.PIPE,
