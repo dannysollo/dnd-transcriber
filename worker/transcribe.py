@@ -122,6 +122,117 @@ def apply_vad(wav_path: str) -> str:
 # (imported above) to avoid circular imports with diarize.py
 
 
+# ─── VAD-chunk transcription (accurate timestamps) ───────────────────────────
+
+def _transcribe_via_vad_chunks(wav_path: str, model, **whisper_kwargs) -> dict:
+    """
+    Transcribe a WAV using Silero VAD timestamps as anchors.
+
+    Instead of passing the whole file to Whisper with vad_filter=True (which lets
+    Whisper's internal VAD remap timestamps internally, causing up to ~10s drift),
+    we:
+      1. Run Silero VAD to get precise speech timestamps
+      2. Merge nearby regions (gap < 800ms) to avoid tiny fragments
+      3. Extract each speech chunk as a temp WAV
+      4. Transcribe each chunk with vad_filter=False (no remapping needed)
+      5. Offset each chunk's segment timestamps by the chunk's absolute start time
+
+    This is the same approach used in diarize.py for diarized tracks, where it
+    produces correctly interleaved multi-speaker output.
+
+    Returns {"segments": [{start, end, text}, ...]} sorted by start time.
+    """
+    import soundfile as sf
+    import torch
+    import torchaudio
+    from silero_vad import get_speech_timestamps, load_silero_vad
+    import tempfile
+
+    # ── 1. Get speech timestamps from Silero VAD ──────────────────────────────
+    vad_model = load_silero_vad()
+    audio_np, sr = sf.read(wav_path, dtype="float32", always_2d=False)
+    wav_tensor = torch.from_numpy(audio_np)
+    if sr != SAMPLE_RATE:
+        wav_tensor = torchaudio.functional.resample(wav_tensor, sr, SAMPLE_RATE)
+    if wav_tensor.dim() > 1:
+        wav_tensor = wav_tensor.mean(0)
+
+    speech_timestamps = get_speech_timestamps(
+        wav_tensor, vad_model,
+        sampling_rate=SAMPLE_RATE,
+        threshold=0.4,
+        min_speech_duration_ms=300,
+        min_silence_duration_ms=500,
+        speech_pad_ms=400,
+        return_seconds=True,
+    )
+
+    if not speech_timestamps:
+        # No speech detected — fall back to transcribing the whole file
+        return transcribe_audio(model, wav_path, vad_filter=False, **whisper_kwargs)
+
+    # ── 2. Merge nearby speech regions (gap < 1.5s) ───────────────────────────
+    merged_regions = []
+    for ts in speech_timestamps:
+        if merged_regions and (ts["start"] - merged_regions[-1]["end"]) < 1.5:
+            merged_regions[-1]["end"] = ts["end"]
+        else:
+            merged_regions.append({"start": ts["start"], "end": ts["end"]})
+
+    # ── 3–5. Extract, transcribe, offset ─────────────────────────────────────
+    all_segments = []
+    total_chunks = len(merged_regions)
+    for i, region in enumerate(merged_regions):
+        chunk_start = region["start"]
+        chunk_end = region["end"]
+        chunk_duration = chunk_end - chunk_start
+
+        # Skip very short chunks (< 0.5s) — usually noise
+        if chunk_duration < 0.5:
+            continue
+
+        # Extract chunk to temp WAV
+        tmp = tempfile.NamedTemporaryFile(suffix="_chunk.wav", delete=False)
+        tmp.close()
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", str(chunk_start),
+            "-t", str(chunk_duration),
+            "-i", wav_path,
+            "-ar", str(SAMPLE_RATE), "-ac", "1",
+            tmp.name,
+        ]
+        import subprocess
+        result = subprocess.run(cmd, capture_output=True)
+        if result.returncode != 0:
+            Path(tmp.name).unlink(missing_ok=True)
+            continue
+
+        try:
+            chunk_result = transcribe_audio(
+                model, tmp.name,
+                vad_filter=False,  # chunk is already trimmed to speech
+                **whisper_kwargs,
+            )
+            # Offset each segment's timestamps by the chunk's absolute start time
+            for seg in chunk_result["segments"]:
+                all_segments.append({
+                    "start": chunk_start + seg["start"],
+                    "end": chunk_start + seg["end"],
+                    "text": seg["text"],
+                })
+        finally:
+            Path(tmp.name).unlink(missing_ok=True)
+
+        # Progress logging
+        pct = int(((i + 1) / total_chunks) * 100)
+        if total_chunks > 5 and (i + 1) % max(1, total_chunks // 10) == 0:
+            print(f"      vad-chunk transcription {pct}% ({i+1}/{total_chunks} chunks, t={chunk_end:.0f}s)")
+
+    all_segments.sort(key=lambda s: s["start"])
+    return {"segments": all_segments}
+
+
 # ─── Per-speaker transcription ────────────────────────────────────────────────
 
 def transcribe_session(session_dir: Path, model, config: dict) -> str:
@@ -216,16 +327,29 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
                     continue
 
         # ── Standard single-speaker Whisper path ─────────────────────────────
-        result = transcribe_audio(
-            model,
-            wav_path,
-            language="en",
-            initial_prompt=vocab_prompt if vocab_prompt else None,
-            condition_on_previous_text=False,
-            no_speech_threshold=0.85,
-            compression_ratio_threshold=2.4,
-            vad_filter=use_vad,
-        )
+        # Use VAD-chunk approach for accurate timestamps: run Silero VAD to get
+        # precise speech boundaries, extract each chunk, transcribe with offset.
+        # This matches what diarize.py does and gives accurate absolute timestamps.
+        # vad_filter=True inside transcribe_audio is unreliable for multi-speaker
+        # interleaving because Whisper's internal timestamp mapping can drift by
+        # several seconds when processing concatenated speech chunks.
+        if use_vad:
+            result = _transcribe_via_vad_chunks(
+                wav_path, model,
+                language="en",
+                initial_prompt=vocab_prompt if vocab_prompt else None,
+            )
+        else:
+            result = transcribe_audio(
+                model,
+                wav_path,
+                language="en",
+                initial_prompt=vocab_prompt if vocab_prompt else None,
+                condition_on_previous_text=False,
+                no_speech_threshold=0.85,
+                compression_ratio_threshold=2.4,
+                vad_filter=False,
+            )
 
         Path(wav_path).unlink(missing_ok=True)
 
