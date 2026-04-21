@@ -195,8 +195,9 @@ def transcribe_with_diarization(
                 language="en",
                 initial_prompt=vocab_prompt if vocab_prompt else None,
                 condition_on_previous_text=False,
-                no_speech_threshold=0.6,
+                no_speech_threshold=0.85,
                 compression_ratio_threshold=2.4,
+                vad_filter=False,  # diarized segments are already trimmed to speech; no internal VAD needed
             )
             for whisper_seg in result["segments"]:
                 text = whisper_seg["text"].strip()

@@ -158,11 +158,21 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
 
         wav_path = convert_to_wav(audio_file)
 
-        if use_vad:
-            print(f"    Applying VAD...")
-            vad_path = apply_vad(wav_path)
-            Path(wav_path).unlink(missing_ok=True)
-            wav_path = vad_path
+        # NOTE: External VAD zeroing (apply_vad) was removed because it conflicts
+        # with faster-whisper's internal vad_filter=True.  Zeroing silence to
+        # 0-amplitude causes Whisper to compress timestamps within a 30s chunk
+        # (the silent region has no encoder features, so Whisper's decoder jumps
+        # over it without advancing the timestamp), which makes segments from
+        # the same speaker appear consecutive even when other speakers filled
+        # that gap on their tracks.
+        #
+        # faster-whisper's internal Silero VAD (vad_filter=True in transcribe_audio)
+        # correctly skips silence chunks and maintains accurate timestamps.
+        # Hallucination prevention is handled by:
+        #   - condition_on_previous_text=False
+        #   - no_speech_prob threshold filtering
+        #   - phrase blocklist
+        # So external VAD is no longer needed.
 
         # ── Diarization path ──────────────────────────────────────────────────
         print(f"    Checking diarization: should_diarize={diarize_module.should_diarize(audio_file.name, config)}, hf_token={'yes' if config.get('hf_token') else 'missing'}, diarize_tracks={config.get('diarize_tracks')}")
@@ -211,10 +221,10 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
             wav_path,
             language="en",
             initial_prompt=vocab_prompt if vocab_prompt else None,
-            word_timestamps=True,
             condition_on_previous_text=False,
-            no_speech_threshold=0.6,
+            no_speech_threshold=0.85,
             compression_ratio_threshold=2.4,
+            vad_filter=use_vad,
         )
 
         Path(wav_path).unlink(missing_ok=True)
