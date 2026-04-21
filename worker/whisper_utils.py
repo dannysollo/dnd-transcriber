@@ -102,6 +102,11 @@ def transcribe_audio(model, wav_path: str, **kwargs) -> dict:
     except Exception:
         duration = None
 
+    # vad_filter: faster-whisper's internal Silero VAD gives much more accurate
+    # timestamps than relying on segment boundaries alone.  Critical for correct
+    # multi-speaker interleaving — without it, timestamps can drift 5-10 seconds.
+    kwargs.setdefault("vad_filter", True)
+
     segments_gen, _info = model.transcribe(wav_path, **kwargs)
     segments = []
     dropped = 0
