@@ -208,6 +208,18 @@ def run_analysis(transcript: str, config: dict, notes: str = "") -> tuple[str, s
         "../campaign-vault/", str(CAMPAIGN_VAULT) + "/"
     )
 
+    # Inject existing vault page index so Claude knows exactly what already exists
+    # and doesn't suggest NEW PAGE for pages that are already there.
+    vault_pages = sorted(
+        p.relative_to(CAMPAIGN_VAULT)
+        for p in CAMPAIGN_VAULT.rglob("*.md")
+        if "campaign-site" not in p.parts and p.name != "README.md"
+    )
+    vault_index_block = "\n## Existing Vault Pages\n\nThe following pages already exist in the vault. " \
+        "Use their exact paths for wiki update suggestions — do NOT suggest NEW PAGE for any of these:\n\n"
+    vault_index_block += "\n".join(f"- {p}" for p in vault_pages)
+    system_prompt = system_prompt + "\n\n" + vault_index_block
+
     message = transcript
     if notes and notes.strip():
         message = f"## DM Notes for this session\n{notes.strip()}\n\n---\n\n{transcript}"
