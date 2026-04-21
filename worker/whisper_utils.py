@@ -107,6 +107,13 @@ def transcribe_audio(model, wav_path: str, **kwargs) -> dict:
     # multi-speaker interleaving — without it, timestamps can drift 5-10 seconds.
     kwargs.setdefault("vad_filter", True)
 
+    # speech_pad_ms: Silero VAD clips aggressively at speech boundaries, causing
+    # the first word(s) of a segment to be cut off.  Adding 400ms of padding before
+    # and after each detected speech region prevents this.  Default is only 200ms
+    # which is often not enough for natural speech onset.
+    if kwargs.get("vad_filter"):
+        kwargs.setdefault("vad_parameters", {"speech_pad_ms": 400})
+
     segments_gen, _info = model.transcribe(wav_path, **kwargs)
     segments = []
     dropped = 0
