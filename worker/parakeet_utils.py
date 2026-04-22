@@ -63,9 +63,9 @@ def load_parakeet_model():
             "Use a Whisper model (e.g. large-v3) for CPU/Apple Silicon."
         )
 
-    print("Loading Parakeet-TDT-0.6B (nvidia/parakeet-tdt-0.6b)...")
+    print("Loading Parakeet-TDT-0.6B (nvidia/parakeet-tdt-0.6b-v2)...")
     model = nemo_asr.models.EncDecRNNTBPEModel.from_pretrained(
-        "nvidia/parakeet-tdt-0.6b"
+        "nvidia/parakeet-tdt-0.6b-v2"
     )
     model = model.cuda()
     model.eval()
