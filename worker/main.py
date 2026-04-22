@@ -178,6 +178,17 @@ def poll_loop(config: dict, stop_event: threading.Event):
                     client.report_error(session_name, str(e))
                 except Exception as report_err:
                     print(f"[worker]   Failed to report error: {report_err}")
+                # Free any stale CUDA allocations so the next job can load the model clean
+                try:
+                    import gc, torch
+                    whisper_model = None
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
+                        print(f"[worker]   CUDA cache cleared after error.")
+                except Exception:
+                    pass
 
         heartbeat_counter += 1
         if heartbeat_counter >= 5:
