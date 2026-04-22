@@ -63,9 +63,18 @@ def load_parakeet_model():
             "Use a Whisper model (e.g. large-v3) for CPU/Apple Silicon."
         )
 
+    # Clear any stale allocations before loading
+    import gc
+    gc.collect()
+    torch.cuda.empty_cache()
+    torch.cuda.synchronize()
+
     print("Loading Parakeet-TDT-0.6B (nvidia/parakeet-tdt-0.6b-v2)...")
+    # Load to CPU first to avoid partial VRAM allocations on OOM failure,
+    # then move to CUDA in one shot.
     model = nemo_asr.models.EncDecRNNTBPEModel.from_pretrained(
-        "nvidia/parakeet-tdt-0.6b-v2"
+        "nvidia/parakeet-tdt-0.6b-v2",
+        map_location="cpu",
     )
     model = model.cuda()
     model.eval()
