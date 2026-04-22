@@ -1028,8 +1028,8 @@ def _pipeline_thread(session: str, transcribe_only: bool, wiki_only: bool,
                 log_queue.put("__EXIT__1")
                 return
             flag = session_dir / ANALYSIS_FLAG
-            flag.touch()
-            log_queue.put(f"[pipeline] queued analysis for {session} — worker will process shortly")
+            flag.write_text(json.dumps({"wiki_only": True}), encoding="utf-8")
+            log_queue.put(f"[pipeline] queued wiki-only analysis for {session} — worker will process shortly")
             log_queue.put("__EXIT__0")
         else:
             # Transcription is handled by the local worker process (worker/main.py).
@@ -3146,6 +3146,15 @@ def worker_list_analysis_jobs(slug: str, db: Session = Depends(get_db), request:
                 transcript_path = session_dir / "transcript.md"
                 notes_path = session_dir / "analysis_notes.md"
                 transcript_text = transcript_path.read_text(encoding="utf-8") if transcript_path.exists() else ""
+                # Read wiki_only flag from file if present (JSON) or default to False
+                flag_path = session_dir / ANALYSIS_FLAG
+                wiki_only = False
+                try:
+                    flag_content = flag_path.read_text(encoding="utf-8").strip()
+                    if flag_content:
+                        wiki_only = json.loads(flag_content).get("wiki_only", False)
+                except Exception:
+                    pass
                 # Apply corrections and patterns so Claude sees the cleaned-up text
                 if transcript_text and (corrections or patterns):
                     from merge import apply_corrections, apply_patterns
@@ -3157,6 +3166,7 @@ def worker_list_analysis_jobs(slug: str, db: Session = Depends(get_db), request:
                     "session_name": session_dir.name,
                     "transcript": transcript_text,
                     "notes": notes_path.read_text(encoding="utf-8") if notes_path.exists() else "",
+                    "wiki_only": wiki_only,
                 })
     return pending
 
@@ -3164,6 +3174,7 @@ class AnalysisResultBody(BaseModel):
     summary: str = ""
     wiki: str = ""
     description: str = ""
+    wiki_only: bool = False
 
 @app.post("/campaigns/{slug}/worker/sessions/{name}/analysis-result")
 def worker_push_analysis_result(
@@ -3176,12 +3187,13 @@ def worker_push_analysis_result(
     if not session_dir.exists():
         raise HTTPException(404, "Session not found")
     wrote = []
-    if body.description.strip():
-        (session_dir / "description.md").write_text(body.description.strip(), encoding="utf-8")
-        wrote.append("description")
-    if body.summary.strip():
-        (session_dir / "summary.md").write_text(body.summary.strip(), encoding="utf-8")
-        wrote.append("summary")
+    if not body.wiki_only:
+        if body.description.strip():
+            (session_dir / "description.md").write_text(body.description.strip(), encoding="utf-8")
+            wrote.append("description")
+        if body.summary.strip():
+            (session_dir / "summary.md").write_text(body.summary.strip(), encoding="utf-8")
+            wrote.append("summary")
     if body.wiki.strip():
         (session_dir / "wiki_suggestions.md").write_text(body.wiki.strip(), encoding="utf-8")
         wrote.append("wiki")

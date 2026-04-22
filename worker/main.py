@@ -193,11 +193,18 @@ def poll_loop(config: dict, stop_event: threading.Event):
 ANALYZE_SESSION_MD = Path.home() / ".openclaw" / "workspace" / "ANALYZE_SESSION.md"
 CAMPAIGN_VAULT = Path.home() / ".openclaw" / "workspace" / "campaign-vault"
 
-def run_analysis(transcript: str, config: dict, notes: str = "") -> tuple[str, str, str]:
+WIKI_ONLY_PROMPT_OVERRIDE = """
+**WIKI-ONLY RUN**: Skip sections 0 (Blurb), 1 (Session Summary), and any proper noun corrections.
+Output ONLY sections 2 (Wiki Update Suggestions), 3 (Index Update), and 4 (Proper Noun Corrections).
+Start your response directly with ## [1] for the first wiki suggestion.
+"""
+
+
+def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool = False) -> tuple[str, str, str]:
     """
     Run analysis via `claude -p` with ANALYZE_SESSION.md as the system prompt.
     Runs from /tmp so no CLAUDE.md is auto-loaded. Vault path passed explicitly.
-    Returns (summary, wiki) strings split on the first ## [1] wiki block.
+    Returns (summary, wiki, blurb) strings. When wiki_only=True, summary and blurb are empty.
     """
     if not ANALYZE_SESSION_MD.exists():
         raise RuntimeError(f"ANALYZE_SESSION.md not found at {ANALYZE_SESSION_MD}")
@@ -219,6 +226,9 @@ def run_analysis(transcript: str, config: dict, notes: str = "") -> tuple[str, s
         "Use their exact paths for wiki update suggestions — do NOT suggest NEW PAGE for any of these:\n\n"
     vault_index_block += "\n".join(f"- {p}" for p in vault_pages)
     system_prompt = system_prompt + "\n\n" + vault_index_block
+
+    if wiki_only:
+        system_prompt = system_prompt + "\n\n" + WIKI_ONLY_PROMPT_OVERRIDE
 
     message = transcript
     if notes and notes.strip():
@@ -297,13 +307,15 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
                 continue
 
             notes = job.get("notes", "")
-            print(f"\n[analysis] [JOB] {session_name}" + (" (with notes)" if notes.strip() else ""))
+            wiki_only = job.get("wiki_only", False)
+            mode_label = " (wiki only)" if wiki_only else (" (with notes)" if notes.strip() else "")
+            print(f"\n[analysis] [JOB] {session_name}{mode_label}")
             try:
-                summary, wiki, blurb = run_analysis(transcript, config, notes)
-                client.push_analysis_result(session_name, summary, wiki, blurb)
+                summary, wiki, blurb = run_analysis(transcript, config, notes, wiki_only=wiki_only)
+                client.push_analysis_result(session_name, summary, wiki, blurb, wiki_only=wiki_only)
                 parts = []
-                if blurb: parts.append("blurb")
-                if summary: parts.append("summary")
+                if blurb and not wiki_only: parts.append("blurb")
+                if summary and not wiki_only: parts.append("summary")
                 if wiki: parts.append("wiki")
                 print(f"[analysis]   [DONE] {session_name} — wrote: {', '.join(parts) or 'nothing'}")
             except Exception as e:
