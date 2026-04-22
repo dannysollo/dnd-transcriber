@@ -1,5 +1,5 @@
 """
-parakeet_utils.py — NVIDIA Parakeet-TDT-0.6B transcription helpers.
+parakeet_utils.py — NVIDIA Parakeet-TDT-1.1B transcription helpers.
 
 Parakeet-TDT uses a Token-and-Duration Transducer architecture (frame-level
 classification), giving inherently accurate timestamps with no hallucination
@@ -11,8 +11,8 @@ Requirements:
     (CUDA GPU required — no CPU/Apple Silicon fallback)
 
 Model:
-    nvidia/parakeet-tdt-0.6b (~1.2GB)
-    HuggingFace: https://huggingface.co/nvidia/parakeet-tdt-0.6b
+    nvidia/parakeet-tdt-1.1b (~4.4GB)
+    HuggingFace: https://huggingface.co/nvidia/parakeet-tdt-1.1b
 
 Context Biasing (proper noun boosting):
     Parakeet supports context biasing via NeMo's hotword mechanism. A list of
@@ -69,11 +69,11 @@ def load_parakeet_model():
     torch.cuda.empty_cache()
     torch.cuda.synchronize()
 
-    print("Loading Parakeet-TDT-0.6B (nvidia/parakeet-tdt-0.6b-v2)...")
+    print("Loading Parakeet-TDT-1.1B (nvidia/parakeet-tdt-1.1b)...")
     # Load to CPU first to avoid partial VRAM allocations on OOM failure,
     # then move to CUDA in one shot.
     model = nemo_asr.models.EncDecRNNTBPEModel.from_pretrained(
-        "nvidia/parakeet-tdt-0.6b-v2",
+        "nvidia/parakeet-tdt-1.1b",
         map_location="cpu",
     )
     model = model.cuda()
