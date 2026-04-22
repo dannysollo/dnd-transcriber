@@ -189,16 +189,24 @@ def transcribe_with_diarization(
         label = speaker_map.get(seg["speaker"], base_speaker)
         seg_wav = extract_segment_audio(wav_path, seg["start"], seg["end"])
         try:
-            result = transcribe_audio(
-                whisper_model,
-                seg_wav,
-                language="en",
-                initial_prompt=vocab_prompt if vocab_prompt else None,
-                condition_on_previous_text=False,
-                no_speech_threshold=0.85,
-                compression_ratio_threshold=2.4,
-                vad_filter=False,  # diarized segments are already trimmed to speech; no internal VAD needed
-            )
+            if getattr(whisper_model, "_model_type", None) == "parakeet":
+                from parakeet_utils import transcribe_audio_parakeet
+                result = transcribe_audio_parakeet(
+                    whisper_model,
+                    seg_wav,
+                    initial_prompt=vocab_prompt if vocab_prompt else None,
+                )
+            else:
+                result = transcribe_audio(
+                    whisper_model,
+                    seg_wav,
+                    language="en",
+                    initial_prompt=vocab_prompt if vocab_prompt else None,
+                    condition_on_previous_text=False,
+                    no_speech_threshold=0.85,
+                    compression_ratio_threshold=2.4,
+                    vad_filter=False,  # diarized segments are already trimmed to speech; no internal VAD needed
+                )
             for whisper_seg in result["segments"]:
                 text = whisper_seg["text"].strip()
                 if not text or len(text) < 3:

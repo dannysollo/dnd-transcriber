@@ -433,8 +433,8 @@ export default function CampaignSettingsPage() {
                     onChange={e => updateConfigField('whisper_model', e.target.value)}
                     style={configSelectStyle}
                   >
-                    {['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3', 'turbo', 'distil-large-v3'].map(m => (
-                      <option key={m} value={m}>{m}</option>
+                    {['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3', 'turbo', 'distil-large-v3', 'parakeet'].map(m => (
+                      <option key={m} value={m}>{m === 'parakeet' ? 'parakeet-tdt-0.6b (NVIDIA)' : m}</option>
                     ))}
                   </select>
                 </ConfigField>

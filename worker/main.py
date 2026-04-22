@@ -149,7 +149,11 @@ def poll_loop(config: dict, stop_event: threading.Event):
 
                 model_name = job_config.get("whisper_model", "turbo")
                 if whisper_model is None or getattr(whisper_model, "_model_name", None) != model_name:
-                    whisper_model = load_whisper_model(model_name)
+                    if model_name == "parakeet":
+                        from parakeet_utils import load_parakeet_model
+                        whisper_model = load_parakeet_model()
+                    else:
+                        whisper_model = load_whisper_model(model_name)
                     whisper_model._model_name = model_name
 
                 transcript = transcribe_session(session_dir, whisper_model, job_config)

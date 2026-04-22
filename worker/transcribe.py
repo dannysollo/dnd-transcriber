@@ -326,14 +326,25 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
                 except Exception:
                     continue
 
-        # ── Standard single-speaker Whisper path ─────────────────────────────
-        # Use VAD-chunk approach for accurate timestamps: run Silero VAD to get
-        # precise speech boundaries, extract each chunk, transcribe with offset.
-        # This matches what diarize.py does and gives accurate absolute timestamps.
-        # vad_filter=True inside transcribe_audio is unreliable for multi-speaker
-        # interleaving because Whisper's internal timestamp mapping can drift by
-        # several seconds when processing concatenated speech chunks.
-        if use_vad:
+        # ── Standard single-speaker transcription path ────────────────────────
+        if getattr(model, "_model_type", None) == "parakeet":
+            # Parakeet-TDT: frame-level classification, accurate timestamps,
+            # no hallucinations in silence. Use directly — no VAD chunking needed.
+            from parakeet_utils import transcribe_audio_parakeet
+            print(f"    Using Parakeet-TDT engine")
+            result = transcribe_audio_parakeet(
+                model,
+                wav_path,
+                initial_prompt=vocab_prompt if vocab_prompt else None,
+            )
+        elif use_vad:
+            # Whisper with VAD-chunk approach for accurate timestamps: run Silero
+            # VAD to get precise speech boundaries, extract each chunk, transcribe
+            # with offset. This matches what diarize.py does and gives accurate
+            # absolute timestamps.
+            # vad_filter=True inside transcribe_audio is unreliable for multi-speaker
+            # interleaving because Whisper's internal timestamp mapping can drift by
+            # several seconds when processing concatenated speech chunks.
             result = _transcribe_via_vad_chunks(
                 wav_path, model,
                 language="en",
