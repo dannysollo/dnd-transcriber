@@ -130,7 +130,13 @@ def _extract_wav_chunk(audio, sr, start_sample, end_sample, tmp_path):
 
 
 def _parse_hypothesis(hypothesis, time_offset=0.0):
-    """Extract word-level timestamps from a NeMo hypothesis, offset by time_offset seconds."""
+    """Extract word-level timestamps from a NeMo hypothesis, offset by time_offset seconds.
+
+    Uses hypothesis.text for the actual word content (preserves capitalization and
+    punctuation from the model output) and hypothesis.timestamp["word"] only for
+    timing information. The raw token words in the timestamp dict are often lowercase
+    and strip punctuation, so we zip the properly-cased text words with the timing.
+    """
     if not hypothesis or not hypothesis.text.strip():
         return []
 
@@ -141,10 +147,16 @@ def _parse_hypothesis(hypothesis, time_offset=0.0):
     if not word_timestamps:
         return []
 
+    # hypothesis.text has proper casing/punctuation; word_timestamps has timing.
+    # Zip them together so we get accurate timing with correct text.
+    text_words = hypothesis.text.split()
+    n = min(len(text_words), len(word_timestamps))
+
     words = []
-    for wt in word_timestamps:
+    for i in range(n):
+        wt = word_timestamps[i]
         words.append({
-            "word": wt.get("word", ""),
+            "word": text_words[i],  # use the properly-cased word from full text
             "start": float(wt.get("start", 0.0)) + time_offset,
             "end": float(wt.get("end", 0.0)) + time_offset,
         })
