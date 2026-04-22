@@ -163,55 +163,12 @@ def _parse_hypothesis(hypothesis, time_offset=0.0):
     return words
 
 
-def _apply_casing(text: str, hotwords: list = None) -> str:
-    """Apply basic casing to Parakeet output (which is all-lowercase by default).
-
-    Steps:
-    1. Capitalize the first character of the segment.
-    2. Capitalize the word after sentence-ending punctuation.
-    3. Capitalize any word that appears in the hotwords/vocab list (exact match,
-       case-insensitive) — handles character names, spell names, locations.
-    """
-    if not text:
-        return text
-
-    # Build a lookup of lowercase → cased form from the hotwords list
-    hotword_map = {}
-    if hotwords:
-        for hw in hotwords:
-            hw = hw.strip()
-            if hw:
-                hotword_map[hw.lower()] = hw  # preserve original casing from vocab
-
-    words = text.split()
-    result = []
-    capitalize_next = True  # first word is always capitalized
-
-    for word in words:
-        # Apply hotword casing first (overrides everything for that word)
-        bare = word.strip(".,!?;:\"'")
-        if bare.lower() in hotword_map:
-            cased = hotword_map[bare.lower()]
-            word = word.replace(bare, cased, 1)
-            result.append(word)
-        elif capitalize_next:
-            result.append(word[0].upper() + word[1:] if word else word)
-        else:
-            result.append(word)
-
-        # Next word should be capitalized if this one ends a sentence
-        capitalize_next = bool(re.search(r'[.?!]["\'\u201d\u00bb]?$', word.strip()))
-
-    return " ".join(result)
-
-
 def _flush_segment(current_words, segments, hotwords=None):
     """Flush current_words into a segment and clear the list."""
     if not current_words:
         return
     text = " ".join(w["word"] for w in current_words).strip()
     if text and len(text) >= 2:
-        text = _apply_casing(text, hotwords=hotwords)
         segments.append({
             "start": current_words[0]["start"],
             "end": current_words[-1]["end"],
@@ -220,7 +177,7 @@ def _flush_segment(current_words, segments, hotwords=None):
     current_words.clear()
 
 
-def _words_to_segments(all_words, hotwords=None):
+def _words_to_segments(all_words):
     """
     Group word-level timestamps into sentence segments.
 
@@ -229,10 +186,9 @@ def _words_to_segments(all_words, hotwords=None):
     2. Time gap between consecutive words > _SENTENCE_GAP_THRESHOLD seconds
     3. Segment length exceeding _MAX_SEGMENT_WORDS
 
-    Parakeet often produces no punctuation, so the gap-based splitting is the
-    primary mechanism. This prevents entire speakers' turns from collapsing
-    into one line and ensures short fragments ("Yeah", "Roll for it") are
-    preserved as their own lines.
+    The model outputs properly-cased text — no casing post-processing needed.
+    Gap-based splitting is the primary mechanism since Parakeet may not always
+    emit punctuation.
     """
     segments = []
     current_words = []
@@ -244,19 +200,19 @@ def _words_to_segments(all_words, hotwords=None):
         if current_words:
             gap = word_info["start"] - current_words[-1]["end"]
             if gap >= _SENTENCE_GAP_THRESHOLD:
-                _flush_segment(current_words, segments, hotwords=hotwords)
+                _flush_segment(current_words, segments)
 
         # Length break: too many words accumulated
         if len(current_words) >= _MAX_SEGMENT_WORDS:
-            _flush_segment(current_words, segments, hotwords=hotwords)
+            _flush_segment(current_words, segments)
 
         current_words.append(word_info)
 
         # Punctuation break: sentence-ending punctuation
         if re.search(r'[.?!]["\'\u201d\u00bb]?$', word.strip()):
-            _flush_segment(current_words, segments, hotwords=hotwords)
+            _flush_segment(current_words, segments)
 
-    _flush_segment(current_words, segments, hotwords=hotwords)
+    _flush_segment(current_words, segments)
     return segments
 
 
@@ -325,5 +281,5 @@ def transcribe_audio_parakeet(model, wav_path, **kwargs):
                 words = _parse_hypothesis(hyp, time_offset=time_offset)
                 all_words.extend(words)
 
-    segments = _words_to_segments(all_words, hotwords=hotwords)
+    segments = _words_to_segments(all_words)
     return {"segments": segments}
