@@ -94,68 +94,67 @@ def _apply_context_biasing(model, hotwords, hotword_weight=20.0):
 
     try:
         from omegaconf import OmegaConf
-        current_cfg = OmegaConf.structured(model.cfg.decoding)
-        current_cfg.rnnt_decoding.hotwords = hotwords
-        current_cfg.rnnt_decoding.hotword_weight = hotword_weight
-        model.change_decoding_strategy(current_cfg)
+        current_cfg = OmegaConf.to_container(model.cfg.decoding, resolve=True)
+        # TDT models use 'decoding' key; older NeMo uses 'rnnt_decoding'
+        decoding_key = "decoding" if "decoding" in current_cfg else "rnnt_decoding"
+        if decoding_key not in current_cfg:
+            raise KeyError(f"Neither 'decoding' nor 'rnnt_decoding' found in model.cfg.decoding")
+        current_cfg[decoding_key]["hotwords"] = hotwords
+        current_cfg[decoding_key]["hotword_weight"] = hotword_weight
+        cfg_structured = OmegaConf.create(current_cfg)
+        model.change_decoding_strategy(cfg_structured)
         print(f"      context biasing: {len(hotwords)} hotwords, weight={hotword_weight}")
     except Exception as e:
         print(f"      context biasing unavailable ({e}), transcribing without hotwords")
 
 
-def transcribe_audio_parakeet(model, wav_path, **kwargs):
-    """
-    Transcribe a WAV file using Parakeet-TDT and return the same dict format
-    as whisper_utils.transcribe_audio: {"segments": [{start, end, text}, ...]}
+_CHUNK_SECONDS = 120  # Transcribe 2-minute chunks to avoid CUDA OOM on long files
 
-    Supported kwargs:
-        initial_prompt (str): comma/newline-separated vocab words for context
-                              biasing. Same field as Whisper's vocab_prompt.
-        hotword_weight (float): biasing strength, default 20.0
-    """
-    import torch
 
-    initial_prompt = kwargs.get("initial_prompt", "")
-    hotword_weight = float(kwargs.get("hotword_weight", 20.0))
+def _extract_wav_chunk(audio, sr, start_sample, end_sample, tmp_path):
+    """Write a slice of audio to a temp WAV file."""
+    import soundfile as sf
+    chunk = audio[start_sample:end_sample]
+    sf.write(tmp_path, chunk, sr)
 
-    hotwords = _parse_vocab_words(initial_prompt)
-    if hotwords:
-        _apply_context_biasing(model, hotwords, hotword_weight)
-    else:
-        print("      context biasing: no vocab words configured")
 
-    with torch.no_grad():
-        hypotheses = model.transcribe([wav_path], timestamps=True)
-
-    hypothesis = hypotheses[0] if hypotheses else None
+def _parse_hypothesis(hypothesis, time_offset=0.0):
+    """Extract word-level timestamps from a NeMo hypothesis, offset by time_offset seconds."""
     if not hypothesis or not hypothesis.text.strip():
-        return {"segments": []}
+        return []
 
     word_timestamps = []
     if hasattr(hypothesis, "timestamp") and hypothesis.timestamp:
         word_timestamps = hypothesis.timestamp.get("word", [])
 
     if not word_timestamps:
-        text = hypothesis.text.strip()
-        if text and len(text) >= 3:
-            return {"segments": [{"start": 0.0, "end": 0.0, "text": text}]}
-        return {"segments": []}
+        return []
 
+    words = []
+    for wt in word_timestamps:
+        words.append({
+            "word": wt.get("word", ""),
+            "start": float(wt.get("start", 0.0)) + time_offset,
+            "end": float(wt.get("end", 0.0)) + time_offset,
+        })
+    return words
+
+
+def _words_to_segments(all_words):
+    """Group word-level timestamps into sentence segments at .?! boundaries."""
     segments = []
     current_words = []
 
-    for word_info in word_timestamps:
-        word = word_info.get("word", "")
-        start = float(word_info.get("start", 0.0))
-        end = float(word_info.get("end", 0.0))
-        current_words.append({"word": word, "start": start, "end": end})
+    for word_info in all_words:
+        word = word_info["word"]
+        current_words.append(word_info)
 
         if re.search(r'[.?!]["\'\u201d\u00bb]?$', word.strip()):
             text = "".join(w["word"] for w in current_words).strip()
             if text and len(text) >= 3:
                 segments.append({
                     "start": current_words[0]["start"],
-                    "end": end,
+                    "end": current_words[-1]["end"],
                     "text": text,
                 })
             current_words = []
@@ -169,4 +168,70 @@ def transcribe_audio_parakeet(model, wav_path, **kwargs):
                 "text": text,
             })
 
+    return segments
+
+
+def transcribe_audio_parakeet(model, wav_path, **kwargs):
+    """
+    Transcribe a WAV file using Parakeet-TDT and return the same dict format
+    as whisper_utils.transcribe_audio: {"segments": [{start, end, text}, ...]}
+
+    Audio is split into _CHUNK_SECONDS chunks to avoid CUDA OOM on long files.
+    Timestamps are offset per-chunk so the final segments have absolute times.
+
+    Supported kwargs:
+        initial_prompt (str): comma/newline-separated vocab words for context
+                              biasing. Same field as Whisper's vocab_prompt.
+        hotword_weight (float): biasing strength, default 20.0
+    """
+    import os
+    import tempfile
+    import torch
+    import soundfile as sf
+
+    initial_prompt = kwargs.get("initial_prompt", "")
+    hotword_weight = float(kwargs.get("hotword_weight", 20.0))
+
+    hotwords = _parse_vocab_words(initial_prompt)
+    if hotwords:
+        _apply_context_biasing(model, hotwords, hotword_weight)
+    else:
+        print("      context biasing: no vocab words configured")
+
+    # Load the full audio to split into chunks
+    audio, sr = sf.read(wav_path, dtype="float32")
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1)  # stereo → mono
+
+    total_samples = len(audio)
+    total_duration = total_samples / sr
+    chunk_samples = int(_CHUNK_SECONDS * sr)
+    num_chunks = max(1, int(total_samples / chunk_samples) + (1 if total_samples % chunk_samples else 0))
+
+    all_words = []
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for i in range(num_chunks):
+            start_sample = i * chunk_samples
+            end_sample = min(start_sample + chunk_samples, total_samples)
+            time_offset = start_sample / sr
+            chunk_duration = (end_sample - start_sample) / sr
+
+            chunk_path = os.path.join(tmpdir, f"chunk_{i:04d}.wav")
+            _extract_wav_chunk(audio, sr, start_sample, end_sample, chunk_path)
+
+            pct = int(100 * i / num_chunks)
+            print(f"      parakeet {pct}% ({int(time_offset)}s / {int(total_duration)}s)")
+
+            with torch.no_grad():
+                hypotheses = model.transcribe([chunk_path], timestamps=True)
+
+            if hypotheses:
+                words = _parse_hypothesis(hypotheses[0], time_offset=time_offset)
+                all_words.extend(words)
+
+            # Free GPU memory between chunks
+            torch.cuda.empty_cache()
+
+    segments = _words_to_segments(all_words)
     return {"segments": segments}
