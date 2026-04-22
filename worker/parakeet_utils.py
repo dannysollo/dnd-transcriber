@@ -211,27 +211,30 @@ def transcribe_audio_parakeet(model, wav_path, **kwargs):
     all_words = []
 
     with tempfile.TemporaryDirectory() as tmpdir:
+        # Write all chunks upfront — then transcribe in ONE call to avoid
+        # NeMo's CUDA graph state being re-initialized between calls (which
+        # causes cudaErrorIllegalAddress on the second chunk).
+        chunk_paths = []
+        time_offsets = []
         for i in range(num_chunks):
             start_sample = i * chunk_samples
             end_sample = min(start_sample + chunk_samples, total_samples)
             time_offset = start_sample / sr
-            chunk_duration = (end_sample - start_sample) / sr
-
             chunk_path = os.path.join(tmpdir, f"chunk_{i:04d}.wav")
             _extract_wav_chunk(audio, sr, start_sample, end_sample, chunk_path)
+            chunk_paths.append(chunk_path)
+            time_offsets.append(time_offset)
 
+        print(f"      parakeet: transcribing {num_chunks} chunk(s) ({int(total_duration)}s total)...")
+        with torch.no_grad():
+            hypotheses = model.transcribe(chunk_paths, timestamps=True, batch_size=1)
+
+        for i, (hyp, time_offset) in enumerate(zip(hypotheses, time_offsets)):
             pct = int(100 * i / num_chunks)
             print(f"      parakeet {pct}% ({int(time_offset)}s / {int(total_duration)}s)")
-
-            with torch.no_grad():
-                hypotheses = model.transcribe([chunk_path], timestamps=True)
-
-            if hypotheses:
-                words = _parse_hypothesis(hypotheses[0], time_offset=time_offset)
+            if hyp:
+                words = _parse_hypothesis(hyp, time_offset=time_offset)
                 all_words.extend(words)
-
-            # Free GPU memory between chunks
-            torch.cuda.empty_cache()
 
     segments = _words_to_segments(all_words)
     return {"segments": segments}
