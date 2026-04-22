@@ -103,14 +103,14 @@ def _apply_context_biasing(model, hotwords, hotword_weight=20.0):
 
     try:
         from omegaconf import OmegaConf
-        current_cfg = OmegaConf.to_container(model.cfg.decoding, resolve=True)
-        # TDT models use 'decoding' key; older NeMo uses 'rnnt_decoding'
-        decoding_key = "decoding" if "decoding" in current_cfg else "rnnt_decoding"
-        if decoding_key not in current_cfg:
-            raise KeyError(f"Neither 'decoding' nor 'rnnt_decoding' found in model.cfg.decoding")
-        current_cfg[decoding_key]["hotwords"] = hotwords
-        current_cfg[decoding_key]["hotword_weight"] = hotword_weight
-        cfg_structured = OmegaConf.create(current_cfg)
+        # model.cfg contains top-level keys like 'decoding' or 'rnnt_decoding'
+        top_cfg = OmegaConf.to_container(model.cfg, resolve=True)
+        decoding_key = "decoding" if "decoding" in top_cfg else ("rnnt_decoding" if "rnnt_decoding" in top_cfg else None)
+        if decoding_key is None:
+            raise KeyError(f"Neither 'decoding' nor 'rnnt_decoding' found in model.cfg")
+        top_cfg[decoding_key]["hotwords"] = hotwords
+        top_cfg[decoding_key]["hotword_weight"] = hotword_weight
+        cfg_structured = OmegaConf.create(top_cfg[decoding_key])
         model.change_decoding_strategy(cfg_structured)
         print(f"      context biasing: {len(hotwords)} hotwords, weight={hotword_weight}")
     except Exception as e:
@@ -159,7 +159,7 @@ def _words_to_segments(all_words):
         current_words.append(word_info)
 
         if re.search(r'[.?!]["\'\u201d\u00bb]?$', word.strip()):
-            text = "".join(w["word"] for w in current_words).strip()
+            text = " ".join(w["word"] for w in current_words).strip()
             if text and len(text) >= 3:
                 segments.append({
                     "start": current_words[0]["start"],
@@ -169,7 +169,7 @@ def _words_to_segments(all_words):
             current_words = []
 
     if current_words:
-        text = "".join(w["word"] for w in current_words).strip()
+        text = " ".join(w["word"] for w in current_words).strip()
         if text and len(text) >= 3:
             segments.append({
                 "start": current_words[0]["start"],
