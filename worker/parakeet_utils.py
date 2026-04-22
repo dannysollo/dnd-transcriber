@@ -147,16 +147,14 @@ def _parse_hypothesis(hypothesis, time_offset=0.0):
     if not word_timestamps:
         return []
 
-    # hypothesis.text has proper casing/punctuation; word_timestamps has timing.
-    # Zip them together so we get accurate timing with correct text.
-    text_words = hypothesis.text.split()
-    n = min(len(text_words), len(word_timestamps))
-
+    # wt["word"] from the timestamp dict contains properly-cased tokens — the
+    # model's SentencePiece decoder preserves casing at the token level.
+    # hypothesis.text is the normalized (lowercase) output string, so we do NOT
+    # use it for word content; timing and text both come from word_timestamps.
     words = []
-    for i in range(n):
-        wt = word_timestamps[i]
+    for wt in word_timestamps:
         words.append({
-            "word": text_words[i],  # use the properly-cased word from full text
+            "word": wt.get("word", ""),
             "start": float(wt.get("start", 0.0)) + time_offset,
             "end": float(wt.get("end", 0.0)) + time_offset,
         })
