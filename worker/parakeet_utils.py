@@ -118,6 +118,8 @@ def _apply_context_biasing(model, hotwords, hotword_weight=20.0):
 
 
 _CHUNK_SECONDS = 120  # Transcribe 2-minute chunks to avoid CUDA OOM on long files
+_SENTENCE_GAP_THRESHOLD = 1.0   # seconds of silence between words → new segment
+_MAX_SEGMENT_WORDS = 40          # force a break after this many words regardless
 
 
 def _extract_wav_chunk(audio, sr, start_sample, end_sample, tmp_path):
@@ -149,34 +151,57 @@ def _parse_hypothesis(hypothesis, time_offset=0.0):
     return words
 
 
+def _flush_segment(current_words, segments):
+    """Flush current_words into a segment and clear the list."""
+    if not current_words:
+        return
+    text = " ".join(w["word"] for w in current_words).strip()
+    if text and len(text) >= 2:
+        segments.append({
+            "start": current_words[0]["start"],
+            "end": current_words[-1]["end"],
+            "text": text,
+        })
+    current_words.clear()
+
+
 def _words_to_segments(all_words):
-    """Group word-level timestamps into sentence segments at .?! boundaries."""
+    """
+    Group word-level timestamps into sentence segments.
+
+    Breaks on:
+    1. Sentence-ending punctuation (.?!)
+    2. Time gap between consecutive words > _SENTENCE_GAP_THRESHOLD seconds
+    3. Segment length exceeding _MAX_SEGMENT_WORDS
+
+    Parakeet often produces no punctuation, so the gap-based splitting is the
+    primary mechanism. This prevents entire speakers' turns from collapsing
+    into one line and ensures short fragments ("Yeah", "Roll for it") are
+    preserved as their own lines.
+    """
     segments = []
     current_words = []
 
-    for word_info in all_words:
+    for i, word_info in enumerate(all_words):
         word = word_info["word"]
+
+        # Time-gap break: significant pause before this word
+        if current_words:
+            gap = word_info["start"] - current_words[-1]["end"]
+            if gap >= _SENTENCE_GAP_THRESHOLD:
+                _flush_segment(current_words, segments)
+
+        # Length break: too many words accumulated
+        if len(current_words) >= _MAX_SEGMENT_WORDS:
+            _flush_segment(current_words, segments)
+
         current_words.append(word_info)
 
+        # Punctuation break: sentence-ending punctuation
         if re.search(r'[.?!]["\'\u201d\u00bb]?$', word.strip()):
-            text = " ".join(w["word"] for w in current_words).strip()
-            if text and len(text) >= 3:
-                segments.append({
-                    "start": current_words[0]["start"],
-                    "end": current_words[-1]["end"],
-                    "text": text,
-                })
-            current_words = []
+            _flush_segment(current_words, segments)
 
-    if current_words:
-        text = " ".join(w["word"] for w in current_words).strip()
-        if text and len(text) >= 3:
-            segments.append({
-                "start": current_words[0]["start"],
-                "end": current_words[-1]["end"],
-                "text": text,
-            })
-
+    _flush_segment(current_words, segments)
     return segments
 
 
