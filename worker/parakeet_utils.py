@@ -151,45 +151,66 @@ def _parse_hypothesis(hypothesis, time_offset=0.0):
     if not word_timestamps:
         return []
 
-    # Properly-cased words from the model output text
     text_words = hypothesis.text.split()
 
+    # Use raw word tokens from timestamps for timing; content from whichever
+    # source has matching count. Model outputs lowercase — casing applied later.
+    raw_words = [wt.get("word", "") for wt in word_timestamps]
     if len(text_words) == len(word_timestamps):
-        # Perfect alignment — use text_words for content, timestamps for timing
-        words = []
-        for tw, wt in zip(text_words, word_timestamps):
-            words.append({
-                "word": tw,
-                "start": float(wt.get("start", 0.0)) + time_offset,
-                "end": float(wt.get("end", 0.0)) + time_offset,
-            })
-        return words
+        content_words = text_words  # may also be lowercase but prefer it
     else:
-        # Mismatch (punctuation tokens differ) — use raw timestamp tokens but
-        # apply basic capitalisation: first word of hypothesis + after .?!
-        words = []
-        capitalize_next = True
-        for wt in word_timestamps:
-            raw = wt.get("word", "")
-            if capitalize_next and raw:
-                raw = raw[0].upper() + raw[1:]
-                capitalize_next = False
-            if re.search(r'[.?!]$', raw.strip()):
-                capitalize_next = True
-            words.append({
-                "word": raw,
-                "start": float(wt.get("start", 0.0)) + time_offset,
-                "end": float(wt.get("end", 0.0)) + time_offset,
-            })
-        return words
+        content_words = raw_words
+
+    words = []
+    for content, wt in zip(content_words, word_timestamps):
+        words.append({
+            "word": content,
+            "start": float(wt.get("start", 0.0)) + time_offset,
+            "end": float(wt.get("end", 0.0)) + time_offset,
+        })
+    return words
 
 
-def _flush_segment(current_words, segments, hotwords=None):
+def _apply_casing(text, hotwords_lower=None):
+    """Apply basic casing to all-lowercase model output.
+
+    1. Capitalize first word of the segment.
+    2. Capitalize after sentence-ending punctuation (.?!).
+    3. Apply exact casing from the hotwords list for known proper nouns.
+    """
+    if not text:
+        return text
+
+    # Step 1+2: sentence-start capitalisation
+    words = text.split()
+    capitalize_next = True
+    for i, w in enumerate(words):
+        stripped = w.strip("\"'([{")
+        if capitalize_next and stripped:
+            words[i] = w[:len(w)-len(stripped)] + stripped[0].upper() + stripped[1:]
+            capitalize_next = False
+        if re.search(r'[.?!]$', w.rstrip("\"')]}") ):
+            capitalize_next = True
+
+    text = " ".join(words)
+
+    # Step 3: hotword capitalisation — replace case-insensitive matches
+    if hotwords_lower:
+        for hw, hw_lower in hotwords_lower.items():
+            # Match whole-word, case-insensitive
+            text = re.sub(r'(?<!\w)' + re.escape(hw_lower) + r'(?!\w)',
+                          hw, text, flags=re.IGNORECASE)
+
+    return text
+
+
+def _flush_segment(current_words, segments, hotwords_lower=None):
     """Flush current_words into a segment and clear the list."""
     if not current_words:
         return
     text = " ".join(w["word"] for w in current_words).strip()
     if text and len(text) >= 2:
+        text = _apply_casing(text, hotwords_lower)
         segments.append({
             "start": current_words[0]["start"],
             "end": current_words[-1]["end"],
@@ -198,7 +219,7 @@ def _flush_segment(current_words, segments, hotwords=None):
     current_words.clear()
 
 
-def _words_to_segments(all_words):
+def _words_to_segments(all_words, hotwords_lower=None):
     """
     Group word-level timestamps into sentence segments.
 
@@ -207,9 +228,7 @@ def _words_to_segments(all_words):
     2. Time gap between consecutive words > _SENTENCE_GAP_THRESHOLD seconds
     3. Segment length exceeding _MAX_SEGMENT_WORDS
 
-    The model outputs properly-cased text — no casing post-processing needed.
-    Gap-based splitting is the primary mechanism since Parakeet may not always
-    emit punctuation.
+    Casing is applied at flush time via _apply_casing.
     """
     segments = []
     current_words = []
@@ -221,19 +240,19 @@ def _words_to_segments(all_words):
         if current_words:
             gap = word_info["start"] - current_words[-1]["end"]
             if gap >= _SENTENCE_GAP_THRESHOLD:
-                _flush_segment(current_words, segments)
+                _flush_segment(current_words, segments, hotwords_lower)
 
         # Length break: too many words accumulated
         if len(current_words) >= _MAX_SEGMENT_WORDS:
-            _flush_segment(current_words, segments)
+            _flush_segment(current_words, segments, hotwords_lower)
 
         current_words.append(word_info)
 
         # Punctuation break: sentence-ending punctuation
         if re.search(r'[.?!]["\'\u201d\u00bb]?$', word.strip()):
-            _flush_segment(current_words, segments)
+            _flush_segment(current_words, segments, hotwords_lower)
 
-    _flush_segment(current_words, segments)
+    _flush_segment(current_words, segments, hotwords_lower)
     return segments
 
 
@@ -263,6 +282,9 @@ def transcribe_audio_parakeet(model, wav_path, **kwargs):
         _apply_context_biasing(model, hotwords, hotword_weight)
     else:
         print("      context biasing: no vocab words configured")
+
+    # Build a lookup dict for casing: lowercase → original-case hotword
+    hotwords_lower = {hw: hw.lower() for hw in hotwords} if hotwords else None
 
     # Load the full audio to split into chunks
     audio, sr = sf.read(wav_path, dtype="float32")
@@ -302,5 +324,5 @@ def transcribe_audio_parakeet(model, wav_path, **kwargs):
                 words = _parse_hypothesis(hyp, time_offset=time_offset)
                 all_words.extend(words)
 
-    segments = _words_to_segments(all_words)
+    segments = _words_to_segments(all_words, hotwords_lower=hotwords_lower)
     return {"segments": segments}
