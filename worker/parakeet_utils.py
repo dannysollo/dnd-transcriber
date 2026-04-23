@@ -132,10 +132,14 @@ def _extract_wav_chunk(audio, sr, start_sample, end_sample, tmp_path):
 def _parse_hypothesis(hypothesis, time_offset=0.0):
     """Extract word-level timestamps from a NeMo hypothesis, offset by time_offset seconds.
 
-    Uses hypothesis.text for the actual word content (preserves capitalization and
-    punctuation from the model output) and hypothesis.timestamp["word"] only for
-    timing information. The raw token words in the timestamp dict are often lowercase
-    and strip punctuation, so we zip the properly-cased text words with the timing.
+    Parakeet produces properly-cased text in hypothesis.text (e.g. "Hello World.")
+    but the per-word entries in hypothesis.timestamp["word"] are raw SentencePiece
+    tokens — lowercase and stripped of punctuation (e.g. "hello", "world").
+
+    Strategy: use hypothesis.text.split() for word content and align with
+    hypothesis.timestamp["word"] for timing. If counts match exactly, zip them.
+    If they differ (can happen with punctuation tokens), fall back to raw tokens
+    with simple sentence-start capitalisation.
     """
     if not hypothesis or not hypothesis.text.strip():
         return []
@@ -147,18 +151,37 @@ def _parse_hypothesis(hypothesis, time_offset=0.0):
     if not word_timestamps:
         return []
 
-    # wt["word"] from the timestamp dict contains properly-cased tokens — the
-    # model's SentencePiece decoder preserves casing at the token level.
-    # hypothesis.text is the normalized (lowercase) output string, so we do NOT
-    # use it for word content; timing and text both come from word_timestamps.
-    words = []
-    for wt in word_timestamps:
-        words.append({
-            "word": wt.get("word", ""),
-            "start": float(wt.get("start", 0.0)) + time_offset,
-            "end": float(wt.get("end", 0.0)) + time_offset,
-        })
-    return words
+    # Properly-cased words from the model output text
+    text_words = hypothesis.text.split()
+
+    if len(text_words) == len(word_timestamps):
+        # Perfect alignment — use text_words for content, timestamps for timing
+        words = []
+        for tw, wt in zip(text_words, word_timestamps):
+            words.append({
+                "word": tw,
+                "start": float(wt.get("start", 0.0)) + time_offset,
+                "end": float(wt.get("end", 0.0)) + time_offset,
+            })
+        return words
+    else:
+        # Mismatch (punctuation tokens differ) — use raw timestamp tokens but
+        # apply basic capitalisation: first word of hypothesis + after .?!
+        words = []
+        capitalize_next = True
+        for wt in word_timestamps:
+            raw = wt.get("word", "")
+            if capitalize_next and raw:
+                raw = raw[0].upper() + raw[1:]
+                capitalize_next = False
+            if re.search(r'[.?!]$', raw.strip()):
+                capitalize_next = True
+            words.append({
+                "word": raw,
+                "start": float(wt.get("start", 0.0)) + time_offset,
+                "end": float(wt.get("end", 0.0)) + time_offset,
+            })
+        return words
 
 
 def _flush_segment(current_words, segments, hotwords=None):
