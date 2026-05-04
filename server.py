@@ -3206,18 +3206,16 @@ def worker_push_analysis_result(
 
 
 @app.get("/campaigns/{slug}/sessions/{name}/analysis-pending")
-def get_analysis_pending(slug: str, name: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def get_analysis_pending(slug: str, name: str, _member=Depends(require_campaign_member("spectator"))):
     """Check whether an analysis job is pending for this session."""
-    campaign = get_campaign_for_user(db, slug, user)
     session_dir = get_sessions_dir(slug) / name
     flag = session_dir / ANALYSIS_FLAG
     return {"pending": flag.exists()}
 
 
 @app.delete("/campaigns/{slug}/sessions/{name}/analysis-pending")
-def cancel_analysis_pending(slug: str, name: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def cancel_analysis_pending(slug: str, name: str, _member=Depends(require_campaign_member("spectator"))):
     """Cancel a pending analysis job by removing the flag file."""
-    campaign = get_campaign_for_user(db, slug, user)
     session_dir = get_sessions_dir(slug) / name
     flag = session_dir / ANALYSIS_FLAG
     if flag.exists():
