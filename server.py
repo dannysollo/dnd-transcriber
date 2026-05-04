@@ -3205,6 +3205,28 @@ def worker_push_analysis_result(
     return {"ok": True, "wrote": wrote}
 
 
+@app.get("/campaigns/{slug}/sessions/{name}/analysis-pending")
+def get_analysis_pending(slug: str, name: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Check whether an analysis job is pending for this session."""
+    campaign = get_campaign_for_user(db, slug, user)
+    session_dir = get_sessions_dir(slug) / name
+    flag = session_dir / ANALYSIS_FLAG
+    return {"pending": flag.exists()}
+
+
+@app.delete("/campaigns/{slug}/sessions/{name}/analysis-pending")
+def cancel_analysis_pending(slug: str, name: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Cancel a pending analysis job by removing the flag file."""
+    campaign = get_campaign_for_user(db, slug, user)
+    session_dir = get_sessions_dir(slug) / name
+    flag = session_dir / ANALYSIS_FLAG
+    if flag.exists():
+        flag.unlink()
+        log_queue.put(f"[analysis] {name}: cancelled by user")
+        return {"ok": True, "cancelled": True}
+    return {"ok": True, "cancelled": False}
+
+
 # ─── Static frontend (SPA catch-all) ─────────────────────────────────────────
 # Serves built React app. Any path not matched by API routes returns index.html
 # so that client-side routing (e.g. /sessions/foo, /campaigns/bar) works on reload.
