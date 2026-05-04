@@ -1019,7 +1019,7 @@ def _pipeline_thread(session: str, transcribe_only: bool, wiki_only: bool,
     pipeline_state["log"] = []
 
     try:
-        if wiki_only:
+        if wiki_only or not transcribe_only:
             # Write the analysis_pending flag so the worker picks it up
             sessions_dir = get_sessions_dir(campaign_slug)
             session_dir = sessions_dir / session
@@ -1028,8 +1028,9 @@ def _pipeline_thread(session: str, transcribe_only: bool, wiki_only: bool,
                 log_queue.put("__EXIT__1")
                 return
             flag = session_dir / ANALYSIS_FLAG
-            flag.write_text(json.dumps({"wiki_only": True}), encoding="utf-8")
-            log_queue.put(f"[pipeline] queued wiki-only analysis for {session} — worker will process shortly")
+            flag.write_text(json.dumps({"wiki_only": wiki_only}), encoding="utf-8")
+            label = "wiki-only analysis" if wiki_only else "full analysis (summary + wiki)"
+            log_queue.put(f"[pipeline] queued {label} for {session} — worker will process shortly")
             log_queue.put("__EXIT__0")
         else:
             # Transcription is handled by the local worker process (worker/main.py).
