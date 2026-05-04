@@ -244,7 +244,7 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
         stdout=subprocess.PIPE,
         stderr=None,  # let stderr flow to worker's console so errors are visible
         text=True,
-        timeout=600,
+        timeout=1200,
         cwd="/tmp",
     )
 
