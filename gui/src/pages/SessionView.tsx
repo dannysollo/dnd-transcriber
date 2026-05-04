@@ -187,6 +187,7 @@ export default function SessionView() {
   const [generateDone, setGenerateDone] = useState(false)
   const [analysisNotes, setAnalysisNotes] = useState<string>('')
   const [notesSaving, setNotesSaving] = useState(false)
+  const [analysisPending, setAnalysisPending] = useState(false)
   const [importingTranscript, setImportingTranscript] = useState(false)
   const [audioDuration, setAudioDuration] = useState(0)
   const [audioPlaying, setAudioPlaying] = useState(false)
@@ -241,12 +242,13 @@ export default function SessionView() {
 
   const load = async () => {
     setLoading(true)
-    const [t, s, w, n, d] = await Promise.allSettled([
+    const [t, s, w, n, d, p] = await Promise.allSettled([
       fetch(apiUrl(`/sessions/${name}/transcript`)).then(r => r.ok ? r.json() : null),
       fetch(apiUrl(`/sessions/${name}/summary`)).then(r => r.ok ? r.json() : null),
       fetch(apiUrl(`/sessions/${name}/wiki`)).then(r => r.ok ? r.json() : null),
       fetch(apiUrl(`/sessions/${name}/analysis-notes`)).then(r => r.ok ? r.json() : null),
       fetch(apiUrl(`/sessions/${name}/description`)).then(r => r.ok ? r.json() : null),
+      fetch(apiUrl(`/sessions/${name}/analysis-pending`)).then(r => r.ok ? r.json() : null),
     ])
     setTranscript(t.status === 'fulfilled' && t.value ? t.value.content : null)
     setSummary(s.status === 'fulfilled' && s.value ? s.value.content : null)
@@ -255,6 +257,7 @@ export default function SessionView() {
     const desc = d.status === 'fulfilled' && d.value ? d.value.content : null
     setDescription(desc)
     setDescriptionDraft(desc ?? '')
+    setAnalysisPending(p.status === 'fulfilled' && p.value ? p.value.pending : false)
     setLoading(false)
   }
 
@@ -468,20 +471,23 @@ export default function SessionView() {
             setGenerateDone(true)
             if (code === 0) {
               toast('Queued — worker is analyzing transcript…', 'success')
-              // Poll until wiki_suggestions.md appears (worker runs async after pipeline)
+              setAnalysisPending(true)
+              // Poll until analysis_pending flag clears (worker runs async after pipeline)
+              // Allow up to 20 min (240 tries × 5s) for long sessions
               let attempts = 0
               const poll = setInterval(async () => {
                 attempts++
-                const r = await fetch(apiUrl(`/sessions/${name}/wiki-suggestions-parsed`))
-                if (r.ok) {
-                  const data = await r.json()
-                  if (data && data.length > 0) {
+                const pr = await fetch(apiUrl(`/sessions/${name}/analysis-pending`))
+                if (pr.ok) {
+                  const pd = await pr.json()
+                  if (!pd.pending) {
                     clearInterval(poll)
+                    setAnalysisPending(false)
                     toast('Summary & wiki ready!', 'success')
                     load()
                   }
                 }
-                if (attempts >= 40) clearInterval(poll) // give up after ~3 min
+                if (attempts >= 240) { clearInterval(poll); setAnalysisPending(false) } // give up after ~20 min
               }, 5000)
             } else {
               toast('Generation failed — check logs', 'error')
@@ -499,6 +505,16 @@ export default function SessionView() {
     } catch {
       setGenerating(false)
       toast('Failed to start generation', 'error')
+    }
+  }
+
+  const cancelAnalysis = async () => {
+    try {
+      await fetch(apiUrl(`/sessions/${name}/analysis-pending`), { method: 'DELETE' })
+      setAnalysisPending(false)
+      toast('Analysis job cancelled', 'info')
+    } catch {
+      toast('Failed to cancel analysis', 'error')
     }
   }
 
@@ -1231,6 +1247,8 @@ export default function SessionView() {
               onNotesChange={setAnalysisNotes}
               onNotesBlur={saveAnalysisNotes}
               notesSaving={notesSaving}
+              analysisPending={analysisPending}
+              onCancelAnalysis={cancelAnalysis}
             />
             <MarkdownEditView
               content={summary}
@@ -1254,6 +1272,8 @@ export default function SessionView() {
             onNotesChange={setAnalysisNotes}
             onNotesBlur={saveAnalysisNotes}
             notesSaving={notesSaving}
+            analysisPending={analysisPending}
+            onCancelAnalysis={cancelAnalysis}
           />
         ) : (
           <ChangesView
@@ -2622,7 +2642,7 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
 
 // ─── Wiki tab ─────────────────────────────────────────────────────────────────
 
-function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generating, generateLog, generateDone, onGenerate, notes, onNotesChange, onNotesBlur, notesSaving }: {
+function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generating, generateLog, generateDone, onGenerate, notes, onNotesChange, onNotesBlur, notesSaving, analysisPending, onCancelAnalysis }: {
   sessionName: string
   wikiMarkdown: string | null
   onRemerge?: () => void
@@ -2635,6 +2655,8 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
   onNotesChange: (v: string) => void
   onNotesBlur: (v: string) => void
   notesSaving: boolean
+  analysisPending?: boolean
+  onCancelAnalysis?: () => void
 }) {
   const apiUrl = useApiUrl()
   const { authEnabled } = useAuth()
@@ -2823,6 +2845,8 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           onNotesChange={onNotesChange}
           onNotesBlur={onNotesBlur}
           notesSaving={notesSaving}
+          analysisPending={analysisPending}
+          onCancelAnalysis={onCancelAnalysis}
         />
         {wikiEditMode ? (
           <textarea
@@ -3231,6 +3255,8 @@ function GenerateWikiPanel({
   onNotesChange,
   onNotesBlur,
   notesSaving = false,
+  analysisPending = false,
+  onCancelAnalysis,
 }: {
   generating: boolean
   generateLog: string[]
@@ -3241,6 +3267,8 @@ function GenerateWikiPanel({
   onNotesChange?: (v: string) => void
   onNotesBlur?: (v: string) => void
   notesSaving?: boolean
+  analysisPending?: boolean
+  onCancelAnalysis?: () => void
 }) {
   return (
     <div style={{
@@ -3267,18 +3295,51 @@ function GenerateWikiPanel({
         {compact && (
           <span style={{ fontSize: '12px', color: '#64748b', flex: 1 }}>Re-analyze transcript (worker runs Claude locally)</span>
         )}
+        {analysisPending && !generating && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <span style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              color: '#f59e0b',
+              background: 'rgba(245,158,11,0.12)',
+              border: '1px solid rgba(245,158,11,0.3)',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              animation: 'pulse 2s infinite',
+            }}>
+              ⏳ Worker analyzing…
+            </span>
+            <button
+              onClick={onCancelAnalysis}
+              title="Cancel analysis job"
+              style={{
+                background: 'rgba(239,68,68,0.12)',
+                border: '1px solid rgba(239,68,68,0.3)',
+                borderRadius: '6px',
+                color: '#f87171',
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              ✕ Cancel
+            </button>
+          </div>
+        )}
         <button
           onClick={onGenerate}
-          disabled={generating}
+          disabled={generating || analysisPending}
           style={{
-            background: generating ? 'rgba(100,116,139,0.15)' : 'rgba(124,108,252,0.15)',
-            border: `1px solid ${generating ? 'rgba(100,116,139,0.3)' : 'rgba(124,108,252,0.3)'}`,
+            background: (generating || analysisPending) ? 'rgba(100,116,139,0.15)' : 'rgba(124,108,252,0.15)',
+            border: `1px solid ${(generating || analysisPending) ? 'rgba(100,116,139,0.3)' : 'rgba(124,108,252,0.3)'}`,
             borderRadius: '8px',
-            color: generating ? '#64748b' : 'var(--accent-text)',
+            color: (generating || analysisPending) ? '#64748b' : 'var(--accent-text)',
             padding: '7px 16px',
             fontSize: '12px',
             fontWeight: 700,
-            cursor: generating ? 'not-allowed' : 'pointer',
+            cursor: (generating || analysisPending) ? 'not-allowed' : 'pointer',
             whiteSpace: 'nowrap',
             flexShrink: 0,
           }}
