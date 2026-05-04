@@ -340,6 +340,29 @@ export default function SessionView() {
     loadPlayers()
   }, [name, apiUrl])
 
+  // Start polling whenever analysisPending becomes true (catches both page-load detection and UI-triggered)
+  useEffect(() => {
+    if (!analysisPending) return
+    let attempts = 0
+    const poll = setInterval(async () => {
+      attempts++
+      try {
+        const pr = await fetch(apiUrl(`/sessions/${name}/analysis-pending`))
+        if (pr.ok) {
+          const pd = await pr.json()
+          if (!pd.pending) {
+            clearInterval(poll)
+            setAnalysisPending(false)
+            toast('Summary & wiki ready!', 'success')
+            load()
+          }
+        }
+      } catch (_) { /* ignore transient errors */ }
+      if (attempts >= 240) { clearInterval(poll); setAnalysisPending(false) }
+    }, 5000)
+    return () => clearInterval(poll)
+  }, [analysisPending, name, apiUrl])
+
   useEffect(() => {
     if (selectedAudio === '_merged') setMixingInProgress(true)
     else setMixingInProgress(false)
@@ -471,24 +494,7 @@ export default function SessionView() {
             setGenerateDone(true)
             if (code === 0) {
               toast('Queued — worker is analyzing transcript…', 'success')
-              setAnalysisPending(true)
-              // Poll until analysis_pending flag clears (worker runs async after pipeline)
-              // Allow up to 20 min (240 tries × 5s) for long sessions
-              let attempts = 0
-              const poll = setInterval(async () => {
-                attempts++
-                const pr = await fetch(apiUrl(`/sessions/${name}/analysis-pending`))
-                if (pr.ok) {
-                  const pd = await pr.json()
-                  if (!pd.pending) {
-                    clearInterval(poll)
-                    setAnalysisPending(false)
-                    toast('Summary & wiki ready!', 'success')
-                    load()
-                  }
-                }
-                if (attempts >= 240) { clearInterval(poll); setAnalysisPending(false) } // give up after ~20 min
-              }, 5000)
+              setAnalysisPending(true) // useEffect will start polling automatically
             } else {
               toast('Generation failed — check logs', 'error')
             }
@@ -624,6 +630,41 @@ export default function SessionView() {
           }}>
             {uploadingAudio ? 'Uploading...' : 'Drop audio files or ZIP to import'}
           </div>
+        </div>
+      )}
+
+      {/* Analysis pending banner — shown across all tabs */}
+      {analysisPending && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 28px',
+          background: 'rgba(245,158,11,0.10)',
+          borderBottom: '1px solid rgba(245,158,11,0.3)',
+          flexShrink: 0,
+        }}>
+          <span style={{ fontSize: '13px', fontWeight: 600, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ animation: 'pulse 2s infinite' }}>⏳</span>
+            Worker is analyzing this session — summary and wiki will appear when done.
+          </span>
+          <button
+            onClick={cancelAnalysis}
+            style={{
+              background: 'rgba(239,68,68,0.12)',
+              border: '1px solid rgba(239,68,68,0.3)',
+              borderRadius: '6px',
+              color: '#f87171',
+              padding: '4px 12px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            ✕ Cancel
+          </button>
         </div>
       )}
 
