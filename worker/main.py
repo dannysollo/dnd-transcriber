@@ -243,14 +243,18 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
          "--output-format", "text"],
         input=message,
         stdout=subprocess.PIPE,
-        stderr=None,  # let stderr flow to worker's console so errors are visible
+        stderr=subprocess.PIPE,  # capture so we can include in error messages
         text=True,
         timeout=1200,
         cwd="/tmp",
     )
 
+    if result.stderr:
+        print(f"[analysis] claude stderr:\n{result.stderr.strip()}")
+
     if result.returncode != 0:
-        raise RuntimeError(f"claude -p failed (code {result.returncode})")
+        stderr_snippet = (result.stderr or "").strip()[-500:] if result.stderr else ""
+        raise RuntimeError(f"claude -p failed (code {result.returncode})" + (f": {stderr_snippet}" if stderr_snippet else ""))
 
     full_text = result.stdout.strip()
     if not full_text:
