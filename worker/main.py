@@ -25,6 +25,7 @@ import traceback
 import zipfile
 from pathlib import Path
 
+WORKER_VERSION = "1.0.0"
 
 # ─── Log ring buffer & stdout tee ────────────────────────────────────────────
 
@@ -534,7 +535,7 @@ def main():
         os.environ.setdefault("HF_TOKEN", config["hf_token"])
 
     print("=" * 60)
-    print("DnD Transcriber Worker")
+    print(f"DnD Transcriber Worker  v{WORKER_VERSION}")
     print(f"  Server:   {config['server_url']}")
     print(f"  Campaign: {config['campaign_slug']}")
     print(f"  Audio:    {config['audio_dir']}")

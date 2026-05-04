@@ -16,6 +16,8 @@ import SettingsPage from './pages/SettingsPage'
 import { useAuth, avatarUrl } from './AuthContext'
 import { useCampaign } from './CampaignContext'
 
+const APP_VERSION = "1.0.0"
+
 // SVG icon components
 const ScrollIcon = () => (
   <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -171,7 +173,10 @@ export default function App() {
       }}>
         {/* Logo */}
         <div className="sidebar-logo" style={{ padding: '20px 16px 16px', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-heading)' }}>DnD Transcriber</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-heading)' }}>DnD Transcriber</div>
+            <div style={{ fontSize: '10px', color: 'color-mix(in srgb, var(--text-muted) 50%, transparent)', fontFamily: 'monospace' }}>v{APP_VERSION}</div>
+          </div>
           {!authEnabled && (
             <div style={{
               marginTop: '6px', fontSize: '10px', fontWeight: 600,
