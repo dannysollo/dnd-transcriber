@@ -473,7 +473,7 @@ export default function SessionView() {
       const r = await fetch(apiUrl('/pipeline/run'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session: name, wiki_only: true }),
+        body: JSON.stringify({ session: name, wiki_only: false }),
       })
       if (!r.ok) {
         const err = await r.json().catch(() => ({}))
