@@ -200,14 +200,19 @@ Start your response directly with ## [1] for the first wiki suggestion.
 """
 
 
+ANALYZE_RUNNER = Path(__file__).parent / "_analyze_runner.py"
+
+
 def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool = False) -> tuple[str, str, str]:
     """
-    Run analysis via `claude -p` with ANALYZE_SESSION.md as the system prompt.
-    Runs from /tmp so no CLAUDE.md is auto-loaded. Vault path passed explicitly.
+    Run analysis via _analyze_runner.py (direct Anthropic API call, no Claude Code overhead).
+    Falls back to openclaw gateway if ANTHROPIC_API_KEY is not set.
     Returns (summary, wiki, blurb) strings. When wiki_only=True, summary and blurb are empty.
     """
     if not ANALYZE_SESSION_MD.exists():
         raise RuntimeError(f"ANALYZE_SESSION.md not found at {ANALYZE_SESSION_MD}")
+    if not ANALYZE_RUNNER.exists():
+        raise RuntimeError(f"_analyze_runner.py not found at {ANALYZE_RUNNER}")
 
     system_prompt = ANALYZE_SESSION_MD.read_text(encoding="utf-8")
     # Patch the vault path reference so the agent can find it by absolute path
@@ -234,26 +239,25 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
     if notes and notes.strip():
         message = f"## DM Notes for this session\n{notes.strip()}\n\n---\n\n{transcript}"
 
+    # Pass system prompt via env var; inherit ANTHROPIC_API_KEY from environment
+    env = {**os.environ, "OPENCLAW_SYSTEM_PROMPT": system_prompt}
+
     result = subprocess.run(
-        ["claude", "-p",
-         "--system-prompt", system_prompt,
-         "--no-session-persistence",
-         "--allowedTools", "Read",
-         "--output-format", "text"],
+        [sys.executable, str(ANALYZE_RUNNER)],
         input=message,
         stdout=subprocess.PIPE,
         stderr=None,  # let stderr flow to worker's console so errors are visible
         text=True,
-        timeout=600,
-        cwd="/tmp",
+        timeout=1200,  # 20 min — direct API call is faster but transcripts can be large
+        env=env,
     )
 
     if result.returncode != 0:
-        raise RuntimeError(f"claude -p failed (code {result.returncode})")
+        raise RuntimeError(f"_analyze_runner.py failed (code {result.returncode})")
 
     full_text = result.stdout.strip()
     if not full_text:
-        raise RuntimeError("claude -p returned empty output")
+        raise RuntimeError("_analyze_runner.py returned empty output")
 
     # Strip any conversational preamble before the first ## heading
     first_heading = re.search(r'^##', full_text, re.MULTILINE)
