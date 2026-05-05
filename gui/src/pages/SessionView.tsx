@@ -465,7 +465,7 @@ export default function SessionView() {
     }
   }
 
-  const generateAnalysis = async () => {
+  const generateAnalysis = async (wikiOnly = false) => {
     setGenerating(true)
     setGenerateLog([])
     setGenerateDone(false)
@@ -473,7 +473,7 @@ export default function SessionView() {
       const r = await fetch(apiUrl('/pipeline/run'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session: name, wiki_only: false }),
+        body: JSON.stringify({ session: name, wiki_only: wikiOnly }),
       })
       if (!r.ok) {
         const err = await r.json().catch(() => ({}))
@@ -1308,7 +1308,7 @@ export default function SessionView() {
             generating={generating}
             generateLog={generateLog}
             generateDone={generateDone}
-            onGenerate={generateAnalysis}
+            onGenerate={() => generateAnalysis(true)}
             notes={analysisNotes}
             onNotesChange={setAnalysisNotes}
             onNotesBlur={saveAnalysisNotes}
