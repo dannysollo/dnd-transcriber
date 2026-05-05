@@ -140,10 +140,37 @@ def create_new_page(vault_path: Path, title: str, description: str, bullets: lis
     return page_path
 
 
+def find_existing_page(vault_path: Path, entity_name: str) -> Path | None:
+    """Search the vault for an existing page matching entity_name (case-insensitive stem match)."""
+    entity_lower = entity_name.lower()
+    for md in vault_path.rglob("*.md"):
+        if "campaign-site" in md.parts:
+            continue
+        if md.stem.lower() == entity_lower:
+            return md
+    return None
+
+
 def apply_suggestion(vault_path: Path, suggestion: dict) -> bool:
     """Apply a single suggestion to the vault. Returns True if successful."""
     if suggestion["new_page"]:
         name = suggestion["title"].replace("NEW PAGE:", "").strip()
+
+        # Guard: check if a page for this entity already exists before creating a new one
+        existing = find_existing_page(vault_path, name)
+        if existing:
+            print(f"  ⚠ '{name}' already exists at {existing.relative_to(vault_path)} — inserting bullets there instead of creating duplicate")
+            content = existing.read_text(encoding="utf-8")
+            section = suggestion.get("section", "Notable Actions")
+            new_content, changed = insert_bullets(content, section, suggestion["bullets"])
+            if changed:
+                existing.write_text(new_content, encoding="utf-8")
+                print(f"  ✓ {existing.name} — added {len(suggestion['bullets'])} bullet(s) to '{section}'")
+                return True
+            else:
+                print(f"  ⚠ No changes made (duplicate bullets?)")
+                return False
+
         path = create_new_page(
             vault_path, name,
             suggestion.get("description", ""),

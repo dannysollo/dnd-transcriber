@@ -223,9 +223,17 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
         for p in CAMPAIGN_VAULT.rglob("*.md")
         if "campaign-site" not in p.parts and p.name != "README.md"
     )
-    vault_index_block = "\n## Existing Vault Pages\n\nThe following pages already exist in the vault. " \
-        "Use their exact paths for wiki update suggestions — do NOT suggest NEW PAGE for any of these:\n\n"
+    vault_index_block = (
+        "\n## Existing Vault Pages\n\n"
+        "**CRITICAL: The following pages already exist in the vault. "
+        "You MUST NOT suggest `NEW PAGE` for any entity whose name matches a page below. "
+        "Use its exact path for a regular wiki update suggestion instead.**\n\n"
+    )
     vault_index_block += "\n".join(f"- {p}" for p in vault_pages)
+    vault_index_block += (
+        "\n\n**If an entity you want to update appears in the list above, "
+        "use `Page: <path>` (not `NEW PAGE:`) and insert bullets into the appropriate section.**"
+    )
     system_prompt = system_prompt + "\n\n" + vault_index_block
 
     if wiki_only:
