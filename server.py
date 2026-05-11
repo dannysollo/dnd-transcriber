@@ -2601,14 +2601,19 @@ def campaign_pipeline_run(
     body: PipelineRunBody,
     _member=Depends(require_campaign_member("dm")),
 ):
+    print(f"[pipeline] /run called: slug={slug!r} session={body.session!r} wiki_only={body.wiki_only} transcribe_only={body.transcribe_only} running={pipeline_state['running']}")
     if pipeline_state["running"]:
         raise HTTPException(409, "Pipeline already running")
-    t = threading.Thread(
-        target=_pipeline_thread,
-        args=(body.session, body.transcribe_only, body.wiki_only, slug),
-        daemon=True,
-    )
-    t.start()
+    try:
+        t = threading.Thread(
+            target=_pipeline_thread,
+            args=(body.session, body.transcribe_only, body.wiki_only, slug),
+            daemon=True,
+        )
+        t.start()
+    except Exception as e:
+        print(f"[pipeline] ERROR starting thread: {e}")
+        raise HTTPException(500, f"Failed to start pipeline thread: {e}")
     return {"ok": True, "session": body.session}
 
 

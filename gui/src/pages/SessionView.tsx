@@ -476,8 +476,11 @@ export default function SessionView() {
         body: JSON.stringify({ session: name, wiki_only: wikiOnly }),
       })
       if (!r.ok) {
-        const err = await r.json().catch(() => ({}))
-        toast(err.detail || 'Failed to start generation', 'error')
+        const body = await r.text().catch(() => '')
+        let detail = `HTTP ${r.status}`
+        try { const j = JSON.parse(body); detail = j.detail ? String(j.detail) : detail } catch {}
+        toast(`Failed to start generation: ${detail}`, 'error')
+        console.error('pipeline/run failed', r.status, body)
         setGenerating(false)
         return
       }
