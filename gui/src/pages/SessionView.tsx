@@ -1285,7 +1285,7 @@ export default function SessionView() {
               generating={generating}
               generateLog={generateLog}
               generateDone={generateDone}
-              onGenerate={generateAnalysis}
+              onGenerate={() => generateAnalysis()}
               compact={!!summary}
               notes={analysisNotes}
               onNotesChange={setAnalysisNotes}
