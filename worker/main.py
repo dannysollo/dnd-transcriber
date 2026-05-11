@@ -532,6 +532,11 @@ def main():
         default=str(Path(__file__).parent / "worker.yaml"),
         help="Path to worker.yaml",
     )
+    parser.add_argument(
+        "--push-audio",
+        metavar="SESSION_NAME",
+        help="Re-push audio for a session without re-transcribing. Merges raw files and uploads.",
+    )
     args = parser.parse_args()
 
     # ── Set up log ring buffer + tee stdout ──────────────────────────────────
@@ -541,6 +546,32 @@ def main():
     sys.stderr = TeeStream(sys.__stderr__, log_ring)
 
     config = load_config(args.config)
+
+    # ── One-shot audio push mode ─────────────────────────────────────────────
+    if args.push_audio:
+        session_name = args.push_audio
+        session_dir = Path(config["audio_dir"]) / session_name
+        print(f"[worker] --push-audio: {session_name}")
+        if not session_dir.exists():
+            print(f"[worker] [ERROR] Session directory not found: {session_dir}")
+            sys.exit(1)
+        audio_files = find_audio_files(session_dir)
+        if not audio_files:
+            print(f"[worker] [ERROR] No audio files found in {session_dir}")
+            sys.exit(1)
+        print(f"[worker] {len(audio_files)} audio file(s) found.")
+        client = WorkerClient(config)
+        with tempfile.NamedTemporaryFile(suffix="_merged.mp3", delete=False) as tmp:
+            merged_path = tmp.name
+        try:
+            print("[worker] Merging audio...")
+            merge_audio_files(audio_files, merged_path)
+            print("[worker] Pushing audio...")
+            client.push_audio(session_name, merged_path)
+            print(f"[worker] [DONE] Audio pushed for {session_name}")
+        finally:
+            Path(merged_path).unlink(missing_ok=True)
+        return
 
     # Set HF_TOKEN from config so faster-whisper can download models
     if config.get("hf_token"):
