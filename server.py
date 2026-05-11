@@ -2946,8 +2946,9 @@ async def worker_push_audio(
     session_dir.mkdir(parents=True, exist_ok=True)
     # Always store as merged.mp3 regardless of uploaded filename
     dest = session_dir / "merged.mp3"
-    content = await file.read()
-    dest.write_bytes(content)
+    # Stream to disk in chunks — avoids loading the whole file into RAM (OOM on 512MB Fly machine)
+    with open(dest, "wb") as out:
+        shutil.copyfileobj(file.file, out)
     return {"ok": True}
 
 
