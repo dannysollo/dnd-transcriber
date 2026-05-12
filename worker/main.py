@@ -227,12 +227,13 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
         "\n## Existing Vault Pages\n\n"
         "**CRITICAL: The following pages already exist in the vault. "
         "You MUST NOT suggest `NEW PAGE` for any entity whose name matches a page below. "
-        "Use its exact path for a regular wiki update suggestion instead.**\n\n"
+        "The entity name is shown in bold before the arrow — if a character, location, or item "
+        "you want to write about appears here, use `Page: <path>` for a regular update instead.**\n\n"
     )
-    vault_index_block += "\n".join(f"- {p}" for p in vault_pages)
+    vault_index_block += "\n".join(f"- **{p.stem}** → {p}" for p in vault_pages)
     vault_index_block += (
-        "\n\n**If an entity you want to update appears in the list above, "
-        "use `Page: <path>` (not `NEW PAGE:`) and insert bullets into the appropriate section.**"
+        "\n\n**Match by the bold name (e.g. **Pei**, **Aja**, **Kali**). "
+        "If the name appears in the list, it already has a page — do NOT use NEW PAGE for it.**"
     )
     system_prompt = system_prompt + "\n\n" + vault_index_block
 
