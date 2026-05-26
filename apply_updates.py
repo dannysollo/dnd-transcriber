@@ -185,11 +185,18 @@ def apply_suggestion(vault_path: Path, suggestion: dict) -> bool:
 
     page_path = vault_path / suggestion["page"]
     if not page_path.exists():
-        # Auto-create a stub rather than failing
-        page_path.parent.mkdir(parents=True, exist_ok=True)
-        title = page_path.stem
-        page_path.write_text(f"# {title}\n\n", encoding="utf-8")
-        print(f"  ✦ Created stub: {suggestion['page']}")
+        # Before creating a stub, search the vault by name — the file may exist
+        # at a different path (e.g. NPCs vs PCs, or moved to a subfolder).
+        existing = find_existing_page(vault_path, page_path.stem)
+        if existing:
+            print(f"  ⚠ '{page_path.stem}' not at suggested path — found at {existing.relative_to(vault_path)}, using that instead")
+            page_path = existing
+        else:
+            # Truly new — auto-create a stub
+            page_path.parent.mkdir(parents=True, exist_ok=True)
+            title = page_path.stem
+            page_path.write_text(f"# {title}\n\n", encoding="utf-8")
+            print(f"  ✦ Created stub: {suggestion['page']}")
 
     content = page_path.read_text(encoding="utf-8")
     new_content, changed = insert_bullets(content, suggestion["section"], suggestion["bullets"])
