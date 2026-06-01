@@ -191,7 +191,7 @@ def poll_loop(config: dict, stop_event: threading.Event):
 
 # ─── Analysis poll loop ──────────────────────────────────────────────────────
 
-ANALYZE_SESSION_MD = Path.home() / ".openclaw" / "workspace" / "ANALYZE_SESSION.md"
+ANALYZE_SESSION_MD = Path(__file__).parent.parent / "ANALYZE_SESSION.md"
 CAMPAIGN_VAULT = Path.home() / ".openclaw" / "workspace" / "campaign-vault"
 
 WIKI_ONLY_PROMPT_OVERRIDE = """
@@ -218,22 +218,46 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
 
     # Inject existing vault page index so Claude knows exactly what already exists
     # and doesn't suggest NEW PAGE for pages that are already there.
-    vault_pages = sorted(
-        p.relative_to(CAMPAIGN_VAULT)
-        for p in CAMPAIGN_VAULT.rglob("*.md")
-        if "campaign-site" not in p.parts and p.name != "README.md"
-    )
+    header_re = re.compile(r'^#{2,}\s+(.+)', re.MULTILINE)
+    vault_pages = []
+    subsections: list[tuple[str, str]] = []  # (display_name, relative_path)
+    for p in sorted(CAMPAIGN_VAULT.rglob("*.md")):
+        if "campaign-site" in p.parts or p.name == "README.md":
+            continue
+        rel = p.relative_to(CAMPAIGN_VAULT)
+        vault_pages.append((p.stem, rel))
+        # Scan section headers to catch subsection names (e.g. "## Shilu (Undercity)")
+        try:
+            text = p.read_text(encoding="utf-8")
+            for m in header_re.finditer(text):
+                raw = m.group(1).strip()
+                # Strip markdown formatting and grab the name before any parenthetical
+                clean = re.sub(r'[*_`\[\]]', '', raw).strip()
+                name = re.split(r'\s*[\(\|]', clean)[0].strip()
+                if name and name != p.stem:
+                    subsections.append((name, str(rel)))
+        except Exception:
+            pass
+
     vault_index_block = (
         "\n## Existing Vault Pages\n\n"
         "**CRITICAL: The following pages already exist in the vault. "
-        "You MUST NOT suggest `NEW PAGE` for any entity whose name matches a page below. "
-        "The entity name is shown in bold before the arrow — if a character, location, or item "
-        "you want to write about appears here, use `Page: <path>` for a regular update instead.**\n\n"
+        "You MUST NOT suggest `NEW PAGE` for any entity whose name matches a page or subsection below. "
+        "If a character, location, or item you want to write about appears here, "
+        "use `Page: <path>` for a regular update instead.**\n\n"
     )
-    vault_index_block += "\n".join(f"- **{p.stem}** → {p}" for p in vault_pages)
+    vault_index_block += "\n".join(f"- **{stem}** → {rel}" for stem, rel in vault_pages)
+    if subsections:
+        vault_index_block += (
+            "\n\n**Known subsections within existing pages "
+            "(do NOT create a NEW PAGE for any of these — update the parent page instead):**\n"
+        )
+        vault_index_block += "\n".join(
+            f"- **{name}** → (section in {path})" for name, path in sorted(subsections)
+        )
     vault_index_block += (
-        "\n\n**Match by the bold name (e.g. **Pei**, **Aja**, **Kali**). "
-        "If the name appears in the list, it already has a page — do NOT use NEW PAGE for it.**"
+        "\n\n**Match by the bold name. "
+        "If the name appears in either list above, it is already documented — do NOT use NEW PAGE for it.**"
     )
     system_prompt = system_prompt + "\n\n" + vault_index_block
 
