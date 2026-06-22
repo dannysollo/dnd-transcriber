@@ -2032,7 +2032,7 @@ def campaign_apply_wiki(
     if vault_repo_url:
         # Inject token into HTTPS URL for auth
         if github_token and vault_repo_url.startswith("https://"):
-            authed_url = vault_repo_url.replace("https://", f"https://{github_token}@")
+            authed_url = vault_repo_url.replace("https://", f"https://x-access-token:{github_token}@")
         else:
             authed_url = vault_repo_url
 
@@ -3036,7 +3036,7 @@ def test_vault_connection(
     # Use per-campaign token if set, fall back to global env token
     github_token = cfg.get("vault_github_token") or os.environ.get("GITHUB_TOKEN")
     if github_token and vault_repo_url.startswith("https://"):
-        authed_url = vault_repo_url.replace("https://", f"https://{github_token}@")
+        authed_url = vault_repo_url.replace("https://", f"https://x-access-token:{github_token}@")
     else:
         authed_url = vault_repo_url
 
