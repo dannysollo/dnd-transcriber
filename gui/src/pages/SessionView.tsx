@@ -2758,7 +2758,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
         body: JSON.stringify({ mode, ids }),
       })
       const data = await r.json()
-      setApplyOutput(data.output || '')
+      setApplyOutput(data.output ?? data.detail ?? '(no output)')
       if (mode === 'all') {
         setAppliedIds(new Set(suggestions?.filter(s => !skippedIds.has(s.id)).map(s => s.id) ?? []))
       } else if (mode === 'apply') {
@@ -3077,7 +3077,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
 
 
       {/* Apply output */}
-      {applyOutput && (
+      {applyOutput !== null && (
         <pre style={{
           background: '#0a0d14',
           border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',

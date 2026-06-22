@@ -2016,6 +2016,15 @@ def campaign_apply_wiki(
     # ── Vault sync: clone or pull repo if vault_repo_url is set ───────────
     campaign_config = load_config(slug)
     vault_repo_url = campaign_config.get("vault_repo_url")
+    # Fallback: check DB settings for vault_repo_url (pre-April-2026 migration case)
+    # If found in DB but not config.yaml, auto-migrate it.
+    if not vault_repo_url:
+        campaign_obj = crud.get_campaign_by_slug(db, slug)
+        db_url = (campaign_obj.settings or {}).get("vault_repo_url") if campaign_obj else None
+        if db_url:
+            vault_repo_url = db_url
+            campaign_config["vault_repo_url"] = db_url
+            save_config(campaign_config, slug)
     # Use per-campaign token if set, fall back to global env token
     github_token = campaign_config.get("vault_github_token") or os.environ.get("GITHUB_TOKEN")
 
@@ -2072,8 +2081,12 @@ def campaign_apply_wiki(
 
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(BASE_DIR))
     output = result.stdout + (result.stderr if result.stderr else "")
+    if not output.strip():
+        output = f"[apply_updates.py exited with code {result.returncode}, no output]"
 
     # ── Push vault changes back to GitHub ─────────────────────────────────
+    if not vault_repo_url:
+        output += "\n⚠ No vault_repo_url configured — vault push skipped. Set it in Campaign Settings."
     if vault_repo_url and vault_dir and (vault_dir / ".git").exists() and github_token:
         # Configure git identity (required for commits in container)
         subprocess.run(["git", "config", "user.email", "deploy@dnd-transcriber"], cwd=vault_dir, capture_output=True)
