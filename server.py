@@ -2040,6 +2040,8 @@ def campaign_apply_wiki(
         vault_dir.mkdir(parents=True, exist_ok=True)
 
         if (vault_dir / ".git").exists():
+            # Update remote URL with current token before pulling (token may have changed)
+            subprocess.run(["git", "remote", "set-url", "origin", authed_url], cwd=vault_dir, capture_output=True)
             pull = subprocess.run(["git", "pull"], cwd=vault_dir, capture_output=True, text=True)
             if pull.returncode != 0:
                 vault_sync_error = f"Git pull failed: {pull.stderr.strip()}"
