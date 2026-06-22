@@ -394,6 +394,15 @@ def run(session_dir: str, apply_ids: list[int] | None, skip_ids: list[int],
         )
         if result.returncode == 0:
             print(f"  ✓ Committed: {commit_msg}")
+            # Push to remote
+            push_result = subprocess.run(
+                ["git", "push"],
+                cwd=vault_path, capture_output=True, text=True
+            )
+            if push_result.returncode == 0:
+                print(f"  ✓ Pushed to remote")
+            else:
+                print(f"  ⚠ Git push failed: {push_result.stderr.strip()}")
         else:
             print(f"  ⚠ Git commit failed: {result.stderr.strip()}")
 
