@@ -2028,6 +2028,7 @@ def campaign_apply_wiki(
     # Use per-campaign token if set, fall back to global env token
     github_token = campaign_config.get("vault_github_token") or os.environ.get("GITHUB_TOKEN")
 
+    vault_sync_error: str | None = None
     if vault_repo_url:
         # Inject token into HTTPS URL for auth
         if github_token and vault_repo_url.startswith("https://"):
@@ -2041,14 +2042,18 @@ def campaign_apply_wiki(
         if (vault_dir / ".git").exists():
             pull = subprocess.run(["git", "pull"], cwd=vault_dir, capture_output=True, text=True)
             if pull.returncode != 0:
-                raise HTTPException(500, f"Git pull failed: {pull.stderr.strip()}")
+                vault_sync_error = f"Git pull failed: {pull.stderr.strip()}"
         else:
             clone = subprocess.run(
                 ["git", "clone", authed_url, str(vault_dir)],
                 capture_output=True, text=True
             )
             if clone.returncode != 0:
-                raise HTTPException(500, f"Git clone failed: {clone.stderr.strip()}")
+                vault_sync_error = f"Git clone failed: {clone.stderr.strip()}"
+
+        if vault_sync_error:
+            # Return immediately with error — don't try to apply updates to a broken vault
+            return {"output": f"⚠ Vault sync failed — updates NOT applied.\n{vault_sync_error}\n\nCheck Campaign Settings: vault_repo_url={vault_repo_url!r}, github_token={'set' if github_token else 'NOT SET'}", "applied": []}
 
         # Write a temp config pointing to the synced vault
         import tempfile
