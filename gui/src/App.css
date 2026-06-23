@@ -128,11 +128,6 @@
     padding: 8px 12px 8px !important;
   }
 
-  /* Hide episode description on mobile — saves ~50px */
-  .session-description-block {
-    display: none !important;
-  }
-
   /* Audio player: tighter on mobile */
   .session-audio-panel {
     padding: 6px 12px !important;
