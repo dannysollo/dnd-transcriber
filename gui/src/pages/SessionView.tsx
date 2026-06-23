@@ -781,7 +781,7 @@ export default function SessionView() {
 
         {/* Episode description row */}
         {(description || editingDescription) ? (
-          <div className="session-description-block" style={{ marginTop: '10px', paddingLeft: '2px' }}>
+          <div className={editingDescription ? undefined : 'session-description-block'} style={{ marginTop: '10px', paddingLeft: '2px' }}>
             {editingDescription ? (
               <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                 <textarea
