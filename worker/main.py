@@ -268,6 +268,7 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
     if notes and notes.strip():
         message = f"## DM Notes for this session\n{notes.strip()}\n\n---\n\n{transcript}"
 
+    print(f"[analysis] system prompt: {len(system_prompt)} chars, message: {len(message)} chars")
     result = subprocess.run(
         ["claude", "-p",
          "--system-prompt", system_prompt,
@@ -284,10 +285,17 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
 
     if result.stderr:
         print(f"[analysis] claude stderr:\n{result.stderr.strip()}")
+    if result.stdout and result.returncode != 0:
+        print(f"[analysis] claude stdout (on error):\n{result.stdout[:500]}")
 
     if result.returncode != 0:
-        stderr_snippet = (result.stderr or "").strip()[-500:] if result.stderr else ""
-        raise RuntimeError(f"claude -p failed (code {result.returncode})" + (f": {stderr_snippet}" if stderr_snippet else ""))
+        stderr_snippet = (result.stderr or "").strip()[-1000:] if result.stderr else "(empty)"
+        stdout_snippet = (result.stdout or "").strip()[:200] if result.stdout else "(empty)"
+        raise RuntimeError(
+            f"claude -p failed (code {result.returncode})\n"
+            f"  stderr: {stderr_snippet}\n"
+            f"  stdout: {stdout_snippet}"
+        )
 
     full_text = result.stdout.strip()
     if not full_text:
