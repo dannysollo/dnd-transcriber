@@ -27,12 +27,20 @@ DMs appear as `DM (Danny):` or `DM (Juno):`, players as `CharacterName [PlayerNa
 ## What To Do With a Transcript
 
 ### 1. Session Summary
-Start with a **TL;DR** section — 3–5 bullet points, each one sentence max, covering the absolute highlights for players who just want the quick version. Format it as:
+Start with a **TL;DR** section — 3–5 bullet points covering the absolute highlights for players who just want the quick version. Format it as:
 
 **TL;DR**
 - Bullet one
 - Bullet two
 - etc.
+
+Each bullet is **one short sentence, ~15 words max** — a single headline, not a summary of the summary.
+Pick the ONE most important fact per bullet and cut the rest; save the how/why/context for the paragraphs below.
+Do not chain sub-events together with em-dashes, semicolons, or parentheticals — if a bullet needs a second clause to
+make sense, it's two bullets or it belongs in the paragraphs instead.
+
+Bad (overstuffed): "Party learned the ritual failed — Kali took the blame, Belle stormed off, and the tower began to collapse, forcing an emergency retreat before the wards gave out."
+Good (headline-only): "The ritual failed and the tower started collapsing."
 
 Then write 3–5 paragraphs covering:
 - What happened and in what order

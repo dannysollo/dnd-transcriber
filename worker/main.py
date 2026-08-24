@@ -301,10 +301,19 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
     if not full_text:
         raise RuntimeError("claude -p returned empty output")
 
-    # Strip any conversational preamble before the first ## heading
-    first_heading = re.search(r'^##', full_text, re.MULTILINE)
-    if first_heading and first_heading.start() > 0:
-        full_text = full_text[first_heading.start():].strip()
+    # Strip any conversational preamble before the real content starts.
+    # Full analysis starts with "**TL;DR**" (not a ## heading, since the summary
+    # section never uses one) — anchoring on the first ## heading here would
+    # treat "## Wiki Update Suggestions" itself as the start and delete the
+    # entire summary whenever Claude doesn't add its own extra heading above it.
+    if wiki_only:
+        first_marker = re.search(r'^##', full_text, re.MULTILINE)
+    else:
+        first_marker = re.search(r'^\*\*TL;DR\*\*', full_text, re.MULTILINE)
+        if not first_marker:
+            first_marker = re.search(r'^##', full_text, re.MULTILINE)
+    if first_marker and first_marker.start() > 0:
+        full_text = full_text[first_marker.start():].strip()
 
     # Extract blurb block
     blurb = ""
