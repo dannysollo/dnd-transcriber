@@ -326,14 +326,23 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
                 except Exception:
                     continue
 
-        # ── Standard single-speaker Whisper path ─────────────────────────────
+        # ── Standard single-speaker transcription path ────────────────────────
+        if getattr(model, "_model_type", None) == "canary":
+            # Canary: encoder-decoder with built-in long-form chunking, no VAD needed.
+            from canary_utils import transcribe_audio_canary
+            print(f"    Using Canary engine")
+            result = transcribe_audio_canary(
+                model,
+                wav_path,
+                initial_prompt=vocab_prompt if vocab_prompt else None,
+            )
         # Use VAD-chunk approach for accurate timestamps: run Silero VAD to get
         # precise speech boundaries, extract each chunk, transcribe with offset.
         # This matches what diarize.py does and gives accurate absolute timestamps.
         # vad_filter=True inside transcribe_audio is unreliable for multi-speaker
         # interleaving because Whisper's internal timestamp mapping can drift by
         # several seconds when processing concatenated speech chunks.
-        if use_vad:
+        elif use_vad:
             result = _transcribe_via_vad_chunks(
                 wav_path, model,
                 language="en",
