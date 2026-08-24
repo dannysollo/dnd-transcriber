@@ -21,13 +21,13 @@ def merge_audio_files(files: list, output_path) -> str:
     """
     Merge/mix multiple audio tracks into a single MP3 using ffmpeg amix.
     All tracks are assumed to be time-aligned (same start time).
-    Output is always MP3 128kbps stereo — lightweight for web playback.
+    Output is always MP3 64kbps mono — lightweight for web playback of spoken dialogue.
     Returns the output path as a string.
     """
     output_path = str(output_path)
 
-    # Common output flags: MP3 128kbps, stereo
-    encode_flags = ["-codec:a", "libmp3lame", "-b:a", "128k", "-ac", "2"]
+    # Common output flags: MP3 64kbps mono (dialogue has no stereo image worth keeping)
+    encode_flags = ["-codec:a", "libmp3lame", "-b:a", "64k", "-ac", "1"]
 
     if len(files) == 1:
         cmd = ["ffmpeg", "-y", "-i", str(files[0])] + encode_flags + [output_path]

@@ -616,6 +616,7 @@ def get_merged_audio(name: str):
         "ffmpeg", "-y",
         *inputs,
         "-filter_complex", f"amix=inputs={n}:duration=longest:normalize=0",
+        "-codec:a", "libmp3lame", "-b:a", "64k", "-ac", "1",
         str(merged_path),
     ]
     proc = subprocess.run(cmd, capture_output=True)
@@ -2490,6 +2491,7 @@ def campaign_get_merged_audio(
     cmd = [
         "ffmpeg", "-y", *inputs,
         "-filter_complex", f"amix=inputs={n}:duration=longest:normalize=0",
+        "-codec:a", "libmp3lame", "-b:a", "64k", "-ac", "1",
         str(merged_path),
     ]
     proc = subprocess.run(cmd, capture_output=True)
