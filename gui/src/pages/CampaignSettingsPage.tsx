@@ -433,9 +433,13 @@ export default function CampaignSettingsPage() {
                     onChange={e => updateConfigField('whisper_model', e.target.value)}
                     style={configSelectStyle}
                   >
-                    {['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3', 'turbo', 'distil-large-v3', 'canary'].map(m => (
-                      <option key={m} value={m}>{m === 'canary' ? 'canary-1b-v2 (NVIDIA)' : m}</option>
-                    ))}
+                    {['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3', 'turbo', 'distil-large-v3', 'canary-1b-flash', 'canary-1b'].map(m => {
+                      const labels: Record<string, string> = {
+                        'canary-1b-flash': 'canary-1b-flash (NVIDIA)',
+                        'canary-1b': 'canary-1b, standard (NVIDIA)',
+                      };
+                      return <option key={m} value={m}>{labels[m] || m}</option>;
+                    })}
                   </select>
                 </ConfigField>
                 <ConfigField label="Voice Activity Detection (VAD)">

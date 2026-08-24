@@ -1,5 +1,5 @@
 faster-whisper
-nemo_toolkit[asr]  # Canary-1B-v2 engine — CUDA required, ~2GB deps
+nemo_toolkit[asr]  # Canary engine (canary-1b-flash / canary-1b) — CUDA required, ~2GB deps
 torch
 torchaudio
 requests

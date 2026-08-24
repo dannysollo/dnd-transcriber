@@ -11,28 +11,51 @@ Requirements:
     pip install nemo_toolkit[asr]
     (CUDA GPU required — no CPU/Apple Silicon fallback)
 
-Model:
-    nvidia/canary-1b-flash (~883M params), not canary-1b-v2.
+Models (selectable — see CANARY_VARIANTS):
+    "canary-1b-flash" -> nvidia/canary-1b-flash (~883M params, default)
+    "canary-1b"        -> nvidia/canary-1b (standard/non-fast variant)
     HuggingFace: https://huggingface.co/nvidia/canary-1b-flash
-    v2 was tried first (newer, marginally more accurate) but its `.nemo`
-    checkpoint bundles an internal "external timestamps" CTC sub-model that
-    nemo_toolkit 2.7.2 fails to restore — `ASRModel.restore_from(...)` is
-    called on the abstract base class internally and raises
-    `TypeError: Can't instantiate abstract class ASRModel`. This is a known
-    NeMo bug (NVIDIA-NeMo/NeMo#14947 tracks a related v2-loading failure);
-    flash predates that submodel entirely (`model.timestamps_asr_model is
-    None`) and loads cleanly, so it's the pragmatic choice until NeMo/the v2
-    checkpoint gets fixed upstream.
-    Natively multilingual/multitask; we use it for English ASR only here.
+                 https://huggingface.co/nvidia/canary-1b
 
-    Canary's automatic long-form chunking (1s-overlap dynamic chunking, per
-    NVIDIA's docs) turns out to be gated on `self.timestamps_asr_model is not
-    None` in aed_multitask_models.py — i.e. it's actually a v2-only feature,
-    not a general Canary capability as the docs imply. Flash has no such
-    submodel, so it silently skips chunking and OOMs the conformer encoder on
-    anything longer than ~40s. We do our own chunk-and-stitch here (25s chunks,
-    matching flash's training `max_duration`), same shape as Parakeet-TDT
-    needed, just for a different underlying reason.
+    canary-1b-v2 was tried first (newer, marginally more accurate on paper) but
+    its `.nemo` checkpoint bundles an internal "external timestamps" CTC
+    sub-model, and restoring it fails under nemo_toolkit 2.7.2 —
+    `ASRModel.restore_from(...)` is called on the abstract base class
+    internally and raises `TypeError: Can't instantiate abstract class
+    ASRModel`. This is a known NeMo bug (NVIDIA-NeMo/NeMo#14947 tracks a
+    related v2-loading failure). Neither flash nor standard 1b have that
+    submodel (`model.timestamps_asr_model is None`), so both load cleanly —
+    v2 is intentionally not offered as a selectable option until NeMo fixes
+    this upstream.
+
+    Standard canary-1b has a further limitation flash doesn't: it doesn't
+    support word-level timestamps at all — `model.transcribe(timestamps=True)`
+    raises "Timestamp feature is not supported in Canary prompt format.
+    Please use latest canary-1b-flash or canary-180m-flash" (NeMo's own
+    message). The top-level `timestamps=` flag isn't actually what trips this —
+    it's a separate `timestamp` prompt *slot* (singular) whose default is baked
+    into the legacy 'canary' prompt template regardless of that flag; passing
+    `timestamp=False` through .transcribe()'s `**prompt` catch-all overrides
+    the slot and avoids the error. transcribe_audio_canary() probes this once
+    and falls back to coarse chunk-level timestamps (the VAD chunk's own
+    start/end) for that variant rather than per-word timing.
+
+    That same submodel also gates NeMo's automatic long-form chunking
+    (`enable_chunking` in aed_multitask_models.py checks
+    `self.timestamps_asr_model is not None`) — so despite NVIDIA's docs
+    describing dynamic chunking as a general Canary capability, it's actually
+    v2-only in practice. Without it, feeding a whole session-length clip in
+    one forward pass OOMs the conformer encoder well before VRAM capacity is
+    actually the limit. transcribe_audio_canary() below detects this at
+    runtime (checking model.timestamps_asr_model, not hardcoding per variant)
+    and does its own VAD-based chunk-and-stitch when needed — same approach
+    worker/transcribe.py already uses for Whisper (Silero VAD speech regions,
+    not blind fixed-time slicing), which also happens to be what's needed to
+    avoid a separate failure mode: naive fixed-time chunking can hand the
+    model a chunk that's pure silence/noise, and AED decoders (Canary same as
+    Whisper) are prone to degenerate repetition-loop hallucinations on such
+    input. VAD-based chunking sidesteps this because silent regions are never
+    fed to the model at all.
 
 Context Biasing (proper noun boosting):
     Canary supports NeMo's boosting-tree context biasing at beam-search decode
@@ -55,6 +78,12 @@ Context Biasing (proper noun boosting):
     without setting it has zero effect on output. See `_apply_context_biasing`
     for details. Applied defensively regardless: falls back to transcribing
     without biasing if a future NeMo version changes this shape.
+
+Known real-world result (head-to-head against production Whisper turbo+
+initial_prompt on a real proper-noun-dense session segment): canary-1b-flash
++biasing got 2/4 known names right, tying Whisper. Not a clear win, but close
+enough — and cheap enough to keep available as a selectable option — that it's
+worth having rather than discarding.
 """
 
 import re
@@ -79,11 +108,21 @@ def _parse_vocab_words(vocab_prompt: str) -> list:
     return result
 
 
-CANARY_MODEL_NAME = "nvidia/canary-1b-flash"
+# model_name (as selected in campaign settings / worker.yaml) -> HuggingFace repo id.
+# "canary-1b-v2" intentionally omitted — see module docstring.
+CANARY_VARIANTS = {
+    "canary-1b-flash": "nvidia/canary-1b-flash",
+    "canary-1b": "nvidia/canary-1b",
+}
+DEFAULT_CANARY_VARIANT = "canary-1b-flash"
 
 
-def load_canary_model():
-    """Load Canary via NVIDIA NeMo. Returns the model on CUDA."""
+def load_canary_model(model_name: str = DEFAULT_CANARY_VARIANT):
+    """Load a Canary variant via NVIDIA NeMo. Returns the model on CUDA."""
+    hf_repo = CANARY_VARIANTS.get(model_name)
+    if hf_repo is None:
+        raise ValueError(f"Unknown Canary variant {model_name!r}. Options: {list(CANARY_VARIANTS)}")
+
     try:
         from nemo.collections.asr.models import ASRModel  # noqa: F401
     except ImportError:
@@ -107,7 +146,7 @@ def load_canary_model():
     torch.cuda.empty_cache()
     torch.cuda.synchronize()
 
-    print(f"Loading Canary ({CANARY_MODEL_NAME})...")
+    print(f"Loading Canary ({hf_repo})...")
 
     # On this WSL2 GPU passthrough setup, loading immediately after a crashed
     # CUDA process sometimes throws a bogus OOM on the CPU->CUDA transfer
@@ -118,7 +157,7 @@ def load_canary_model():
     import time
     last_err = None
     for attempt in range(3):
-        model = ASRModel.from_pretrained(model_name=CANARY_MODEL_NAME, map_location="cpu")
+        model = ASRModel.from_pretrained(model_name=hf_repo, map_location="cpu")
         try:
             model = model.cuda()
             break
@@ -136,6 +175,7 @@ def load_canary_model():
 
     model.eval()
     model._model_type = "canary"
+    model._canary_variant = model_name
     print("Canary model loaded.")
     return model
 
@@ -259,14 +299,65 @@ def _words_to_segments(all_words):
     return segments
 
 
-_CHUNK_SECONDS = 25   # canary-1b-flash was trained on utterances up to 40s
-                      # (max_duration: 40.0 in its config); stay well under that
-_CHUNK_BATCH = 4      # chunks per model.transcribe() call
+_MAX_CHUNK_SECONDS = 25   # both flash and standard 1b were trained on utterances
+                          # up to 40s (max_duration in their configs); stay under that
+_CHUNK_BATCH = 1          # WSL2 GPU-passthrough CUDA allocator becomes unreliable
+                          # (bogus OOMs with real headroom free) above batch_size=1
+                          # on this hardware — see load_canary_model's docstring for
+                          # the analogous .cuda()-transfer flakiness. Cheap either way:
+                          # ~20 chunks/8min transcribed in ~13s single-batched.
+SAMPLE_RATE = 16000
 
 
-def _extract_wav_chunk(audio, sr, start_sample, end_sample, tmp_path):
+def _vad_chunks(wav_path, max_chunk_s=_MAX_CHUNK_SECONDS):
+    """
+    Get speech-only chunk boundaries via Silero VAD, same approach as
+    worker/transcribe.py's _transcribe_via_vad_chunks: detect speech regions,
+    merge ones close together, then cap each at max_chunk_s (splitting long
+    continuous speech, since Canary chunks need to stay near its training
+    max_duration). Silent/noise regions are never chunked at all — this is
+    what avoids the AED repetition-loop hallucination class VAD chunking was
+    verified to fix during testing.
+
+    Returns (wav_tensor, [(start_s, end_s), ...]) — wav_tensor is 16kHz mono,
+    ready to slice directly by sample index.
+    """
+    import torch
+    import torchaudio
     import soundfile as sf
-    sf.write(tmp_path, audio[start_sample:end_sample], sr)
+    from silero_vad import get_speech_timestamps, load_silero_vad
+
+    vad_model = load_silero_vad()
+    audio_np, sr = sf.read(wav_path, dtype="float32", always_2d=False)
+    wav = torch.from_numpy(audio_np)
+    if sr != SAMPLE_RATE:
+        wav = torchaudio.functional.resample(wav, sr, SAMPLE_RATE)
+    if wav.dim() > 1:
+        wav = wav.mean(0)
+
+    speech_ts = get_speech_timestamps(
+        wav, vad_model, sampling_rate=SAMPLE_RATE,
+        threshold=0.4, min_speech_duration_ms=300,
+        min_silence_duration_ms=500, speech_pad_ms=400,
+        return_seconds=True,
+    )
+
+    merged = []
+    for ts in speech_ts:
+        if merged and (ts["start"] - merged[-1]["end"]) < 1.5:
+            merged[-1]["end"] = ts["end"]
+        else:
+            merged.append({"start": ts["start"], "end": ts["end"]})
+
+    regions = []
+    for r in merged:
+        start = r["start"]
+        while start < r["end"]:
+            end = min(start + max_chunk_s, r["end"])
+            regions.append((start, end))
+            start = end
+
+    return wav, regions
 
 
 def transcribe_audio_canary(model, wav_path, **kwargs):
@@ -274,12 +365,11 @@ def transcribe_audio_canary(model, wav_path, **kwargs):
     Transcribe a WAV file using Canary and return the same dict format as
     whisper_utils.transcribe_audio: {"segments": [{start, end, text}, ...]}
 
-    Manual chunking is required here: NeMo's automatic long-form chunking for
-    AED models (`enable_chunking`) is hard-gated on `self.timestamps_asr_model
-    is not None` (see aed_multitask_models.py) — a feature only canary-1b-v2's
-    checkpoint bundles. canary-1b-flash has no such submodel, so without manual
-    chunking a full session-length clip gets encoded in one forward pass and
-    OOMs the conformer encoder well before VRAM capacity is actually the limit.
+    Uses the model's built-in long-form chunking when available (currently
+    only true for canary-1b-v2, which isn't a selectable option here — see
+    module docstring), detected dynamically via `model.timestamps_asr_model`
+    rather than hardcoded per variant so this stays correct if that changes
+    upstream. Otherwise does its own VAD-based chunk-and-stitch.
 
     Supported kwargs:
         initial_prompt (str): comma/newline-separated vocab phrases for
@@ -291,7 +381,6 @@ def transcribe_audio_canary(model, wav_path, **kwargs):
     import os
     import tempfile
     import torch
-    import soundfile as sf
 
     initial_prompt = kwargs.get("initial_prompt") or ""
     boosting_tree_alpha = float(kwargs.get("boosting_tree_alpha", 1.0))
@@ -302,46 +391,90 @@ def transcribe_audio_canary(model, wav_path, **kwargs):
     else:
         print("      context biasing: no vocab words configured")
 
-    audio, sr = sf.read(wav_path, dtype="float32")
-    if audio.ndim > 1:
-        audio = audio.mean(axis=1)
+    has_native_chunking = getattr(model, "timestamps_asr_model", None) is not None
 
-    total_samples = len(audio)
-    total_duration = total_samples / sr
-    chunk_samples = int(_CHUNK_SECONDS * sr)
-    num_chunks = max(1, -(-total_samples // chunk_samples))  # ceil div
+    if has_native_chunking:
+        print("      canary: using built-in long-form chunking")
+        with torch.no_grad():
+            hypotheses = model.transcribe(
+                [wav_path], source_lang="en", target_lang="en",
+                timestamps=True, batch_size=1,
+            )
+        hyp = hypotheses[0] if hypotheses else None
+        all_words = _parse_hypothesis(hyp) if hyp else []
+        segments = _words_to_segments(all_words)
+        return {"segments": segments}
 
+    # Manual VAD-based chunking path (flash, standard 1b)
+    import soundfile as sf
+    wav, regions = _vad_chunks(wav_path)
+    total_duration = len(wav) / SAMPLE_RATE
+
+    if not regions:
+        print("      canary: VAD found no speech in this file")
+        return {"segments": []}
+
+    print(f"      canary: transcribing {len(regions)} VAD-chunk(s) "
+          f"({int(total_duration)}s total, silence skipped)...")
+
+    # Word-level timestamps aren't supported by every Canary variant (e.g. plain
+    # canary-1b raises "Timestamp feature is not supported in Canary prompt
+    # format" — only the flash checkpoints support it). Probe once rather than
+    # hardcoding per variant, so this stays correct if that changes upstream.
+    word_timestamps_supported = True
     all_words = []
+    coarse_segments = []
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        chunk_paths, time_offsets = [], []
-        for i in range(num_chunks):
-            start_sample = i * chunk_samples
-            end_sample = min(start_sample + chunk_samples, total_samples)
+        for i, (start, end) in enumerate(regions):
+            s, e = int(start * SAMPLE_RATE), int(end * SAMPLE_RATE)
             chunk_path = os.path.join(tmpdir, f"chunk_{i:04d}.wav")
-            _extract_wav_chunk(audio, sr, start_sample, end_sample, chunk_path)
-            chunk_paths.append(chunk_path)
-            time_offsets.append(start_sample / sr)
+            sf.write(chunk_path, wav[s:e].numpy(), SAMPLE_RATE)
 
-        print(f"      canary: transcribing {num_chunks} chunk(s) "
-              f"({int(total_duration)}s total, {_CHUNK_SECONDS}s each)...")
-
-        for batch_start in range(0, num_chunks, _CHUNK_BATCH):
-            batch_paths = chunk_paths[batch_start:batch_start + _CHUNK_BATCH]
-            batch_offsets = time_offsets[batch_start:batch_start + _CHUNK_BATCH]
             with torch.no_grad():
-                hypotheses = model.transcribe(
-                    batch_paths,
-                    source_lang="en",
-                    target_lang="en",
-                    timestamps=True,
-                    batch_size=len(batch_paths),
-                )
-            pct = int(100 * batch_start / num_chunks)
-            print(f"      canary {pct}% ({int(batch_offsets[0])}s / {int(total_duration)}s)")
-            for hyp, offset in zip(hypotheses, batch_offsets):
-                if hyp:
-                    all_words.extend(_parse_hypothesis(hyp, time_offset=offset))
+                if word_timestamps_supported:
+                    try:
+                        hypotheses = model.transcribe(
+                            [chunk_path], source_lang="en", target_lang="en",
+                            timestamps=True, batch_size=1,
+                        )
+                    except ValueError as e:
+                        if "Timestamp feature is not supported" not in str(e):
+                            raise
+                        word_timestamps_supported = False
+                        print(f"      canary: model doesn't support word timestamps "
+                              f"({model._canary_variant}) — falling back to "
+                              f"chunk-level timestamps")
+                if not word_timestamps_supported:
+                    # `timestamps=False` (the output-format flag) doesn't avoid this —
+                    # the ValueError comes from a separate prompt *slot* default baked
+                    # into the legacy 'canary' prompt template, and passing `timestamps=`
+                    # explicitly (even False) still triggers NeMo to populate that slot's
+                    # truthy default. Passing ONLY `timestamp=False` (singular, via
+                    # .transcribe()'s **prompt catch-all) overrides the slot directly and
+                    # is what actually avoids the error — verified empirically; leave the
+                    # top-level `timestamps=` kwarg out entirely here.
+                    hypotheses = model.transcribe(
+                        [chunk_path], source_lang="en", target_lang="en",
+                        timestamp=False, batch_size=1,
+                    )
 
-    segments = _words_to_segments(all_words)
+            if i % 5 == 0:
+                pct = int(100 * i / len(regions))
+                print(f"      canary {pct}% ({int(start)}s / {int(total_duration)}s)")
+
+            hyp = hypotheses[0] if hypotheses else None
+            if not hyp:
+                continue
+            if word_timestamps_supported:
+                all_words.extend(_parse_hypothesis(hyp, time_offset=start))
+            elif hyp.text.strip():
+                # Coarse fallback: one segment per VAD chunk, using the chunk's
+                # own (accurate) boundaries rather than word-level timing.
+                coarse_segments.append({"start": start, "end": end, "text": hyp.text.strip()})
+
+    if word_timestamps_supported:
+        segments = _words_to_segments(all_words)
+    else:
+        segments = coarse_segments
     return {"segments": segments}

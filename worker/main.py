@@ -150,9 +150,9 @@ def poll_loop(config: dict, stop_event: threading.Event):
 
                 model_name = job_config.get("whisper_model", "turbo")
                 if whisper_model is None or getattr(whisper_model, "_model_name", None) != model_name:
-                    if model_name == "canary":
+                    if model_name in ("canary-1b-flash", "canary-1b"):
                         from canary_utils import load_canary_model
-                        whisper_model = load_canary_model()
+                        whisper_model = load_canary_model(model_name)
                     else:
                         whisper_model = load_whisper_model(model_name)
                     whisper_model._model_name = model_name
