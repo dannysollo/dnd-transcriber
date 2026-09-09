@@ -53,17 +53,6 @@ class Api:
     def default_server_url(self) -> str:
         return DEFAULT_SERVER_URL
 
-    def open_campaign_site(self) -> dict:
-        """Called from onboarding_ui.html's "I need a campaign" button.
-        Account creation, campaign creation, invite acceptance, and (for
-        DMs) generating a Worker API Key from Campaign Settings all already
-        exist as real pages on the site — reusing that instead of
-        reimplementing Discord OAuth/campaign management locally. Use the
-        tray's "Set Up / Reconfigure Worker" item to come back here once
-        they have a key."""
-        main_window.load_url(_site_url())
-        return {"ok": True}
-
     def pick_audio_dir(self) -> str:
         result = main_window.create_file_dialog(webview.FileDialog.FOLDER)
         return result[0] if result else ""
@@ -99,7 +88,20 @@ class Api:
             return {"ok": False, "error": str(e)}
 
     def finish_onboarding(self) -> dict:
-        _start_worker_and_load_site()
+        # Must NOT call _start_worker_and_load_site() synchronously here:
+        # worker.start() can take up to 60s (waiting on the dashboard to come
+        # up), which would leave this API call hanging and the onboarding
+        # page looking frozen — and worse, _start_worker_and_load_site()
+        # ends with main_window.load_url(), which navigates the very page
+        # that pywebview still needs to deliver THIS call's return value
+        # into (that's exactly what crashed open_campaign_site() with a
+        # "callback is not a function" error — the framework tries to run
+        # its return-value JS against a page that's already gone). Returning
+        # immediately and doing the real work in a background thread avoids
+        # both: the return value lands on the still-current onboarding page
+        # right away, and by the time the thread gets around to navigating,
+        # there's no pending callback left to race.
+        threading.Thread(target=_start_worker_and_load_site, daemon=True).start()
         return {"ok": True}
 
 

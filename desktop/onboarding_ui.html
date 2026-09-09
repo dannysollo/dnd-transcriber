@@ -160,8 +160,15 @@ async function validateKey() {
 }
 
 async function openCampaignSite() {
+  // Navigate from JS itself (not via a Python API call that calls
+  // main_window.load_url()) — pywebview needs to deliver this call's
+  // return value back into the page that invoked it, and navigating away
+  // from Python mid-call destroys that page out from under it, crashing
+  // the app. A plain client-side navigation after the value comes back
+  // has no such race.
   try {
-    await window.pywebview.api.open_campaign_site();
+    const url = await window.pywebview.api.default_server_url();
+    window.location.href = url;
   } catch (e) { console.warn('failed to open campaign site', e); }
 }
 
