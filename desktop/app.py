@@ -65,6 +65,10 @@ main_window: webview.Window | None = None
 # whether a query string survives that resolution is untested/unconfirmed,
 # so this avoids relying on it.
 _next_onboarding_screen = "choice"
+# Captured once by _watch_for_login() while the window is still on the
+# site's own domain — see _get_access_token()'s docstring for why this has
+# to be cached rather than re-queried later. None until a login is detected.
+_cached_access_token: str | None = None
 
 
 def _site_url() -> str:
@@ -84,7 +88,18 @@ def _get_access_token() -> str | None:
     source: it calls CoreWebView2.CookieManager.GetCookiesAsync directly).
     This is what lets Python make authenticated calls (create campaign,
     generate a worker key) using the Discord login the user just did in the
-    same window, without re-implementing OAuth or scraping the page."""
+    same window, without re-implementing OAuth or scraping the page.
+
+    IMPORTANT, found via a real login: get_cookies() is scoped to whatever
+    page is CURRENTLY loaded (it calls GetCookiesAsync(self.url), and
+    self.url tracks pywebview's current page) — it is NOT "every cookie
+    this browser profile has ever stored." Once _watch_for_login() navigates
+    the window back to the local onboarding page, this function can no
+    longer see the site's cookie at all, even though it's still sitting in
+    WebView2's profile — self.url has moved to a totally different domain
+    (the local 127.0.0.1 server). So this only works while still ON the
+    site's domain; callers after that point must use the cached value
+    _watch_for_login() captured instead of calling this again."""
     try:
         for cookie in main_window.get_cookies():
             if ACCESS_TOKEN_COOKIE in cookie:
@@ -158,8 +173,15 @@ class Api:
         db/crud.py's create_campaign) and immediately generate its worker
         key, so the device-setup step can be pre-filled instead of making
         the user copy/paste anything. Mirrors exactly what a DM would do by
-        hand on the site's own Campaign Settings > Worker tab."""
-        token = _get_access_token()
+        hand on the site's own Campaign Settings > Worker tab.
+
+        Uses the cached token from _watch_for_login(), not a fresh
+        _get_access_token() call — by the time this screen is showing, the
+        window has already navigated back to the local onboarding page, so
+        a live call can no longer see the site's cookie at all (see that
+        function's docstring). Falls back to a live call only in case this
+        ever gets reached some other way while still on the site's domain."""
+        token = _cached_access_token or _get_access_token()
         if not token:
             return {"ok": False, "error": "Not logged in — please use \"Start a New Campaign\" again and complete the Discord login first."}
         base = DEFAULT_SERVER_URL
@@ -209,8 +231,13 @@ def _watch_for_login() -> None:
     deadline = time.time() + LOGIN_WATCH_TIMEOUT
     while time.time() < deadline:
         time.sleep(1.5)
-        if _get_access_token():
-            global _next_onboarding_screen
+        token = _get_access_token()
+        if token:
+            global _next_onboarding_screen, _cached_access_token
+            # Cache it now, while still on the site's domain — see
+            # _get_access_token()'s docstring: this is the last point this
+            # window will be able to see this cookie at all.
+            _cached_access_token = token
             _next_onboarding_screen = "create"
             main_window.load_url(str(paths.onboarding_html_path()))
             return
