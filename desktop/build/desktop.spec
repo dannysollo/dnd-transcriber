@@ -110,16 +110,6 @@ exe = EXE(
     # build is confirmed working end-to-end.
     console=True,
     icon=str(DESKTOP_DIR / "assets" / "icon.ico") if (DESKTOP_DIR / "assets" / "icon.ico").exists() else None,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
-    name="dnd-transcriber-worker",
     # PyInstaller >=6.0 defaults onedir builds to nesting everything
     # (bundled data files included) into a _internal/ subfolder next to the
     # exe. desktop/paths.py resolves bundled files (onboarding_ui.html,
@@ -131,5 +121,24 @@ coll = COLLECT(
     # off. contents_directory="." restores the flat layout instead of
     # reworking paths.py's resolution logic, since worker_src_dir()/
     # bundled_ffmpeg()/icon_path() would all have hit the exact same bug.
+    #
+    # IMPORTANT: this belongs on EXE, not COLLECT. First attempt put it on
+    # COLLECT() below and it silently did nothing — COLLECT doesn't apply
+    # its own contents_directory override, it just reads the value back off
+    # the exe object it's given (PyInstaller/building/api.py's COLLECT class:
+    # `self.contents_directory = arg.contents_directory`), so setting it only
+    # on COLLECT() is a no-op. Confirmed via a real build: the exe still
+    # reported `_internal` in its own runtime logging even with the (wrong)
+    # COLLECT-level setting in place.
     contents_directory=".",
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    name="dnd-transcriber-worker",
 )
