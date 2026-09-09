@@ -206,7 +206,14 @@ def main() -> None:
     main_window.events.closing += _on_closing
 
     icon = paths.icon_path()
-    webview.start(_on_gui_start, gui="edgechromium", icon=str(icon) if icon else None)
+    # debug=True enables right-click "Inspect" (WebView2 devtools) — needed
+    # right now to actually see JS-side errors during development, since
+    # without it there is currently no way to observe a JS failure at all
+    # (confirmed: a real failure produced no visible output anywhere).
+    # TODO: flip to False (or gate behind an env var) once the desktop app
+    # is past active debugging — devtools access isn't something to ship to
+    # end users by default.
+    webview.start(_on_gui_start, gui="edgechromium", icon=str(icon) if icon else None, debug=True)
     sys.exit(0)
 
 
