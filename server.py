@@ -21,11 +21,10 @@ from typing import Optional
 import yaml
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from starlette.background import BackgroundTask
 
 from auth import discord as discord_auth
 from auth.jwt import COOKIE_NAME, create_access_token
@@ -1344,45 +1343,96 @@ def patch_campaign(
     }
 
 
+class _ChunkedZipWriter:
+    """Minimal writable stream that zipfile.ZipFile can target, draining
+    written bytes into a thread-safe queue instead of holding the whole
+    archive in memory or building it on disk before any response bytes go
+    out. Needed because the original approach (build a temp file to
+    completion, then FileResponse it) left the client's connection sitting
+    at zero response bytes for the entire build — fine for a small test
+    campaign, but a real campaign here has ~1.9GB of session audio, and
+    that showed up as the browser's request just hanging at "pending" with
+    no response at all (almost certainly some proxy/timeout along the way
+    giving up on a connection that goes quiet that long)."""
+
+    def __init__(self, q: "queue.Queue"):
+        self._q = q
+        self._pos = 0
+
+    def write(self, data: bytes) -> int:
+        self._q.put(bytes(data))
+        self._pos += len(data)
+        return len(data)
+
+    def tell(self) -> int:
+        return self._pos
+
+    def flush(self):
+        pass
+
+
 @app.get("/campaigns/{slug}/export")
 def export_campaign(
     slug: str,
     _member=Depends(require_campaign_member("dm")),
     db: Session = Depends(get_db),
 ):
-    """Zip every session's transcript.md + merged.mp3 into one download.
-    Offered specifically alongside campaign deletion, per an explicit ask:
-    deletion should come with a manual one-time way to keep the data first,
-    since delete_campaign below removes both the DB rows and the on-disk
-    session directory permanently. Only those two files per session (not
-    the raw per-speaker tracks or intermediate speaker JSONs) — matches
-    "transcripts and audio files," not a full internal-data dump."""
+    """Zip every session's transcript.md + merged.mp3 into one streamed
+    download. Offered specifically alongside campaign deletion, per an
+    explicit ask: deletion should come with a manual one-time way to keep
+    the data first, since delete_campaign below removes both the DB rows
+    and the on-disk session directory permanently. Only those two files per
+    session (not the raw per-speaker tracks or intermediate speaker JSONs)
+    — matches "transcripts and audio files," not a full internal-data dump.
+
+    Builds the zip in a background thread and streams completed chunks to
+    the client as they're produced (via a small bounded queue, so a slow
+    client can't force the whole archive to buffer in memory either) rather
+    than blocking the whole request on building it first — see
+    _ChunkedZipWriter for why that mattered in practice, not just in theory.
+    """
     campaign = crud.get_campaign_by_slug(db, slug)
     if not campaign:
         raise HTTPException(404, "Campaign not found")
 
     sessions_dir = get_sessions_dir(slug)
-    tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
-    tmp.close()
-    with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as zf:
-        if sessions_dir.exists():
-            for session_dir in sorted(sessions_dir.iterdir()):
-                if not session_dir.is_dir():
-                    continue
-                transcript = session_dir / "transcript.md"
-                audio = session_dir / "merged.mp3"
-                if transcript.exists():
-                    zf.write(transcript, f"{session_dir.name}/transcript.md")
-                if audio.exists():
-                    zf.write(audio, f"{session_dir.name}/merged.mp3")
+    chunk_queue: "queue.Queue" = queue.Queue(maxsize=32)
+    _DONE = object()
+
+    def build_zip():
+        try:
+            writer = _ChunkedZipWriter(chunk_queue)
+            with zipfile.ZipFile(writer, "w", zipfile.ZIP_DEFLATED) as zf:
+                if sessions_dir.exists():
+                    for session_dir in sorted(sessions_dir.iterdir()):
+                        if not session_dir.is_dir():
+                            continue
+                        transcript = session_dir / "transcript.md"
+                        audio = session_dir / "merged.mp3"
+                        if transcript.exists():
+                            zf.write(transcript, f"{session_dir.name}/transcript.md")
+                        if audio.exists():
+                            # merged.mp3 is already compressed — DEFLATEing it
+                            # wastes real CPU time for near-zero size benefit;
+                            # STORED just copies the bytes through.
+                            zf.write(audio, f"{session_dir.name}/merged.mp3", compress_type=zipfile.ZIP_STORED)
+        finally:
+            chunk_queue.put(_DONE)
+
+    threading.Thread(target=build_zip, daemon=True).start()
+
+    def stream():
+        while True:
+            chunk = chunk_queue.get()
+            if chunk is _DONE:
+                return
+            yield chunk
 
     filename = f"{slug}-export-{datetime.utcnow().strftime('%Y%m%d')}.zip"
-    # BackgroundTask deletes the temp file only after the response has
-    # actually been sent — FileResponse doesn't clean up after itself, and
-    # this endpoint would otherwise leak a temp zip on every export.
-    return FileResponse(
-        tmp.name, media_type="application/zip", filename=filename,
-        background=BackgroundTask(lambda: os.unlink(tmp.name)),
+    return StreamingResponse(
+        stream(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
