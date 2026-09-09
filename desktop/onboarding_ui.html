@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DnD Transcriber Worker — Setup</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #1e2130; --panel2: #252840; --border: #2e3350;
+    --accent: #7c6af7; --accent2: #5db0f7; --text: #d4d8f0; --muted: #8890b0;
+    --ok: #4caf82; --warn: #f5c543; --err: #e05c68;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; padding: 28px 32px;
+  }
+  h1 { font-size: 18px; color: var(--accent); margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 22px; font-size: 13px; }
+  .field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  .row { display: flex; gap: 8px; }
+  input[type=text], input[type=password] {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 5px;
+    padding: 8px 10px; color: var(--text); font-size: 13px; outline: none; flex: 1;
+  }
+  input:focus { border-color: var(--accent); }
+  .btn {
+    background: var(--accent); color: #fff; border: none; border-radius: 5px;
+    padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .btn:hover { opacity: .85; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.secondary { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+  .checkbox-row label { font-size: 13px; color: var(--text); }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  #validate-msg, #status-msg { font-size: 12px; margin-top: 6px; min-height: 16px; }
+  .ok { color: var(--ok); } .err { color: var(--err); }
+  #progress-panel {
+    display: none; background: #0a0c12; border: 1px solid var(--border); border-radius: 5px;
+    font-family: 'Consolas', 'Fira Mono', monospace; font-size: 12px; color: #9fa8d4;
+    height: 220px; overflow-y: auto; padding: 10px 12px; white-space: pre-wrap;
+    word-break: break-all; margin-top: 18px;
+  }
+  .actions { display: flex; gap: 10px; margin-top: 20px; }
+</style>
+</head>
+<body>
+  <h1>DnD Transcriber Worker</h1>
+  <p class="sub">One-time setup — installs the transcription engine locally and connects to your campaign.</p>
+
+  <div class="field">
+    <label>Server URL</label>
+    <input type="text" id="server_url">
+  </div>
+
+  <div class="field">
+    <label>API Key</label>
+    <div class="row">
+      <input type="password" id="api_key" placeholder="Paste your worker API key from campaign settings">
+      <button class="btn secondary" id="validate-btn" onclick="validateKey()">Validate</button>
+    </div>
+    <div id="validate-msg"></div>
+  </div>
+
+  <div class="field">
+    <label>Campaign Slug <span class="hint">(optional — auto-detected from your API key if left blank)</span></label>
+    <input type="text" id="campaign_slug" placeholder="auto-detected">
+  </div>
+
+  <div class="field">
+    <label>Audio Folder <span class="hint">(where session recordings are saved/watched)</span></label>
+    <div class="row">
+      <input type="text" id="audio_dir" placeholder="C:\Users\you\Desktop\worker_audio">
+      <button class="btn secondary" onclick="pickAudioDir()">Browse…</button>
+    </div>
+  </div>
+
+  <div class="checkbox-row">
+    <input type="checkbox" id="include_canary">
+    <label for="include_canary">Enable NVIDIA Canary engine (optional, ~2GB extra download, experimental on Windows)</label>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="setup-btn" onclick="runSetup()">Install &amp; Continue</button>
+  </div>
+
+  <div id="progress-panel"></div>
+  <div id="status-msg"></div>
+
+<script>
+let validated = false;
+
+function whenReady(fn) {
+  if (window.pywebview && window.pywebview.api) { fn(); return; }
+  window.addEventListener('pywebviewready', fn);
+}
+
+whenReady(async () => {
+  try {
+    document.getElementById('server_url').value = await window.pywebview.api.default_server_url();
+  } catch (e) { /* fall back to empty — user can type it */ }
+});
+
+async function validateKey() {
+  const server_url = document.getElementById('server_url').value.trim();
+  const api_key = document.getElementById('api_key').value.trim();
+  const msg = document.getElementById('validate-msg');
+  if (!server_url || !api_key) {
+    msg.textContent = 'Enter a server URL and API key first.';
+    msg.className = 'err';
+    return;
+  }
+  msg.textContent = 'Checking…';
+  msg.className = '';
+  try {
+    const result = await window.pywebview.api.validate_key(server_url, api_key);
+    if (result.ok) {
+      validated = true;
+      msg.textContent = `Connected — campaign: ${result.campaign_name || result.campaign_slug}`;
+      msg.className = 'ok';
+      const slugField = document.getElementById('campaign_slug');
+      if (!slugField.value && result.campaign_slug) slugField.value = result.campaign_slug;
+    } else {
+      validated = false;
+      msg.textContent = result.error || 'Validation failed.';
+      msg.className = 'err';
+    }
+  } catch (e) {
+    validated = false;
+    msg.textContent = 'Error: ' + e;
+    msg.className = 'err';
+  }
+}
+
+async function pickAudioDir() {
+  try {
+    const dir = await window.pywebview.api.pick_audio_dir();
+    if (dir) document.getElementById('audio_dir').value = dir;
+  } catch (e) { console.warn('folder picker failed', e); }
+}
+
+window.onSetupProgress = function(line) {
+  const panel = document.getElementById('progress-panel');
+  panel.style.display = 'block';
+  panel.textContent += line + '\n';
+  panel.scrollTop = panel.scrollHeight;
+};
+
+async function runSetup() {
+  const server_url = document.getElementById('server_url').value.trim();
+  const api_key = document.getElementById('api_key').value.trim();
+  const campaign_slug = document.getElementById('campaign_slug').value.trim();
+  const audio_dir = document.getElementById('audio_dir').value.trim();
+  const include_canary = document.getElementById('include_canary').checked;
+  const statusMsg = document.getElementById('status-msg');
+  const setupBtn = document.getElementById('setup-btn');
+
+  if (!server_url || !api_key || !audio_dir) {
+    statusMsg.textContent = 'Server URL, API key, and audio folder are all required.';
+    statusMsg.className = 'err';
+    return;
+  }
+  if (!validated) {
+    statusMsg.textContent = 'Click "Validate" to confirm your API key before continuing.';
+    statusMsg.className = 'err';
+    return;
+  }
+
+  setupBtn.disabled = true;
+  statusMsg.textContent = 'Installing — this can take several minutes on the first run (PyTorch is a multi-GB download)…';
+  statusMsg.className = '';
+  document.getElementById('progress-panel').textContent = '';
+
+  try {
+    const result = await window.pywebview.api.run_setup({
+      server_url, api_key, campaign_slug, audio_dir, include_canary,
+    });
+    if (!result.ok) {
+      statusMsg.textContent = 'Setup failed: ' + result.error;
+      statusMsg.className = 'err';
+      setupBtn.disabled = false;
+      return;
+    }
+    statusMsg.textContent = 'Done — starting the app…';
+    statusMsg.className = 'ok';
+    await window.pywebview.api.finish_onboarding();
+  } catch (e) {
+    statusMsg.textContent = 'Error: ' + e;
+    statusMsg.className = 'err';
+    setupBtn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>

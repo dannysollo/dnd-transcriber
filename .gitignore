@@ -22,3 +22,11 @@ campaigns/
 vocab.txt
 .env
 worker/worker.yaml
+
+# Desktop launcher build output and unbuildable-from-here binary resources
+# (PyInstaller dist, a static ffmpeg.exe, the WebView2 bootstrapper) — these
+# get produced/added on the Windows machine that actually builds the .exe,
+# not checked into source control.
+desktop/build/dist/
+desktop/build/work/
+desktop/resources/
