@@ -1,6 +1,6 @@
 import { useToast } from '../Toast'
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import { useApiUrl } from '../CampaignContext'
 
@@ -41,8 +41,13 @@ interface Invite {
 
 export default function CampaignSettingsPage() {
   const { slug } = useParams<{ slug: string }>()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const { toast } = useToast()
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [members, setMembers] = useState<Member[]>([])
   const [invites, setInvites] = useState<Invite[]>([])
@@ -212,7 +217,19 @@ export default function CampaignSettingsPage() {
 
   useEffect(() => { if (slug) load() }, [slug])
   useEffect(() => { if (slug && myRole === 'dm') loadWorkerKey() }, [slug, myRole])
-  useEffect(() => { if (tab === 'config' && !config && !configLoading) loadConfig() }, [tab])
+  // `config` (which includes `players`) was never reset or re-fetched on a
+  // slug change — this effect's dependency array was [tab] only, and its
+  // `!config` guard (meant to avoid a redundant re-fetch on unrelated
+  // re-renders) meant that once loaded for one campaign, switching to a
+  // DIFFERENT campaign and opening its Config tab kept showing the first
+  // campaign's stale config (players included) instead of fetching fresh —
+  // a real bug, not just a missing-players-on-a-new-campaign issue: it
+  // could just as easily show and let you edit/save someone else's
+  // corrections/vocab onto the wrong campaign. Clearing `config` on slug
+  // change AND fetching on slug change (not just tab change) fixes both
+  // the stale-display and the accidental-cross-campaign-save cases.
+  useEffect(() => { setConfig(null); setConfigSaved(false) }, [slug])
+  useEffect(() => { if (tab === 'config') loadConfig() }, [tab, slug])
 
   const saveSettings = async () => {
     if (!campaign) return
@@ -238,6 +255,33 @@ export default function CampaignSettingsPage() {
       else toast('Failed to save settings', 'error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const exportCampaignData = () => {
+    // Plain navigation rather than fetch+blob: the export endpoint returns
+    // a real file download (Content-Disposition: attachment), and the
+    // browser/WebView2 handles that natively — no need to juggle blobs.
+    setExporting(true)
+    window.location.href = `/campaigns/${slug}/export`
+    setTimeout(() => setExporting(false), 3000)
+  }
+
+  const deleteCampaign = async () => {
+    if (!campaign || deleteConfirmText !== campaign.slug) return
+    setDeleting(true)
+    try {
+      const r = await fetch(`/campaigns/${slug}`, { method: 'DELETE' })
+      if (r.ok) {
+        toast(`"${campaign.name}" deleted.`, 'success')
+        navigate('/campaigns')
+      } else {
+        toast('Failed to delete campaign', 'error')
+        setDeleting(false)
+      }
+    } catch {
+      toast('Failed to delete campaign', 'error')
+      setDeleting(false)
     }
   }
 
@@ -401,6 +445,95 @@ export default function CampaignSettingsPage() {
           >
             {saving ? 'Saving...' : 'Save Settings'}
           </button>
+
+          {myRole === 'dm' && (
+            <div style={{
+              marginTop: '20px', padding: '20px', border: '1px solid rgba(248,113,113,0.3)',
+              borderRadius: '10px', background: 'rgba(248,113,113,0.05)',
+              display: 'flex', flexDirection: 'column', gap: '14px',
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#f87171' }}>Danger Zone</div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '13px', color: '#e2e8f0' }}>Download all session data</div>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>
+                    Every session's transcript and merged audio, zipped. Recommended before deleting.
+                  </div>
+                </div>
+                <button
+                  onClick={exportCampaignData}
+                  disabled={exporting}
+                  style={{
+                    background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
+                    borderRadius: 6, color: '#93c5fd', padding: '6px 14px', fontSize: 12,
+                    fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                    opacity: exporting ? 0.6 : 1,
+                  }}
+                >
+                  {exporting ? 'Preparing…' : 'Download All Data'}
+                </button>
+              </div>
+
+              <div style={{ height: 1, background: 'rgba(248,113,113,0.2)' }} />
+
+              {!showDeleteConfirm ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', color: '#e2e8f0' }}>Delete this campaign</div>
+                    <div style={{ fontSize: '11px', color: '#64748b' }}>
+                      Permanently removes all sessions, transcripts, audio, members, and invites. Cannot be undone.
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    style={{
+                      background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)',
+                      borderRadius: 6, color: '#f87171', padding: '6px 14px', fontSize: 12,
+                      fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Delete Campaign
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ fontSize: '12px', color: '#f87171' }}>
+                    This cannot be undone. Type <strong>{campaign?.slug}</strong> to confirm.
+                  </div>
+                  <input
+                    value={deleteConfirmText}
+                    onChange={e => setDeleteConfirmText(e.target.value)}
+                    placeholder={campaign?.slug}
+                    style={{ ...inputStyle, maxWidth: '280px' }}
+                    autoComplete="off"
+                  />
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={deleteCampaign}
+                      disabled={deleting || deleteConfirmText !== campaign?.slug}
+                      style={{
+                        background: '#f87171', border: 'none', borderRadius: 6, color: '#1e1b1b',
+                        padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        opacity: (deleting || deleteConfirmText !== campaign?.slug) ? 0.5 : 1,
+                      }}
+                    >
+                      {deleting ? 'Deleting…' : 'Permanently Delete'}
+                    </button>
+                    <button
+                      onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText('') }}
+                      style={{
+                        background: 'transparent', border: '1px solid var(--accent3)', borderRadius: 6,
+                        color: '#94a3b8', padding: '6px 14px', fontSize: 12, cursor: 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
