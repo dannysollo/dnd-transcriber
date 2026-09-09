@@ -448,41 +448,46 @@ export default function CampaignSettingsPage() {
 
           {myRole === 'dm' && (
             <div style={{
-              marginTop: '20px', padding: '20px', border: '1px solid rgba(248,113,113,0.3)',
+              marginTop: '20px', padding: '20px', border: '1px solid var(--accent3)',
+              borderRadius: '10px', background: 'var(--bg-elevated)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+            }}>
+              <div>
+                <div style={{ fontSize: '13px', color: '#e2e8f0' }}>Download all session data</div>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>
+                  Every session's transcript and merged audio, zipped — a manual backup, anytime.
+                </div>
+              </div>
+              <button
+                onClick={exportCampaignData}
+                disabled={exporting}
+                style={{
+                  background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
+                  borderRadius: 6, color: '#93c5fd', padding: '6px 14px', fontSize: 12,
+                  fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                  opacity: exporting ? 0.6 : 1,
+                }}
+              >
+                {exporting ? 'Preparing…' : 'Download All Data'}
+              </button>
+            </div>
+          )}
+
+          {myRole === 'dm' && (
+            <div style={{
+              marginTop: '4px', padding: '20px', border: '1px solid rgba(248,113,113,0.3)',
               borderRadius: '10px', background: 'rgba(248,113,113,0.05)',
               display: 'flex', flexDirection: 'column', gap: '14px',
             }}>
               <div style={{ fontSize: '13px', fontWeight: 600, color: '#f87171' }}>Danger Zone</div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                <div>
-                  <div style={{ fontSize: '13px', color: '#e2e8f0' }}>Download all session data</div>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>
-                    Every session's transcript and merged audio, zipped. Recommended before deleting.
-                  </div>
-                </div>
-                <button
-                  onClick={exportCampaignData}
-                  disabled={exporting}
-                  style={{
-                    background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
-                    borderRadius: 6, color: '#93c5fd', padding: '6px 14px', fontSize: 12,
-                    fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                    opacity: exporting ? 0.6 : 1,
-                  }}
-                >
-                  {exporting ? 'Preparing…' : 'Download All Data'}
-                </button>
-              </div>
-
-              <div style={{ height: 1, background: 'rgba(248,113,113,0.2)' }} />
 
               {!showDeleteConfirm ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                   <div>
                     <div style={{ fontSize: '13px', color: '#e2e8f0' }}>Delete this campaign</div>
                     <div style={{ fontSize: '11px', color: '#64748b' }}>
-                      Permanently removes all sessions, transcripts, audio, members, and invites. Cannot be undone.
+                      Permanently removes all sessions, transcripts, audio, members, and invites. Cannot be undone —
+                      consider downloading a backup above first.
                     </div>
                   </div>
                   <button
