@@ -60,7 +60,20 @@ if command -v nvidia-smi &>/dev/null; then
     pip install torch torchaudio --quiet
   else
     echo "  Using CUDA wheel index: $CUDA_INDEX"
-    pip install torch torchaudio --index-url "$CUDA_INDEX" --quiet
+    # --no-deps: confirmed via a real failure that installing torch's full
+    # dependency tree FROM this index breaks. It mirrors common transitive
+    # deps (typing_extensions, jinja2, etc.) to be self-contained, but its
+    # metadata has package-name casing that newer pip versions reject as a
+    # hard mismatch for some of them — the wheel gets discarded, pip falls
+    # back to building from source, which needs flit_core as a build
+    # dependency, and flit_core isn't on this index at all (a build tool,
+    # not anything torch depends on at runtime). "No matching distribution
+    # for flit_core" was the actual resulting error.
+    pip install torch torchaudio --index-url "$CUDA_INDEX" --no-deps --quiet
+    # Torch's actual runtime deps, deliberately from plain PyPI (not the
+    # CUDA index --no-deps skipped above) — generic, non-CUDA-specific
+    # packages, no reason to route them through PyTorch's index at all.
+    pip install filelock typing_extensions sympy networkx jinja2 fsspec setuptools --quiet
   fi
 else
   echo "  No NVIDIA GPU detected — installing CPU torch (transcription will be slow)..."

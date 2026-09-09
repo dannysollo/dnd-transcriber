@@ -226,6 +226,7 @@ def run_worker_setup(progress: ProgressFn = _noop, include_canary: bool = False)
 
     progress("Installing PyTorch (this is the largest download, several GB)...")
     torch_cmd = [str(vpy), "-m", "pip", "install", "torch", "torchaudio"]
+    install_torch_deps_from_pypi = False
     if gpu:
         # PyTorch's CUDA wheel index gets a new cuNNN name periodically as
         # CUDA majors advance, and old ones don't get new Python-version
@@ -243,7 +244,24 @@ def run_worker_setup(progress: ProgressFn = _noop, include_canary: bool = False)
         if cuda_index.returncode == 0 and cuda_index.stdout.strip():
             index_url = cuda_index.stdout.strip()
             progress(f"Using CUDA wheel index: {index_url}")
-            torch_cmd += ["--index-url", index_url]
+            # --no-deps: confirmed via a real failure (and reproduced
+            # directly) that installing torch's full dependency tree FROM
+            # this index breaks. PyTorch's index mirrors common transitive
+            # deps (typing_extensions, jinja2, etc.) to be self-contained,
+            # but its metadata has package-name casing (e.g.
+            # "typing_extensions" vs the normalized "typing-extensions")
+            # that pip 26.x's stricter validation rejects as a hard
+            # mismatch for some of them — it discards the (perfectly good)
+            # wheel and falls back to building from source, which then
+            # needs flit_core as a build dependency. flit_core isn't on
+            # this index at all (it's a build tool, not anything torch
+            # depends on at runtime), so that fails too: "No matching
+            # distribution for flit_core<4,>=3.11" was the actual error
+            # this produced. Installing only torch/torchaudio themselves
+            # from here, then their real dependencies from plain PyPI
+            # separately below, sidesteps the whole index-mirroring quirk.
+            torch_cmd += ["--index-url", index_url, "--no-deps"]
+            install_torch_deps_from_pypi = True
         else:
             progress("Could not find a matching CUDA wheel index for this Python version — "
                      "falling back to CPU-only PyTorch. Transcription will still work, just "
@@ -251,6 +269,21 @@ def run_worker_setup(progress: ProgressFn = _noop, include_canary: bool = False)
     rc = _stream_subprocess(torch_cmd, progress)
     if rc != 0:
         raise RuntimeError(f"PyTorch install failed (exit code {rc}). See the log above for details.")
+
+    if install_torch_deps_from_pypi:
+        # Deliberately from plain PyPI, not the CUDA index --no-deps
+        # skipped above — see the comment on that flag. These are generic,
+        # non-CUDA-specific packages, so there's no reason to route them
+        # through PyTorch's index at all. List confirmed directly against
+        # a real torch 2.14.0 install's own dependency metadata.
+        progress("Installing PyTorch's dependencies...")
+        rc = _stream_subprocess(
+            [str(vpy), "-m", "pip", "install", "filelock", "typing_extensions",
+             "sympy", "networkx", "jinja2", "fsspec", "setuptools"],
+            progress,
+        )
+        if rc != 0:
+            raise RuntimeError(f"Installing PyTorch's dependencies failed (exit code {rc}). See the log above for details.")
 
     # Install everything except nemo_toolkit up front — it's the one line in
     # requirements.txt that's both huge (~2GB) and unverified on native

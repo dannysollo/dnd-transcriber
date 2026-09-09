@@ -69,11 +69,27 @@ if errorlevel 1 (
         pip install torch torchaudio --quiet
     ) else (
         echo   Using CUDA wheel index: !CUDA_INDEX!
-        pip install torch torchaudio --index-url !CUDA_INDEX! --quiet
+        REM --no-deps: confirmed via a real failure that installing torch's
+        REM full dependency tree FROM this index breaks. It mirrors common
+        REM transitive deps (typing_extensions, jinja2, etc.) to be
+        REM self-contained, but its metadata has package-name casing that
+        REM newer pip versions reject as a hard mismatch for some of them --
+        REM the wheel gets discarded, pip falls back to building from
+        REM source, which needs flit_core as a build dependency, and
+        REM flit_core isn't on this index at all (a build tool, not
+        REM anything torch depends on at runtime). "No matching
+        REM distribution for flit_core" was the actual resulting error.
+        pip install torch torchaudio --index-url !CUDA_INDEX! --no-deps --quiet
         if errorlevel 1 (
             echo   ERROR: CUDA torch install failed even with a matching index found.
             echo   Falling back to CPU-only torch -- transcription will be much slower.
             pip install torch torchaudio --quiet
+        ) else (
+            REM Torch's actual runtime deps, deliberately from plain PyPI
+            REM (not the CUDA index --no-deps skipped above) -- generic,
+            REM non-CUDA-specific packages, no reason to route them through
+            REM PyTorch's index at all.
+            pip install filelock typing_extensions sympy networkx jinja2 fsspec setuptools --quiet
         )
     )
 )
