@@ -22,7 +22,7 @@
 ; Build with: iscc desktop\installer\dnd-transcriber-worker.iss
 
 #define MyAppName "DnD Transcriber Worker"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "dannysollo"
 #define MyAppExeName "dnd-transcriber-worker.exe"
 
