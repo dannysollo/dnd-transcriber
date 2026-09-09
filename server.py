@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import zipfile
 from pathlib import Path
@@ -24,6 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
 from auth import discord as discord_auth
 from auth.jwt import COOKIE_NAME, create_access_token
@@ -1340,6 +1342,69 @@ def patch_campaign(
         "description": campaign.description,
         "settings": merged_settings,
     }
+
+
+@app.get("/campaigns/{slug}/export")
+def export_campaign(
+    slug: str,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    """Zip every session's transcript.md + merged.mp3 into one download.
+    Offered specifically alongside campaign deletion, per an explicit ask:
+    deletion should come with a manual one-time way to keep the data first,
+    since delete_campaign below removes both the DB rows and the on-disk
+    session directory permanently. Only those two files per session (not
+    the raw per-speaker tracks or intermediate speaker JSONs) — matches
+    "transcripts and audio files," not a full internal-data dump."""
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+
+    sessions_dir = get_sessions_dir(slug)
+    tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    tmp.close()
+    with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as zf:
+        if sessions_dir.exists():
+            for session_dir in sorted(sessions_dir.iterdir()):
+                if not session_dir.is_dir():
+                    continue
+                transcript = session_dir / "transcript.md"
+                audio = session_dir / "merged.mp3"
+                if transcript.exists():
+                    zf.write(transcript, f"{session_dir.name}/transcript.md")
+                if audio.exists():
+                    zf.write(audio, f"{session_dir.name}/merged.mp3")
+
+    filename = f"{slug}-export-{datetime.utcnow().strftime('%Y%m%d')}.zip"
+    # BackgroundTask deletes the temp file only after the response has
+    # actually been sent — FileResponse doesn't clean up after itself, and
+    # this endpoint would otherwise leak a temp zip on every export.
+    return FileResponse(
+        tmp.name, media_type="application/zip", filename=filename,
+        background=BackgroundTask(lambda: os.unlink(tmp.name)),
+    )
+
+
+@app.delete("/campaigns/{slug}", status_code=204)
+def delete_campaign(
+    slug: str,
+    _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
+):
+    """Permanently delete a campaign: DB rows (members, invites,
+    transcription jobs, shares, transcript edits — see
+    crud.delete_campaign_cascade for why these need explicit cleanup) and
+    its on-disk data directory (sessions, transcripts, audio, config.yaml).
+    Irreversible — the frontend is expected to make the user confirm by
+    typing the campaign's name before calling this."""
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    crud.delete_campaign_cascade(db, campaign)
+    campaign_dir = BASE_DIR / "campaigns" / slug
+    if campaign_dir.exists():
+        shutil.rmtree(campaign_dir, ignore_errors=True)
 
 
 @app.get("/campaigns/{slug}/members")

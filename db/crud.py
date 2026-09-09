@@ -107,6 +107,29 @@ def update_campaign_settings(db: Session, campaign: Campaign, settings_dict: dic
     return campaign
 
 
+def delete_campaign_cascade(db: Session, campaign: Campaign) -> None:
+    """Delete a campaign and every row that references it.
+
+    None of Campaign's relationships (members, invites) declare a cascade,
+    and there's no ondelete="CASCADE" on the FK columns either — and this
+    app's SQLite connection never sets PRAGMA foreign_keys=ON (see
+    db/database.py), so SQLite won't enforce or cascade the delete for us.
+    A plain db.delete(campaign) would silently leave orphaned rows behind
+    in all five tables that reference campaign_id, not raise an error. Must
+    delete children explicitly, in FK-safe order, before the campaign row
+    itself. Doesn't touch the campaign's on-disk data (sessions, transcripts,
+    config.yaml) — callers that want that gone too need to do it separately
+    (see server.py's delete_campaign route).
+    """
+    db.query(TranscriptEdit).filter(TranscriptEdit.campaign_id == campaign.id).delete()
+    db.query(SessionShare).filter(SessionShare.campaign_id == campaign.id).delete()
+    db.query(TranscriptionJob).filter(TranscriptionJob.campaign_id == campaign.id).delete()
+    db.query(CampaignInvite).filter(CampaignInvite.campaign_id == campaign.id).delete()
+    db.query(CampaignMember).filter(CampaignMember.campaign_id == campaign.id).delete()
+    db.delete(campaign)
+    db.commit()
+
+
 # ─── CampaignMember ───────────────────────────────────────────────────────────
 
 def get_member(db: Session, campaign_id: int, user_id: int) -> Optional[CampaignMember]:
