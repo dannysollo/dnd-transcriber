@@ -102,13 +102,15 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    # TEMPORARY: True (shows a console with stdout/stderr) for this first
-    # build specifically, since a windowless exe that fails on startup would
-    # otherwise just silently vanish with no way to see why — this is a real
-    # possibility given how much of this (WebView2 DLL placement, pythonnet
-    # freezing) is unverified until it's actually run. Flip to False once a
-    # build is confirmed working end-to-end.
-    console=True,
+    # Was True (shows a console with stdout/stderr) through the first builds,
+    # since a windowless exe failing on startup would otherwise just silently
+    # vanish with no way to see why — a real risk while WebView2 DLL
+    # placement/pythonnet freezing were unverified. Everything's since been
+    # confirmed working end-to-end (this exact build, through the installer),
+    # so off by default now — see app.py's _redirect_stdio_for_windowed_build
+    # for where output goes instead (paths.launcher_log_path()) so a future
+    # startup failure is still debuggable without needing to flip this back.
+    console=False,
     icon=str(DESKTOP_DIR / "assets" / "icon.ico") if (DESKTOP_DIR / "assets" / "icon.ico").exists() else None,
     # PyInstaller >=6.0 defaults onedir builds to nesting everything
     # (bundled data files included) into a _internal/ subfolder next to the

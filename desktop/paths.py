@@ -83,6 +83,13 @@ def worker_log_path() -> Path:
     return data_dir() / "worker.log"
 
 
+def launcher_log_path() -> Path:
+    """Where the launcher shell's own stdout/stderr gets redirected once
+    built windowless (see app.py's main()). Distinct from worker_log_path()
+    above, which is the separate worker *subprocess's* output."""
+    return data_dir() / "launcher.log"
+
+
 def bundled_ffmpeg() -> Path | None:
     """Path to a bundled ffmpeg.exe, if the installer shipped one. Returns
     None if not present (dev/source runs, or a build without it bundled) —

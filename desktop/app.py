@@ -38,6 +38,7 @@ a close, webview.start(func=..., gui=..., icon=...)) — but the GUI itself
 (WebView2 rendering, native dialogs, tray notifications) has NOT been run on
 a real Windows display; that's Milestones 1-2 in the desktop launcher plan.
 """
+import os
 import sys
 import threading
 import time
@@ -327,8 +328,25 @@ def _on_gui_start() -> None:
         threading.Thread(target=_start_worker_and_load_site, daemon=True).start()
 
 
+def _redirect_stdio_for_windowed_build() -> None:
+    """PyInstaller's windowed mode (console=False, now that everything's
+    confirmed working end-to-end) sets sys.stdout/sys.stderr to None on
+    Windows, not just "invisible" — the many bare print() calls throughout
+    this file would start raising AttributeError instead of silently doing
+    nothing, a well-known PyInstaller gotcha. Redirecting to a log file
+    both avoids that crash and keeps debugging possible without a console,
+    same reasoning as worker/main.py's own TeeStream for the worker
+    subprocess (see paths.worker_log_path/launcher_log_path)."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return  # real console attached (e.g. DND_DEBUG runs from source) — leave it alone
+    log_file = open(paths.launcher_log_path(), "a", encoding="utf-8", errors="replace", buffering=1)
+    sys.stdout = log_file
+    sys.stderr = log_file
+
+
 def main() -> None:
     global main_window
+    _redirect_stdio_for_windowed_build()
 
     if onboarding.needs_onboarding():
         main_window = webview.create_window(
@@ -346,14 +364,16 @@ def main() -> None:
     main_window.events.closing += _on_closing
 
     icon = paths.icon_path()
-    # debug=True enables right-click "Inspect" (WebView2 devtools) — needed
-    # right now to actually see JS-side errors during development, since
-    # without it there is currently no way to observe a JS failure at all
-    # (confirmed: a real failure produced no visible output anywhere).
-    # TODO: flip to False (or gate behind an env var) once the desktop app
-    # is past active debugging — devtools access isn't something to ship to
-    # end users by default.
-    webview.start(_on_gui_start, gui="edgechromium", icon=str(icon) if icon else None, debug=True)
+    # debug=True (right-click "Inspect"/WebView2 devtools) was on through
+    # active development, when there was otherwise no way to see a JS-side
+    # failure at all (confirmed: one produced no visible output anywhere
+    # without it). Everything's since been verified working end-to-end
+    # (onboarding, worker lifecycle, tray, installer) — off by default now
+    # that it's not needed for that, since devtools access isn't something
+    # to ship to end users. DND_DEBUG=1 brings it back for future debugging
+    # without editing source.
+    debug = os.environ.get("DND_DEBUG") == "1"
+    webview.start(_on_gui_start, gui="edgechromium", icon=str(icon) if icon else None, debug=debug)
     sys.exit(0)
 
 
