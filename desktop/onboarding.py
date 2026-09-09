@@ -179,10 +179,17 @@ def run_worker_setup(progress: ProgressFn = _noop, include_canary: bool = False)
     # Windows, so it's handled as its own optional, skippable step rather
     # than silently failing the whole install if it doesn't work out here.
     progress("Installing worker dependencies...")
-    reqs = [
-        line.strip() for line in requirements.read_text().splitlines()
-        if line.strip() and not line.strip().startswith("#") and not line.strip().startswith("nemo_toolkit")
-    ]
+    # requirements.txt has real inline comments (e.g. "flask>=2.0    # Local
+    # web dashboard") — splitting on "#" strips those before pip ever sees
+    # the line. A prior version only filtered out FULLY-commented lines
+    # (line.strip().startswith("#")) and left inline comments attached,
+    # which produced a malformed requirement string pip choked on with a
+    # confusing parser error (confirmed on a real run).
+    reqs = []
+    for raw_line in requirements.read_text().splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if line and not line.startswith("nemo_toolkit"):
+            reqs.append(line)
     rc = _stream_subprocess([str(vpy), "-m", "pip", "install", *reqs], progress)
     if rc != 0:
         raise RuntimeError(f"Dependency install failed (exit code {rc}). See the log above for details.")

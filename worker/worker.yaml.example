@@ -22,10 +22,3 @@ poll_interval: 30
 # diarize_tracks:           # Diarize only these tracks (partial filename match)
 #   - dannysollo
 # # diarize_all: true       # Or diarize every track
-
-# ── Craig Watcher (optional) ──────────────────────────────────────────────────
-# Uncomment to enable automatic recording download when Craig DMs you.
-# discord_token: YOUR_DISCORD_USER_TOKEN  # Your personal Discord token (not a bot token)
-# session_name_format: "{date}"           # Options: {date}, {date}-{channel}, {recording_id}
-# craig_channel_filter:                   # Optional: only process recordings from specific guilds
-#   - "1113899568355098775"

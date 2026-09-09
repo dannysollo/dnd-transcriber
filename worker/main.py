@@ -1,19 +1,15 @@
 """
 worker/main.py — DnD Transcriber worker daemon.
 
-Runs both the transcription poll loop and the Craig Watcher in a single process.
-The Discord client owns the async event loop; the poll loop runs in a background thread.
+Runs the transcription poll loop and the analysis poll loop as background
+threads, blocking the main thread until stopped.
 
 Usage:
     python worker/main.py
     python worker/main.py --config /path/to/worker.yaml
-
-Craig Watcher is enabled automatically when `discord_token` is present in worker.yaml.
 """
 import argparse
-import asyncio
 import collections
-import io
 import os
 import re
 import subprocess
@@ -22,7 +18,6 @@ import tempfile
 import threading
 import time
 import traceback
-import zipfile
 from pathlib import Path
 
 WORKER_VERSION = "1.0.0"
@@ -83,12 +78,6 @@ from client import WorkerClient
 from config import load_config
 from audio import find_audio_files, merge_audio_files
 from transcribe import load_whisper_model, transcribe_session
-
-import requests
-
-# ─── Craig Watcher constants ──────────────────────────────────────────────────
-
-CRAIG_USER_ID = 272937604339466240
 
 
 # ─── Poll loop (runs in a background thread) ─────────────────────────────────
@@ -407,184 +396,6 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
     print("[analysis] Poll loop stopped.")
 
 
-# ─── Craig Watcher helpers ────────────────────────────────────────────────────
-
-def extract_craig_url(message) -> str | None:
-    """Extract download URL from Craig's DM button components or message content."""
-    for component in message.components:
-        children = getattr(component, "children", [component])
-        for child in children:
-            url = getattr(child, "url", None)
-            if url and ("craig.horse/rec/" in url or "craig.chat/rec/" in url):
-                return url
-
-    patterns = [
-        r"https://craig\.horse/rec/[A-Za-z0-9]+\?key=[A-Za-z0-9]+",
-        r"https://craig\.chat/rec/[A-Za-z0-9]+\?key=[A-Za-z0-9]+",
-    ]
-    for pattern in patterns:
-        m = re.search(pattern, message.content or "")
-        if m:
-            return m.group(0)
-        for embed in message.embeds:
-            text = (embed.description or "") + (embed.title or "")
-            m = re.search(pattern, text)
-            if m:
-                return m.group(0)
-    return None
-
-
-def extract_recording_id(message) -> str | None:
-    """Extract Recording ID from Craig's DM text."""
-    m = re.search(r"\*\*Recording ID:\*\*\s*`([A-Za-z0-9]+)`", message.content or "")
-    if m:
-        return m.group(1)
-    url = extract_craig_url(message)
-    if url:
-        m = re.search(r"/rec/([A-Za-z0-9]+)", url)
-        if m:
-            return m.group(1)
-    return None
-
-
-def extract_guild_id(message) -> str | None:
-    m = re.search(r"\((\d{17,20})\)", message.content or "")
-    return m.group(1) if m else None
-
-
-def make_session_name(config: dict, recording_id: str, message) -> str:
-    fmt = config.get("session_name_format", "{date}")
-    from datetime import datetime, timezone
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    channel_match = re.search(r"\*\*Channel:\*\*.*?\(([^)]+)\)\s*\(", message.content or "")
-    channel_raw = channel_match.group(1).strip() if channel_match else "session"
-    channel_name = re.sub(r"[^a-zA-Z0-9_-]", "-", channel_raw)[:30].strip("-")
-    return (fmt
-            .replace("{date}", date_str)
-            .replace("{channel}", channel_name)
-            .replace("{recording_id}", recording_id))
-
-
-def download_and_queue(config: dict, url: str, session_name: str):
-    """Download Craig zip, extract FLACs, create session, queue job."""
-    audio_dir = Path(config["audio_dir"]) / session_name
-    audio_dir.mkdir(parents=True, exist_ok=True)
-
-    # Build FLAC zip download URL
-    # Craig's download page URL has ?key=... — append format/container params
-    if "?" in url:
-        dl_url = url + "&format=flac&container=zip"
-    else:
-        dl_url = url + "?format=flac&container=zip"
-
-    print(f"[craig] Downloading: {dl_url}")
-    r = requests.get(dl_url, timeout=300, stream=True)
-    if r.status_code == 404:
-        raise RuntimeError("Recording not found or expired (404).")
-    if r.status_code == 403:
-        raise RuntimeError("Access denied — invalid key (403).")
-    r.raise_for_status()
-
-    content_type = r.headers.get("content-type", "")
-    if "zip" not in content_type and "octet-stream" not in content_type:
-        raise RuntimeError(f"Unexpected content type: {content_type} — link may be expired or format unsupported.")
-
-    extracted = []
-    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
-        for name in zf.namelist():
-            if name.lower().endswith((".flac", ".ogg", ".wav", ".m4a", ".mp3")):
-                out_path = audio_dir / Path(name).name
-                with zf.open(name) as src, open(out_path, "wb") as dst:
-                    dst.write(src.read())
-                extracted.append(out_path)
-                print(f"[craig]   Extracted: {out_path.name}")
-
-    if not extracted:
-        raise RuntimeError("ZIP contained no audio files.")
-
-    # Create session + queue transcription
-    base = config["server_url"]
-    slug = config["campaign_slug"]
-    headers = {"Authorization": f"Bearer {config['api_key']}", "Content-Type": "application/json"}
-
-    r = requests.post(f"{base}/campaigns/{slug}/sessions", headers=headers,
-                      json={"name": session_name}, timeout=30)
-    if r.status_code == 201:
-        print(f"[craig]   Created session: {session_name}")
-    elif r.status_code == 400:
-        print(f"[craig]   Session already exists: {session_name}")
-    else:
-        r.raise_for_status()
-
-    r = requests.post(f"{base}/campaigns/{slug}/sessions/{session_name}/transcribe",
-                      headers=headers, timeout=30)
-    if r.status_code == 409:
-        print(f"[craig]   Transcription already queued.")
-    elif r.ok:
-        print(f"[craig]   Transcription job queued.")
-    else:
-        print(f"[craig]   Warning: failed to queue transcription: {r.status_code}")
-
-
-# ─── Discord client (Craig Watcher) ──────────────────────────────────────────
-
-def build_discord_client(config: dict, stop_event: threading.Event):
-    try:
-        import discord
-    except ImportError:
-        print("[craig] discord.py-self not installed — Craig Watcher disabled.")
-        print("[craig] Run: pip install discord.py-self")
-        return None
-
-    guild_filter = set(config.get("craig_channel_filter") or [])
-
-    client = discord.Client()
-
-    @client.event
-    async def on_ready():
-        print(f"[craig] Watcher ready. Logged in as {client.user}")
-        print(f"[craig] Watching for DMs from Craig (ID: {CRAIG_USER_ID})")
-        if guild_filter:
-            print(f"[craig] Guild filter: {guild_filter}")
-
-    @client.event
-    async def on_message(message):
-        if not isinstance(message.channel, discord.DMChannel):
-            return
-        if message.author.id != CRAIG_USER_ID:
-            return
-
-        print(f"\n[craig] DM received at {message.created_at.strftime('%H:%M:%S')} UTC")
-
-        if guild_filter:
-            guild_id = extract_guild_id(message)
-            if guild_id and guild_id not in guild_filter:
-                print(f"[craig] Skipping — guild {guild_id} not in filter.")
-                return
-
-        recording_id = extract_recording_id(message)
-        if not recording_id:
-            print("[craig] Could not extract recording ID — skipping.")
-            return
-
-        url = extract_craig_url(message)
-        if not url:
-            print("[craig] Could not find download URL in message components.")
-            print("[craig] Tip: ensure Craig can send interactive components in DMs.")
-            return
-
-        session_name = make_session_name(config, recording_id, message)
-        print(f"[craig] Recording ID: {recording_id} → session: {session_name}")
-
-        try:
-            await asyncio.to_thread(download_and_queue, config, url, session_name)
-            print(f"[craig] ✓ Done — '{session_name}' queued for transcription.")
-        except Exception as e:
-            print(f"[craig] ERROR: {e}")
-
-    return client
-
-
 # ─── Entry point ─────────────────────────────────────────────────────────────
 
 def main():
@@ -646,22 +457,14 @@ def main():
     print(f"  Audio:    {config['audio_dir']}")
     print(f"  Model:    {config.get('whisper_model', '(from campaign settings)')}")
     print(f"  Poll:     every {config['poll_interval']}s")
-    craig_enabled = bool(config.get("discord_token"))
-    print(f"  Craig Watcher: {'enabled' if craig_enabled else 'disabled (no discord_token)'}")
     print("=" * 60)
 
-    # stop_event and runtime_state are created before the GUI server starts
-    # (rather than at their previous spot, right before the poll threads) so
-    # gui_server.init() can be given both up front: stop_event lets its
-    # /api/shutdown route request a graceful stop (used by e.g. a desktop
-    # launcher managing this as a subprocess, which can't cleanly deliver a
-    # Ctrl+C-style KeyboardInterrupt to a console-less Windows child), and
-    # runtime_state is a mutable dict that build_discord_client()'s result
-    # gets stashed into further below — needed because /api/shutdown must be
-    # able to close the Discord client's own asyncio loop too, but that
-    # client doesn't exist yet at gui_server.init() time.
+    # stop_event is created before the GUI server starts so gui_server.init()
+    # can be given it up front: it's what /api/shutdown uses to request a
+    # graceful stop (used by e.g. a desktop launcher managing this as a
+    # subprocess, which can't cleanly deliver a Ctrl+C-style KeyboardInterrupt
+    # to a console-less Windows child).
     stop_event = threading.Event()
-    runtime_state = {"discord_client": None}
 
     # Everything below is wrapped so callers spawning this as a subprocess
     # (e.g. a desktop launcher) can tell a clean stop apart from a crash by
@@ -670,7 +473,7 @@ def main():
         # ── Start GUI server ─────────────────────────────────────────────
         try:
             import gui_server
-            gui_server.init(log_ring, config, args.config, start_time, stop_event, runtime_state)
+            gui_server.init(log_ring, config, args.config, start_time, stop_event)
             gui_thread = threading.Thread(
                 target=gui_server.run_server,
                 kwargs={"port": 8788},
@@ -692,23 +495,13 @@ def main():
         analysis_thread = threading.Thread(target=analysis_poll_loop, args=(config, stop_event), daemon=True)
         analysis_thread.start()
 
-        if craig_enabled:
-            # Discord client owns the main thread's event loop
-            discord_client = build_discord_client(config, stop_event)
-            runtime_state["discord_client"] = discord_client
-            if discord_client:
-                try:
-                    discord_client.run(config["discord_token"])
-                except KeyboardInterrupt:
-                    pass
-                finally:
-                    stop_event.set()
-            else:
-                # discord.py-self not installed — just run poll loop in foreground
-                _run_poll_only(stop_event)
-        else:
-            # No Discord token — run poll loop in foreground
-            _run_poll_only(stop_event)
+        # Block the main thread until stopped (Ctrl+C, or /api/shutdown
+        # setting stop_event from another thread).
+        try:
+            while not stop_event.is_set():
+                time.sleep(1)
+        except KeyboardInterrupt:
+            stop_event.set()
 
         poll_thread.join(timeout=5)
         print("Worker stopped.")
@@ -718,15 +511,6 @@ def main():
         sys.exit(1)
 
     sys.exit(0)
-
-
-def _run_poll_only(stop_event: threading.Event):
-    """Block the main thread until Ctrl+C when Craig Watcher is disabled."""
-    try:
-        while not stop_event.is_set():
-            time.sleep(1)
-    except KeyboardInterrupt:
-        stop_event.set()
 
 
 if __name__ == "__main__":
