@@ -120,4 +120,16 @@ coll = COLLECT(
     strip=False,
     upx=False,
     name="dnd-transcriber-worker",
+    # PyInstaller >=6.0 defaults onedir builds to nesting everything
+    # (bundled data files included) into a _internal/ subfolder next to the
+    # exe. desktop/paths.py resolves bundled files (onboarding_ui.html,
+    # worker/ source, assets/) relative to the exe's own directory — it
+    # predates this change and assumes the pre-6.0 flat layout. Confirmed by
+    # a real build: onboarding_ui.html landed in _internal/ while pywebview's
+    # local HTTP server root (and paths.py) pointed at the dist root,
+    # producing a 404 for a file that was actually right there, one level
+    # off. contents_directory="." restores the flat layout instead of
+    # reworking paths.py's resolution logic, since worker_src_dir()/
+    # bundled_ffmpeg()/icon_path() would all have hit the exact same bug.
+    contents_directory=".",
 )
