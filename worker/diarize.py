@@ -22,10 +22,15 @@ Config (worker.yaml):
 """
 
 import json
+import os
 import tempfile
 from pathlib import Path
 
 from whisper_utils import transcribe_audio
+
+# Overridable so a packaged desktop launcher can point at a bundled ffmpeg.exe
+# without needing it on the system PATH. Defaults to today's PATH-based lookup.
+FFMPEG_BIN = os.environ.get("FFMPEG_BIN", "ffmpeg")
 
 try:
     import torch
@@ -133,7 +138,7 @@ def extract_segment_audio(wav_path: str, start: float, end: float) -> str:
     tmp.close()
     duration = end - start
     cmd = [
-        "ffmpeg", "-y",
+        FFMPEG_BIN, "-y",
         "-ss", str(start),
         "-t", str(max(duration, 0.1)),
         "-i", wav_path,

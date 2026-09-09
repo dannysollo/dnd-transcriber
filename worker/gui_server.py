@@ -16,17 +16,21 @@ _log_buffer = None   # collections.deque — set by main.py
 _config = None       # dict — set by main.py (live reference)
 _config_path = None  # Path — set by main.py
 _start_time = None   # float — set by main.py
+_stop_event = None   # threading.Event — set by main.py (optional, for /api/shutdown)
+_runtime_state = None  # dict — set by main.py (optional; may hold "discord_client")
 
 SENSITIVE_FIELDS = {"api_key", "hf_token", "discord_token"}
 EDITABLE_FIELDS = {"poll_interval", "diarize_speakers", "whisper_model", "audio_dir"}
 
 
-def init(log_buffer, config: dict, config_path, start_time: float):
-    global _log_buffer, _config, _config_path, _start_time
+def init(log_buffer, config: dict, config_path, start_time: float, stop_event=None, runtime_state=None):
+    global _log_buffer, _config, _config_path, _start_time, _stop_event, _runtime_state
     _log_buffer = log_buffer
     _config = config
     _config_path = Path(config_path)
     _start_time = start_time
+    _stop_event = stop_event
+    _runtime_state = runtime_state
 
 
 def _mask(key: str, value) -> str:
@@ -385,6 +389,28 @@ def create_app():
             return jsonify({"ok": True, "updated": list(updates.keys())})
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.route("/api/shutdown", methods=["POST"])
+    def api_shutdown():
+        """Request a graceful stop. Used by the desktop launcher instead of
+        relying on KeyboardInterrupt, which is awkward to deliver to a
+        console-less Windows subprocess. Unblocks _run_poll_only's loop via
+        stop_event directly; for the Craig-Watcher/Discord path (whose
+        asyncio loop owns the main thread and won't observe stop_event on
+        its own), also schedules a clean close() on that loop."""
+        if _stop_event is None:
+            return jsonify({"ok": False, "error": "shutdown not supported by this worker instance"}), 501
+        _stop_event.set()
+        discord_client = (_runtime_state or {}).get("discord_client")
+        if discord_client is not None:
+            try:
+                import asyncio
+                loop = getattr(discord_client, "loop", None)
+                if loop is not None and loop.is_running():
+                    asyncio.run_coroutine_threadsafe(discord_client.close(), loop)
+            except Exception as e:
+                print(f"[gui] Warning: failed to close Discord client cleanly: {e}")
+        return jsonify({"ok": True})
 
     return app
 

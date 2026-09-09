@@ -12,6 +12,7 @@ Players config maps usernames to display names/characters.
 """
 
 import json
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -20,6 +21,10 @@ import diarize as diarize_module
 from whisper_utils import load_whisper_model, transcribe_audio
 
 SAMPLE_RATE = 16000
+
+# Overridable so a packaged desktop launcher can point at a bundled ffmpeg.exe
+# without needing it on the system PATH. Defaults to today's PATH-based lookup.
+FFMPEG_BIN = os.environ.get("FFMPEG_BIN", "ffmpeg")
 
 AUDIO_EXTS = ("*.flac", "*.mp3", "*.ogg", "*.wav", "*.m4a")
 
@@ -69,7 +74,7 @@ def convert_to_wav(input_path: Path) -> str:
     tmp.close()
     for extra_args in [[], ["-f", "ogg"]]:
         cmd = (
-            ["ffmpeg", "-y"]
+            [FFMPEG_BIN, "-y"]
             + extra_args
             + ["-i", str(input_path), "-ar", str(SAMPLE_RATE), "-ac", "1", "-f", "wav", tmp.name]
         )
@@ -195,7 +200,7 @@ def _transcribe_via_vad_chunks(wav_path: str, model, **whisper_kwargs) -> dict:
         tmp = tempfile.NamedTemporaryFile(suffix="_chunk.wav", delete=False)
         tmp.close()
         cmd = [
-            "ffmpeg", "-y",
+            FFMPEG_BIN, "-y",
             "-ss", str(chunk_start),
             "-t", str(chunk_duration),
             "-i", wav_path,

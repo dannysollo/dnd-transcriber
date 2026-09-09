@@ -650,52 +650,74 @@ def main():
     print(f"  Craig Watcher: {'enabled' if craig_enabled else 'disabled (no discord_token)'}")
     print("=" * 60)
 
-    # ── Start GUI server ─────────────────────────────────────────────────────
-    try:
-        import gui_server
-        gui_server.init(log_ring, config, args.config, start_time)
-        gui_thread = threading.Thread(
-            target=gui_server.run_server,
-            kwargs={"port": 8788},
-            daemon=True,
-            name="gui-server",
-        )
-        gui_thread.start()
-        print("[gui] Dashboard at http://localhost:8788")
-    except ImportError as e:
-        print(f"[gui] Warning: could not start GUI server (Flask missing?): {e}")
-    except Exception as e:
-        print(f"[gui] Warning: GUI server failed to start: {e}")
-
+    # stop_event and runtime_state are created before the GUI server starts
+    # (rather than at their previous spot, right before the poll threads) so
+    # gui_server.init() can be given both up front: stop_event lets its
+    # /api/shutdown route request a graceful stop (used by e.g. a desktop
+    # launcher managing this as a subprocess, which can't cleanly deliver a
+    # Ctrl+C-style KeyboardInterrupt to a console-less Windows child), and
+    # runtime_state is a mutable dict that build_discord_client()'s result
+    # gets stashed into further below — needed because /api/shutdown must be
+    # able to close the Discord client's own asyncio loop too, but that
+    # client doesn't exist yet at gui_server.init() time.
     stop_event = threading.Event()
+    runtime_state = {"discord_client": None}
 
-    # Start transcription poll loop in background thread
-    poll_thread = threading.Thread(target=poll_loop, args=(config, stop_event), daemon=True)
-    poll_thread.start()
+    # Everything below is wrapped so callers spawning this as a subprocess
+    # (e.g. a desktop launcher) can tell a clean stop apart from a crash by
+    # exit code, without having to parse stdout.
+    try:
+        # ── Start GUI server ─────────────────────────────────────────────
+        try:
+            import gui_server
+            gui_server.init(log_ring, config, args.config, start_time, stop_event, runtime_state)
+            gui_thread = threading.Thread(
+                target=gui_server.run_server,
+                kwargs={"port": 8788},
+                daemon=True,
+                name="gui-server",
+            )
+            gui_thread.start()
+            print("[gui] Dashboard at http://localhost:8788")
+        except ImportError as e:
+            print(f"[gui] Warning: could not start GUI server (Flask missing?): {e}")
+        except Exception as e:
+            print(f"[gui] Warning: GUI server failed to start: {e}")
 
-    # Start analysis poll loop in background thread
-    analysis_thread = threading.Thread(target=analysis_poll_loop, args=(config, stop_event), daemon=True)
-    analysis_thread.start()
+        # Start transcription poll loop in background thread
+        poll_thread = threading.Thread(target=poll_loop, args=(config, stop_event), daemon=True)
+        poll_thread.start()
 
-    if craig_enabled:
-        # Discord client owns the main thread's event loop
-        discord_client = build_discord_client(config, stop_event)
-        if discord_client:
-            try:
-                discord_client.run(config["discord_token"])
-            except KeyboardInterrupt:
-                pass
-            finally:
-                stop_event.set()
+        # Start analysis poll loop in background thread
+        analysis_thread = threading.Thread(target=analysis_poll_loop, args=(config, stop_event), daemon=True)
+        analysis_thread.start()
+
+        if craig_enabled:
+            # Discord client owns the main thread's event loop
+            discord_client = build_discord_client(config, stop_event)
+            runtime_state["discord_client"] = discord_client
+            if discord_client:
+                try:
+                    discord_client.run(config["discord_token"])
+                except KeyboardInterrupt:
+                    pass
+                finally:
+                    stop_event.set()
+            else:
+                # discord.py-self not installed — just run poll loop in foreground
+                _run_poll_only(stop_event)
         else:
-            # discord.py-self not installed — just run poll loop in foreground
+            # No Discord token — run poll loop in foreground
             _run_poll_only(stop_event)
-    else:
-        # No Discord token — run poll loop in foreground
-        _run_poll_only(stop_event)
 
-    poll_thread.join(timeout=5)
-    print("Worker stopped.")
+        poll_thread.join(timeout=5)
+        print("Worker stopped.")
+    except Exception:
+        print("[worker] Fatal error:")
+        traceback.print_exc()
+        sys.exit(1)
+
+    sys.exit(0)
 
 
 def _run_poll_only(stop_event: threading.Event):
