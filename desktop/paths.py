@@ -100,6 +100,21 @@ def bundled_ffmpeg() -> Path | None:
     return candidate if candidate.exists() else None
 
 
+def bundled_python() -> Path | None:
+    """Path to a bundled Python interpreter (a python-build-standalone
+    CPython distribution — a real, relocatable, full build with working
+    venv/pip, not the stripped python.org "embeddable" package, which
+    notoriously doesn't support venv properly out of the box), if the
+    installer shipped one. Returns None if not present (dev/source runs, or
+    a build without it bundled) — callers (onboarding.find_system_python())
+    fall back to searching the system PATH in that case, same as before
+    this existed."""
+    candidate = app_dir() / "resources" / "python" / (
+        "python.exe" if os.name == "nt" else "bin/python3"
+    )
+    return candidate if candidate.exists() else None
+
+
 def onboarding_html_path() -> Path:
     return app_dir() / "onboarding_ui.html" if is_frozen() else Path(__file__).resolve().parent / "onboarding_ui.html"
 

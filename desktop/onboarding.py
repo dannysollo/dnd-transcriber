@@ -110,7 +110,7 @@ def _python_version_ok(python_exe: str) -> bool:
 
 
 def find_system_python() -> Optional[str]:
-    """Find a real, non-frozen Python interpreter to base a new venv on.
+    """Find a Python interpreter to base a new venv on.
 
     Deliberately NOT venv.EnvBuilder().create() (what run_worker_setup used
     to call directly) — that bases the new venv on sys._base_executable,
@@ -124,13 +124,22 @@ def find_system_python() -> Optional[str]:
     specifically to avoid re-downloading torch during development), so this
     path never ran even once until this fix.
 
-    Checks the same "python on PATH" convention worker/setup.bat already
-    assumes, plus the Windows Python Launcher (py.exe) as a fallback — the
-    official python.org installer always registers py.exe regardless of
-    whether the user checked "Add python.exe to PATH" for the plain
-    `python` command, so it's a meaningfully more reliable signal on
-    Windows specifically.
+    Checks a bundled Python first (paths.bundled_python() — a
+    python-build-standalone CPython distribution the installer can ship,
+    not the stripped python.org "embeddable" package, which notoriously
+    doesn't support venv properly), so a friend with nothing preinstalled
+    still works. Falls back to the same "python on PATH" convention
+    worker/setup.bat already assumes, then the Windows Python Launcher
+    (py.exe) — the official python.org installer always registers py.exe
+    regardless of whether the user checked "Add python.exe to PATH" for the
+    plain `python` command, so it's a meaningfully more reliable signal on
+    Windows specifically — for a build that didn't bundle one, or a dev
+    machine that shouldn't need to use the bundled copy anyway.
     """
+    bundled = paths.bundled_python()
+    if bundled and _python_version_ok(str(bundled)):
+        return str(bundled)
+
     for candidate in ("python", "python3"):
         found = shutil.which(candidate)
         if found and _python_version_ok(found):

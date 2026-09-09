@@ -1,23 +1,19 @@
 ; desktop/installer/dnd-transcriber-worker.iss — Inno Setup script.
 ;
-; NOT YET VALIDATED — this is Milestone 5, the last unbuilt piece of the
-; desktop launcher plan. Milestone 4's PyInstaller output
-; (desktop\build\dist\dnd-transcriber-worker\) is confirmed built and
-; working on the real target machine, so that dependency is satisfied.
+; Confirmed working end-to-end through a real build + install (v0.1.0).
+; ffmpeg and a bundled Python 3.10 are now included too (desktop\resources\
+; ffmpeg\ and desktop\resources\python\ — fetched via GitHub's API from
+; BtbN/FFmpeg-Builds and astral-sh/python-build-standalone respectively,
+; not committed to this repo — see .gitignore), closing the two remaining
+; "friend needs X preinstalled" gaps from v0.1.0's release notes. Both
+; entries below use skipifsourcedoesntexist regardless, so a build missing
+; either resource still works, just falls back to requiring it on PATH.
 ;
-; Two [Files]/[Run] entries below are optional and will just be silently
-; skipped (Flags: skipifsourcedoesntexist) since neither resource exists in
-; this repo:
-;   - desktop\resources\ffmpeg\ffmpeg.exe — not needed for now: the real
-;     target machine already has ffmpeg on PATH (worker/setup.bat's own
-;     check confirmed it), so the app already falls back to that. Only
-;     matters for sharing with someone who doesn't have ffmpeg installed.
-;   - desktop\resources\MicrosoftEdgeWebview2Setup.exe — not needed for now
-;     either: the real target machine (Windows 11) already had WebView2
-;     with zero prompts or missing-runtime dialogs during actual testing.
-;     Only matters for a stripped/LTSC Windows image that might lack it.
-; Both are cheap, purely defensive inclusions for wider sharing later —
-; skip them for a first installer build.
+; desktop\resources\MicrosoftEdgeWebview2Setup.exe (still not bundled) is
+; the one remaining optional [Run] entry below — not needed on the real
+; target machine (Windows 11 already had WebView2, zero prompts during
+; actual testing), only matters for a stripped/LTSC Windows image that
+; might lack it. Cheap, purely defensive inclusion for wider sharing later.
 ;
 ; This requires the Inno Setup Compiler (iscc) installed on Windows —
 ; https://jrsoftware.org/isdl.php — not part of the Python venv/PyInstaller
@@ -71,7 +67,20 @@ Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "A
 Source: "..\build\dist\dnd-transcriber-worker\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Optional bundled ffmpeg — skipped entirely if not present at build time.
+; A static LGPL Windows build (BtbN/FFmpeg-Builds) — paths.bundled_ffmpeg()
+; and worker_process.py's FFMPEG_BIN wiring already expect exactly this
+; path, added when that plumbing was first built.
 Source: "..\resources\ffmpeg\ffmpeg.exe"; DestDir: "{app}\resources\ffmpeg"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\resources\ffmpeg\LICENSE.txt"; DestDir: "{app}\resources\ffmpeg"; Flags: ignoreversion skipifsourcedoesntexist
+
+; Optional bundled Python 3.10 (a python-build-standalone CPython
+; distribution, not the stripped python.org "embeddable" package, which
+; doesn't support venv properly) — skipped entirely if not present at build
+; time, same as ffmpeg above. paths.bundled_python() looks for exactly this
+; path; onboarding.find_system_python() prefers it over anything on the
+; target machine's own PATH, so a friend with no Python installed at all
+; still gets a working first run.
+Source: "..\resources\python\*"; DestDir: "{app}\resources\python"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Optional WebView2 Evergreen Bootstrapper — only needed if Milestone 1
 ; (bare pywebview shell smoke test) shows a target machine is missing it.
