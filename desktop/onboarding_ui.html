@@ -15,15 +15,16 @@
     font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; padding: 28px 32px;
   }
   h1 { font-size: 18px; color: var(--accent); margin: 0 0 4px; }
-  p.sub { color: var(--muted); margin: 0 0 22px; font-size: 13px; }
+  p.sub { color: var(--muted); margin: 0 0 26px; font-size: 13px; }
   .field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 5px; }
   .field label { font-size: 12px; color: var(--muted); }
   .row { display: flex; gap: 8px; }
-  input[type=text], input[type=password] {
+  input[type=text], input[type=password], textarea {
     background: var(--panel2); border: 1px solid var(--border); border-radius: 5px;
     padding: 8px 10px; color: var(--text); font-size: 13px; outline: none; flex: 1;
+    font-family: inherit;
   }
-  input:focus { border-color: var(--accent); }
+  input:focus, textarea:focus { border-color: var(--accent); }
   .btn {
     background: var(--accent); color: #fff; border: none; border-radius: 5px;
     padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
@@ -31,10 +32,11 @@
   .btn:hover { opacity: .85; }
   .btn:disabled { opacity: .5; cursor: default; }
   .btn.secondary { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
+  .btn.link { background: transparent; border: none; color: var(--accent2); padding: 4px 0; font-weight: 500; }
   .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
   .checkbox-row label { font-size: 13px; color: var(--text); }
   .hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
-  #validate-msg, #status-msg { font-size: 12px; margin-top: 6px; min-height: 16px; }
+  #validate-msg, #status-msg, #create-msg { font-size: 12px; margin-top: 8px; min-height: 16px; }
   .ok { color: var(--ok); } .err { color: var(--err); }
   #progress-panel {
     display: none; background: #0a0c12; border: 1px solid var(--border); border-radius: 5px;
@@ -43,37 +45,84 @@
     word-break: break-all; margin-top: 18px;
   }
   .actions { display: flex; gap: 10px; margin-top: 20px; }
-  .step-card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-    padding: 18px 20px; margin-bottom: 22px;
+  [hidden] { display: none !important; }
+
+  /* Choice screen */
+  .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+  .choice-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 22px 20px; text-align: left; cursor: pointer; color: inherit;
+    font-family: inherit; display: flex; flex-direction: column; gap: 8px;
   }
-  .step-card h2 { font-size: 14px; margin: 0 0 8px; color: var(--text); }
-  .step-card p { font-size: 13px; color: var(--muted); margin: 0 0 6px; line-height: 1.5; }
-  .step-card p:last-of-type { margin-bottom: 14px; }
-  .divider { display: flex; align-items: center; gap: 12px; margin: 26px 0; color: var(--muted); font-size: 12px; }
-  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-  h2.section-title { font-size: 14px; margin: 0 0 4px; }
-  p.section-hint { font-size: 12px; color: var(--muted); margin: 0 0 16px; }
+  .choice-card:hover { border-color: var(--accent); }
+  .choice-card .icon { font-size: 26px; }
+  .choice-card h2 { font-size: 15px; margin: 0; color: var(--text); }
+  .choice-card p { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.5; }
+
+  .back-link { font-size: 12px; color: var(--muted); cursor: pointer; margin-bottom: 18px; display: inline-block; }
+  .back-link:hover { color: var(--accent2); }
+  .connected-banner {
+    background: rgba(76,175,130,.12); border: 1px solid var(--ok); border-radius: 6px;
+    padding: 10px 14px; font-size: 12px; color: var(--ok); margin-bottom: 18px;
+  }
 </style>
 </head>
 <body>
+
+<!-- ═══ Screen: choice (first thing shown on a fresh install) ═══ -->
+<section id="screen-choice">
   <h1>DnD Transcriber Worker</h1>
   <p class="sub">Shows the campaign site and runs GPU-powered transcription on this machine.</p>
 
-  <div class="step-card">
-    <h2>New here, or need to join a campaign?</h2>
-    <p>Log in, create a campaign, or accept an invite link on the website — that's also where a DM
-       generates the app's connection key (Campaign Settings → Worker tab, after you're set up there).</p>
-    <p>If you're joining as a player and want to help run transcription, ask your DM to share that
-       key with you directly — only DMs can generate it.</p>
-    <button class="btn secondary" onclick="openCampaignSite()">Open Campaign Site →</button>
-    <p style="margin-top:10px">Come back here anytime from the tray icon → <em>"Set Up / Reconfigure Worker."</em></p>
+  <div class="choice-grid">
+    <button class="choice-card" onclick="startNewCampaign()">
+      <span class="icon">🆕</span>
+      <h2>Start a New Campaign</h2>
+      <p>Log in with Discord and create a campaign — this device gets set up automatically as its DM, no keys to copy.</p>
+    </button>
+    <button class="choice-card" onclick="showScreen('existing')">
+      <span class="icon">🔑</span>
+      <h2>I Already Have a Campaign</h2>
+      <p>Joining one that already exists, or your DM gave you a Worker API Key? Set this device up with it.</p>
+    </button>
+  </div>
+</section>
+
+<!-- ═══ Screen: waiting for Discord login (site takes over the window during this) ═══ -->
+<!-- (no HTML needed — the window navigates away entirely; see startNewCampaign()) -->
+
+<!-- ═══ Screen: create campaign (shown automatically once login is detected) ═══ -->
+<section id="screen-create" hidden>
+  <span class="back-link" onclick="showScreen('choice')">← Back</span>
+  <h1>Create Your Campaign</h1>
+  <p class="sub">You're logged in — this creates the campaign and connects this device to it automatically.</p>
+
+  <div class="field">
+    <label>Campaign Name</label>
+    <input type="text" id="campaign_name" placeholder="As Above, So Below" oninput="autoSlug()">
   </div>
 
-  <div class="divider">already have a connection key?</div>
+  <div class="field">
+    <label>Campaign URL Slug <span class="hint">(used in links — edit if you want something different)</span></label>
+    <input type="text" id="campaign_new_slug" placeholder="as-above-so-below">
+  </div>
 
-  <h2 class="section-title">Set up this device</h2>
-  <p class="section-hint">Paste the key from Campaign Settings → Worker (or one your DM sent you) to finish setup.</p>
+  <div class="field">
+    <label>Description <span class="hint">(optional)</span></label>
+    <textarea id="campaign_description" rows="2" placeholder="A quick blurb for your players"></textarea>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="create-btn" onclick="createCampaign()">Create Campaign →</button>
+  </div>
+  <div id="create-msg"></div>
+</section>
+
+<!-- ═══ Screen: existing campaign / paste-a-key ═══ -->
+<section id="screen-existing" hidden>
+  <span class="back-link" onclick="showScreen('choice')">← Back</span>
+  <h1>Connect to Your Campaign</h1>
+  <p class="sub">Paste the Worker API Key from Campaign Settings → Worker (or one your DM sent you).</p>
 
   <div class="field">
     <label>Server URL</label>
@@ -91,8 +140,20 @@
 
   <div class="field">
     <label>Campaign Slug <span class="hint">(optional — auto-detected from your API key if left blank)</span></label>
-    <input type="text" id="campaign_slug" placeholder="auto-detected">
+    <input type="text" id="campaign_slug">
   </div>
+
+  <div class="actions">
+    <button class="btn" id="existing-continue-btn" onclick="continueFromExisting()" disabled>Continue →</button>
+  </div>
+</section>
+
+<!-- ═══ Screen: device setup (shared final step for BOTH paths above) ═══ -->
+<section id="screen-device" hidden>
+  <h1>Set Up This Device</h1>
+  <p class="sub">Installs the transcription engine locally — this is the largest step, several GB on first run.</p>
+
+  <div id="connected-banner" class="connected-banner"></div>
 
   <div class="field">
     <label>Audio Folder <span class="hint">(where session recordings are saved/watched)</span></label>
@@ -113,25 +174,109 @@
 
   <div id="progress-panel"></div>
   <div id="status-msg"></div>
+</section>
 
 <script>
-let validated = false;
+// Connection info accumulated by whichever path (new/existing campaign) the
+// user takes — screen-device's runSetup() uses this regardless of source.
+let connection = { server_url: '', api_key: '', campaign_slug: '' };
 
 function whenReady(fn) {
   if (window.pywebview && window.pywebview.api) { fn(); return; }
   window.addEventListener('pywebviewready', fn);
 }
 
+function showScreen(name) {
+  for (const el of document.querySelectorAll('body > section')) el.hidden = true;
+  document.getElementById('screen-' + name).hidden = false;
+}
+
 whenReady(async () => {
   try {
     document.getElementById('server_url').value = await window.pywebview.api.default_server_url();
   } catch (e) { /* fall back to empty — user can type it */ }
+
+  // get_initial_screen() is how app.py's login-watcher tells this fresh
+  // page load to jump straight to "create campaign" instead of the choice
+  // screen, after detecting the Discord login this window navigated away
+  // for actually completed.
+  try {
+    const initial = await window.pywebview.api.get_initial_screen();
+    if (initial === 'create') showScreen('create');
+  } catch (e) { /* default choice screen is already showing */ }
 });
+
+// ── New campaign path ──────────────────────────────────────────────────
+
+async function startNewCampaign() {
+  // Must call begin_login_watch() (and await it) BEFORE navigating —
+  // navigating via window.location.href is the safe, JS-driven way to do
+  // it (see the comment on this same pattern for the old "open campaign
+  // site" button); calling an API method that itself navigates crashes
+  // pywebview's return-value delivery.
+  try {
+    const url = await window.pywebview.api.default_server_url();
+    await window.pywebview.api.begin_login_watch();
+    window.location.href = url + '/auth/discord';
+  } catch (e) { console.warn('failed to start login', e); }
+}
+
+function autoSlug() {
+  const slugField = document.getElementById('campaign_new_slug');
+  if (slugField._userEdited) return;
+  const name = document.getElementById('campaign_name').value;
+  slugField.value = name.toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const slugField = document.getElementById('campaign_new_slug');
+  slugField.addEventListener('input', () => slugField._userEdited = true);
+});
+
+async function createCampaign() {
+  const name = document.getElementById('campaign_name').value.trim();
+  const slug = document.getElementById('campaign_new_slug').value.trim();
+  const description = document.getElementById('campaign_description').value.trim();
+  const msg = document.getElementById('create-msg');
+  const btn = document.getElementById('create-btn');
+
+  if (!name || !slug) {
+    msg.textContent = 'Campaign name and slug are both required.';
+    msg.className = 'err';
+    return;
+  }
+
+  btn.disabled = true;
+  msg.textContent = 'Creating campaign…';
+  msg.className = '';
+
+  try {
+    const result = await window.pywebview.api.create_campaign_and_get_key(name, slug, description);
+    if (!result.ok) {
+      msg.textContent = result.error;
+      msg.className = 'err';
+      btn.disabled = false;
+      return;
+    }
+    connection = { server_url: result.server_url, api_key: result.api_key, campaign_slug: result.campaign_slug };
+    document.getElementById('connected-banner').textContent =
+      `Connected as DM of "${name}" (${result.campaign_slug}) — key generated automatically.`;
+    showScreen('device');
+  } catch (e) {
+    msg.textContent = 'Error: ' + e;
+    msg.className = 'err';
+    btn.disabled = false;
+  }
+}
+
+// ── Existing campaign / paste-a-key path ───────────────────────────────
 
 async function validateKey() {
   const server_url = document.getElementById('server_url').value.trim();
   const api_key = document.getElementById('api_key').value.trim();
   const msg = document.getElementById('validate-msg');
+  const continueBtn = document.getElementById('existing-continue-btn');
   if (!server_url || !api_key) {
     msg.textContent = 'Enter a server URL and API key first.';
     msg.className = 'err';
@@ -139,38 +284,34 @@ async function validateKey() {
   }
   msg.textContent = 'Checking…';
   msg.className = '';
+  continueBtn.disabled = true;
   try {
     const result = await window.pywebview.api.validate_key(server_url, api_key);
     if (result.ok) {
-      validated = true;
       msg.textContent = `Connected — campaign: ${result.campaign_name || result.campaign_slug}`;
       msg.className = 'ok';
       const slugField = document.getElementById('campaign_slug');
       if (!slugField.value && result.campaign_slug) slugField.value = result.campaign_slug;
+      connection = { server_url, api_key, campaign_slug: slugField.value };
+      continueBtn.disabled = false;
     } else {
-      validated = false;
       msg.textContent = result.error || 'Validation failed.';
       msg.className = 'err';
     }
   } catch (e) {
-    validated = false;
     msg.textContent = 'Error: ' + e;
     msg.className = 'err';
   }
 }
 
-async function openCampaignSite() {
-  // Navigate from JS itself (not via a Python API call that calls
-  // main_window.load_url()) — pywebview needs to deliver this call's
-  // return value back into the page that invoked it, and navigating away
-  // from Python mid-call destroys that page out from under it, crashing
-  // the app. A plain client-side navigation after the value comes back
-  // has no such race.
-  try {
-    const url = await window.pywebview.api.default_server_url();
-    window.location.href = url;
-  } catch (e) { console.warn('failed to open campaign site', e); }
+function continueFromExisting() {
+  connection.campaign_slug = document.getElementById('campaign_slug').value.trim();
+  document.getElementById('connected-banner').textContent =
+    `Connected to campaign: ${connection.campaign_slug || '(auto-detected)'}`;
+  showScreen('device');
 }
+
+// ── Shared device-setup screen ─────────────────────────────────────────
 
 async function pickAudioDir() {
   try {
@@ -187,21 +328,13 @@ window.onSetupProgress = function(line) {
 };
 
 async function runSetup() {
-  const server_url = document.getElementById('server_url').value.trim();
-  const api_key = document.getElementById('api_key').value.trim();
-  const campaign_slug = document.getElementById('campaign_slug').value.trim();
   const audio_dir = document.getElementById('audio_dir').value.trim();
   const include_canary = document.getElementById('include_canary').checked;
   const statusMsg = document.getElementById('status-msg');
   const setupBtn = document.getElementById('setup-btn');
 
-  if (!server_url || !api_key || !audio_dir) {
-    statusMsg.textContent = 'Server URL, API key, and audio folder are all required.';
-    statusMsg.className = 'err';
-    return;
-  }
-  if (!validated) {
-    statusMsg.textContent = 'Click "Validate" to confirm your API key before continuing.';
+  if (!audio_dir) {
+    statusMsg.textContent = 'Pick an audio folder first.';
     statusMsg.className = 'err';
     return;
   }
@@ -213,7 +346,10 @@ async function runSetup() {
 
   try {
     const result = await window.pywebview.api.run_setup({
-      server_url, api_key, campaign_slug, audio_dir, include_canary,
+      server_url: connection.server_url,
+      api_key: connection.api_key,
+      campaign_slug: connection.campaign_slug,
+      audio_dir, include_canary,
     });
     if (!result.ok) {
       statusMsg.textContent = 'Setup failed: ' + result.error;
