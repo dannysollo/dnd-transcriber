@@ -91,7 +91,10 @@ a = Analysis(
     binaries=_webview2_binaries,
     datas=[
         (str(DESKTOP_DIR / "onboarding_ui.html"), "."),
-        (str(DESKTOP_DIR / "assets"), "assets"),
+        # assets/ only currently holds a .gitkeep placeholder (no real
+        # icon.ico yet) — PyInstaller errors on a missing/nonexistent
+        # source path, so guard rather than assume it's there.
+        *([(str(DESKTOP_DIR / "assets"), "assets")] if (DESKTOP_DIR / "assets").exists() else []),
         *_worker_datas,
     ],
     hiddenimports=[
