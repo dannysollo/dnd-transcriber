@@ -147,11 +147,29 @@ def run_worker_setup(progress: ProgressFn = _noop, include_canary: bool = False)
     progress(f"NVIDIA GPU detected: {gpu}")
 
     progress("Installing PyTorch (this is the largest download, several GB)...")
+    torch_cmd = [str(vpy), "-m", "pip", "install", "torch", "torchaudio"]
     if gpu:
-        torch_cmd = [str(vpy), "-m", "pip", "install", "torch", "torchaudio",
-                     "--index-url", "https://download.pytorch.org/whl/cu121"]
-    else:
-        torch_cmd = [str(vpy), "-m", "pip", "install", "torch", "torchaudio"]
+        # PyTorch's CUDA wheel index gets a new cuNNN name periodically as
+        # CUDA majors advance, and old ones don't get new Python-version
+        # wheels added retroactively — a hardcoded index (this used to say
+        # cu121) silently goes stale and falls back to a CPU-only install
+        # with no error (pip just resolves torch from plain PyPI instead).
+        # Ask pick_torch_index.py, run under THIS venv's own interpreter so
+        # the Python-version tag it checks against matches what's actually
+        # being installed into (not the desktop shell's own interpreter,
+        # which may differ).
+        cuda_index = subprocess.run(
+            [str(vpy), str(paths.worker_src_dir() / "pick_torch_index.py")],
+            capture_output=True, text=True, timeout=30,
+        )
+        if cuda_index.returncode == 0 and cuda_index.stdout.strip():
+            index_url = cuda_index.stdout.strip()
+            progress(f"Using CUDA wheel index: {index_url}")
+            torch_cmd += ["--index-url", index_url]
+        else:
+            progress("Could not find a matching CUDA wheel index for this Python version — "
+                     "falling back to CPU-only PyTorch. Transcription will still work, just "
+                     "much slower.")
     rc = _stream_subprocess(torch_cmd, progress)
     if rc != 0:
         raise RuntimeError(f"PyTorch install failed (exit code {rc}). See the log above for details.")

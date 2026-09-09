@@ -50,12 +50,41 @@ if errorlevel 1 (
     echo   No NVIDIA GPU detected -- installing CPU torch (transcription will be slow^)...
     pip install torch torchaudio --quiet
 ) else (
-    echo   NVIDIA GPU detected -- installing CUDA-enabled torch...
-    pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121 --quiet
+    REM PyTorch's CUDA wheel index gets a new cuNNN name periodically as CUDA
+    REM majors advance, and old ones don't get new Python-version wheels
+    REM added retroactively -- a hardcoded index here (this used to say
+    REM cu121 unconditionally) can go stale silently: the pip install below
+    REM just fails to find a match, and with no errorlevel check afterward,
+    REM execution fell straight through to `pip install -r requirements.txt`,
+    REM whose unpinned `torch` line then quietly installed a CPU-only build
+    REM from plain PyPI with no visible error at all. Ask pick_torch_index.py
+    REM to find a real match instead of trusting a number written down once.
+    echo   NVIDIA GPU detected -- looking up the right CUDA wheel index...
+    set CUDA_INDEX=
+    for /f "delims=" %%i in ('python pick_torch_index.py 2^>nul') do set CUDA_INDEX=%%i
+    if "!CUDA_INDEX!"=="" (
+        echo   WARNING: Could not find a matching CUDA wheel index for this Python version.
+        echo   Installing CPU-only torch instead -- transcription will be much slower.
+        echo   ^(run "python pick_torch_index.py" for the specific error^)
+        pip install torch torchaudio --quiet
+    ) else (
+        echo   Using CUDA wheel index: !CUDA_INDEX!
+        pip install torch torchaudio --index-url !CUDA_INDEX! --quiet
+        if errorlevel 1 (
+            echo   ERROR: CUDA torch install failed even with a matching index found.
+            echo   Falling back to CPU-only torch -- transcription will be much slower.
+            pip install torch torchaudio --quiet
+        )
+    )
 )
 
 pip install -r requirements.txt --quiet
 echo [OK] Dependencies installed
+
+REM Confirm what actually got installed -- this is the check that would
+REM have caught the silent-CPU-fallback bug immediately instead of it only
+REM surfacing later, mid-transcription, as "why is this so slow".
+python -c "import torch; print('  Torch ' + torch.__version__ + ' -- CUDA available: ' + str(torch.cuda.is_available()))" 2>nul
 
 REM Config setup
 if exist worker.yaml (
