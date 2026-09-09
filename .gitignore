@@ -30,3 +30,7 @@ worker/worker.yaml
 desktop/build/dist/
 desktop/build/work/
 desktop/resources/
+# Inno Setup's compiled installer — belongs in a GitHub Release as a binary
+# asset, not in git history (would bloat the repo forever with multi-GB
+# binaries across versions).
+desktop/installer/Output/
