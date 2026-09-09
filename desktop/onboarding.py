@@ -16,7 +16,6 @@ since the assistant developing this doesn't have a Windows display to test on.
 import shutil
 import subprocess
 import sys
-import venv
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -93,6 +92,67 @@ def has_nvidia_gpu() -> bool:
     return shutil.which("nvidia-smi") is not None and _run_ok(["nvidia-smi"])
 
 
+_MIN_PYTHON = (3, 10)
+
+
+def _python_version_ok(python_exe: str) -> bool:
+    try:
+        result = subprocess.run(
+            [python_exe, "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            return False
+        major, minor = (int(x) for x in result.stdout.split())
+        return (major, minor) >= _MIN_PYTHON
+    except Exception:
+        return False
+
+
+def find_system_python() -> Optional[str]:
+    """Find a real, non-frozen Python interpreter to base a new venv on.
+
+    Deliberately NOT venv.EnvBuilder().create() (what run_worker_setup used
+    to call directly) — that bases the new venv on sys._base_executable,
+    and inside this frozen PyInstaller exe that IS the exe itself, not a
+    real Python interpreter. Confirmed by reading venv.EnvBuilder's own
+    source (ensure_directories() in cpython's Lib/venv/__init__.py) rather
+    than assuming: it would have pointed venv creation at a bootloader
+    binary that can't function as a base interpreter, going wrong in some
+    fashion nothing here ever actually exercised — every onboarding test
+    this session used a pre-existing venv (the mklink /J shortcut used
+    specifically to avoid re-downloading torch during development), so this
+    path never ran even once until this fix.
+
+    Checks the same "python on PATH" convention worker/setup.bat already
+    assumes, plus the Windows Python Launcher (py.exe) as a fallback — the
+    official python.org installer always registers py.exe regardless of
+    whether the user checked "Add python.exe to PATH" for the plain
+    `python` command, so it's a meaningfully more reliable signal on
+    Windows specifically.
+    """
+    for candidate in ("python", "python3"):
+        found = shutil.which(candidate)
+        if found and _python_version_ok(found):
+            return found
+
+    py_launcher = shutil.which("py")
+    if py_launcher:
+        try:
+            result = subprocess.run(
+                [py_launcher, "-3", "-c", "import sys; print(sys.executable)"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                candidate = result.stdout.strip()
+                if _python_version_ok(candidate):
+                    return candidate
+        except Exception:
+            pass
+
+    return None
+
+
 def _run_ok(cmd: list) -> bool:
     try:
         return subprocess.run(cmd, capture_output=True, timeout=15).returncode == 0
@@ -136,8 +196,17 @@ def run_worker_setup(progress: ProgressFn = _noop, include_canary: bool = False)
         raise RuntimeError(f"requirements.txt not found at {requirements} — bundled worker source is incomplete.")
 
     if not vpy.exists():
-        progress("Creating virtual environment...")
-        venv.EnvBuilder(with_pip=True).create(str(paths.venv_dir()))
+        system_python = find_system_python()
+        if not system_python:
+            raise RuntimeError(
+                "No Python 3.10+ installation found on this machine. Install it from "
+                "https://python.org/downloads (check \"Add python.exe to PATH\" during "
+                "install), then try again."
+            )
+        progress(f"Creating virtual environment (using {system_python})...")
+        rc = _stream_subprocess([system_python, "-m", "venv", str(paths.venv_dir())], progress)
+        if rc != 0:
+            raise RuntimeError(f"Virtual environment creation failed (exit code {rc}). See the log above for details.")
         if not vpy.exists():
             raise RuntimeError("Virtual environment creation appeared to succeed but python.exe is missing.")
     else:
