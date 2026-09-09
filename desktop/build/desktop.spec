@@ -11,23 +11,18 @@
 #   pyinstaller desktop/build/desktop.spec --distpath desktop/build/dist --workpath desktop/build/work
 #
 # NOT YET VALIDATED on a real Windows build — this is Milestone 4 in the
-# desktop launcher plan. One real, source-confirmed risk handled below
-# (not just a generic warning): pywebview's Windows/WebView2 backend
-# (webview/platforms/edgechromium.py) bridges to .NET via pythonnet
-# (`import clr`), and loads several bundled DLLs
-# (Microsoft.Web.WebView2.Core.dll, Microsoft.Web.WebView2.WinForms.dll,
-# WebBrowserInterop.x64/x86.dll) from a path built at runtime
-# (webview.util.interop_dll_path) — a plain string join PyInstaller's static
-# import analysis has no way to see, so it will NOT bundle them on its own.
-# Worse, for the frozen case that function only checks two locations: next
-# to sys.argv[0], or sys._MEIPASS — both FLAT, not the nested `webview/lib/`
-# layout the DLLs ship in inside the actual package. So these are added
-# explicitly below, copied to the distribution ROOT (not preserving their
-# source layout) to match what interop_dll_path() actually looks for once
-# frozen. Confirmed present in an installed pywebview 6.2.1 by inspecting
-# the package directly; if a different pywebview version changes this
-# layout, `python -c "import webview,os; print(os.path.dirname(webview.__file__))"`
-# then look under that path's `lib/` folder to re-locate them.
+# desktop launcher plan. An earlier version of this spec manually bundled
+# pywebview's WebView2 interop DLLs and pythonnet's CLR bootstrap files,
+# reasoning (correctly, per pywebview's own source) that PyInstaller's
+# static analysis can't trace runtime-constructed DLL paths on its own.
+# Turned out unnecessary AND actively broken: a real build showed pywebview
+# 6.2.1 and pythonnet both ship their own first-party PyInstaller hooks
+# (webview/__pyinstaller/hook-webview.py, pythonnet/_pyinstaller/hook-clr.py)
+# that already handle this correctly and get auto-discovered — and the
+# manual version crashed COLLECT() besides, because it appended raw 2-tuples
+# onto a.binaries/a.datas *after* Analysis() had already normalized them to
+# 3-tuples internally. Removed in favor of just trusting the real hooks,
+# which the successful build up through EXE construction confirmed work.
 
 import sys
 from pathlib import Path
@@ -36,37 +31,6 @@ block_cipher = None
 
 REPO_ROOT = Path(SPECPATH).resolve().parent.parent
 DESKTOP_DIR = REPO_ROOT / "desktop"
-
-# Resolve pywebview's bundled WebView2 interop DLLs from whatever venv is
-# actually running PyInstaller (NOT hardcoded — this must reflect Danny's
-# real venv, which this Linux dev environment has no access to).
-try:
-    import webview
-    _webview_lib_dir = Path(webview.__file__).resolve().parent / "lib"
-except ImportError:
-    _webview_lib_dir = None
-    print("WARNING: could not import webview to locate its bundled WebView2 "
-          "interop DLLs — run PyInstaller from the venv these were installed "
-          "into (worker\\venv\\Scripts\\pyinstaller.exe, not a system-wide one).")
-
-_webview2_binaries = []
-if _webview_lib_dir and _webview_lib_dir.exists():
-    for dll_name in (
-        "Microsoft.Web.WebView2.Core.dll",
-        "Microsoft.Web.WebView2.WinForms.dll",
-        "WebBrowserInterop.x64.dll",
-        "WebBrowserInterop.x86.dll",
-    ):
-        dll_path = _webview_lib_dir / dll_name
-        if dll_path.exists():
-            # ("." = distribution root, matching interop_dll_path()'s frozen
-            # lookup of "next to the exe", not the package's nested layout)
-            _webview2_binaries.append((str(dll_path), "."))
-    # WebView2Loader.dll: standard Microsoft WebView2 SDK deployment
-    # convention is for the native loader to sit next to the main exe too.
-    loader = _webview_lib_dir / "runtimes" / "win-x64" / "native" / "WebView2Loader.dll"
-    if loader.exists():
-        _webview2_binaries.append((str(loader), "."))
 
 # Worker source is bundled as data (not frozen code) — it's run by a
 # separate venv's python.exe, not by this frozen interpreter. See
@@ -88,7 +52,7 @@ for pattern in ("*.py", "*.txt", "*.bat", "*.sh", "*.example"):
 a = Analysis(
     [str(DESKTOP_DIR / "app.py")],
     pathex=[str(DESKTOP_DIR)],
-    binaries=_webview2_binaries,
+    binaries=[],
     datas=[
         (str(DESKTOP_DIR / "onboarding_ui.html"), "."),
         # assets/ only currently holds a .gitkeep placeholder (no real
@@ -125,21 +89,6 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
-
-# collect_all('pythonnet') pulls in pythonnet's own native CLR bootstrap
-# files, which — like the WebView2 DLLs above — are loaded by runtime path
-# construction rather than anything PyInstaller's static analysis can trace.
-# pythonnet freezing is a known-tricky case; this maximizes the odds of a
-# clean first build rather than iterating hidden-imports one crash at a time.
-try:
-    from PyInstaller.utils.hooks import collect_all
-    pn_datas, pn_binaries, pn_hidden = collect_all("pythonnet")
-    a.datas += pn_datas
-    a.binaries += pn_binaries
-    a.hiddenimports += pn_hidden
-except Exception as e:
-    print(f"WARNING: collect_all('pythonnet') failed ({e}) — pythonnet must "
-          f"be installed in the venv running PyInstaller.")
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
