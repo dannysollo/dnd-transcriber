@@ -214,7 +214,7 @@ function renderStatus(d) {
   document.getElementById('server-url').textContent = cfg.server_url || '';
 
   const display = document.getElementById('config-display');
-  const SHOW = ['server_url','campaign_slug','audio_dir','poll_interval','whisper_model','diarize_speakers','api_key','hf_token','discord_token'];
+  const SHOW = ['server_url','campaign_slug','audio_dir','poll_interval','whisper_model','diarize_speakers','api_key','hf_token'];
   display.innerHTML = SHOW.filter(k => cfg[k] !== undefined && cfg[k] !== null && cfg[k] !== '').map(k =>
     `<div class="field"><label>${k}</label><div class="val">${cfg[k]}</div></div>`
   ).join('');
