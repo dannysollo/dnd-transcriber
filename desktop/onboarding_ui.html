@@ -43,11 +43,37 @@
     word-break: break-all; margin-top: 18px;
   }
   .actions { display: flex; gap: 10px; margin-top: 20px; }
+  .step-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 18px 20px; margin-bottom: 22px;
+  }
+  .step-card h2 { font-size: 14px; margin: 0 0 8px; color: var(--text); }
+  .step-card p { font-size: 13px; color: var(--muted); margin: 0 0 6px; line-height: 1.5; }
+  .step-card p:last-of-type { margin-bottom: 14px; }
+  .divider { display: flex; align-items: center; gap: 12px; margin: 26px 0; color: var(--muted); font-size: 12px; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  h2.section-title { font-size: 14px; margin: 0 0 4px; }
+  p.section-hint { font-size: 12px; color: var(--muted); margin: 0 0 16px; }
 </style>
 </head>
 <body>
   <h1>DnD Transcriber Worker</h1>
-  <p class="sub">One-time setup — installs the transcription engine locally and connects to your campaign.</p>
+  <p class="sub">Shows the campaign site and runs GPU-powered transcription on this machine.</p>
+
+  <div class="step-card">
+    <h2>New here, or need to join a campaign?</h2>
+    <p>Log in, create a campaign, or accept an invite link on the website — that's also where a DM
+       generates the app's connection key (Campaign Settings → Worker tab, after you're set up there).</p>
+    <p>If you're joining as a player and want to help run transcription, ask your DM to share that
+       key with you directly — only DMs can generate it.</p>
+    <button class="btn secondary" onclick="openCampaignSite()">Open Campaign Site →</button>
+    <p style="margin-top:10px">Come back here anytime from the tray icon → <em>"Set Up / Reconfigure Worker."</em></p>
+  </div>
+
+  <div class="divider">already have a connection key?</div>
+
+  <h2 class="section-title">Set up this device</h2>
+  <p class="section-hint">Paste the key from Campaign Settings → Worker (or one your DM sent you) to finish setup.</p>
 
   <div class="field">
     <label>Server URL</label>
@@ -131,6 +157,12 @@ async function validateKey() {
     msg.textContent = 'Error: ' + e;
     msg.className = 'err';
   }
+}
+
+async function openCampaignSite() {
+  try {
+    await window.pywebview.api.open_campaign_site();
+  } catch (e) { console.warn('failed to open campaign site', e); }
 }
 
 async function pickAudioDir() {

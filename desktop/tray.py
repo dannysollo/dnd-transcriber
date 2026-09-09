@@ -39,6 +39,7 @@ class TrayIcon:
         self,
         on_open_site: Callable[[], None],
         on_open_dashboard: Callable[[], None],
+        on_setup_worker: Callable[[], None],
         on_restart_worker: Callable[[], None],
         on_quit: Callable[[], None],
     ):
@@ -49,6 +50,13 @@ class TrayIcon:
             menu=pystray.Menu(
                 pystray.MenuItem("Open Site", on_open_site, default=True),
                 pystray.MenuItem("Open Worker Dashboard", on_open_dashboard),
+                # Always present, regardless of whether onboarding has
+                # already run — this is the way back to the local setup
+                # form after the "go get a campaign/key on the site" step,
+                # and also how someone re-configures the worker later
+                # (new campaign, new audio folder, etc.) without deleting
+                # worker.yaml by hand.
+                pystray.MenuItem("Set Up / Reconfigure Worker", on_setup_worker),
                 pystray.MenuItem("Restart Worker", on_restart_worker),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Quit", on_quit),

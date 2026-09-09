@@ -53,6 +53,17 @@ class Api:
     def default_server_url(self) -> str:
         return DEFAULT_SERVER_URL
 
+    def open_campaign_site(self) -> dict:
+        """Called from onboarding_ui.html's "I need a campaign" button.
+        Account creation, campaign creation, invite acceptance, and (for
+        DMs) generating a Worker API Key from Campaign Settings all already
+        exist as real pages on the site — reusing that instead of
+        reimplementing Discord OAuth/campaign management locally. Use the
+        tray's "Set Up / Reconfigure Worker" item to come back here once
+        they have a key."""
+        main_window.load_url(_site_url())
+        return {"ok": True}
+
     def pick_audio_dir(self) -> str:
         result = main_window.create_file_dialog(webview.FileDialog.FOLDER)
         return result[0] if result else ""
@@ -134,6 +145,15 @@ def _tray_open_dashboard() -> None:
     webview.create_window("Worker Dashboard", "http://127.0.0.1:8788", width=1000, height=700)
 
 
+def _tray_setup_worker() -> None:
+    """Always available, not just on first run — the way back to the local
+    setup form after "go get a campaign/key on the site", and also how
+    someone re-configures the worker later (new campaign, new audio folder)
+    without deleting worker.yaml by hand."""
+    main_window.show()
+    main_window.load_url(str(paths.onboarding_html_path()))
+
+
 def _tray_restart_worker() -> None:
     worker.stop()
     try:
@@ -153,6 +173,7 @@ def _on_gui_start() -> None:
     tray_icon = tray_module.TrayIcon(
         on_open_site=_tray_open_site,
         on_open_dashboard=_tray_open_dashboard,
+        on_setup_worker=_tray_setup_worker,
         on_restart_worker=_tray_restart_worker,
         on_quit=_tray_quit,
     )
