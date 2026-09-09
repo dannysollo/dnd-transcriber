@@ -1,14 +1,27 @@
 ; desktop/installer/dnd-transcriber-worker.iss — Inno Setup script.
 ;
-; NOT YET VALIDATED — this is Milestone 5 in the desktop launcher plan, and
-; depends on Milestone 4's PyInstaller output existing first. Two source
-; files this script expects are NOT included in this repo (nobody on this
-; side has a Windows machine to produce them):
-;   - desktop\build\dist\dnd-transcriber-worker\  (PyInstaller onedir output —
-;     build it first: see desktop/build/desktop.spec)
-;   - desktop\resources\ffmpeg\ffmpeg.exe  (a static LGPL Windows ffmpeg build,
-;     optional — if absent the app falls back to a system-PATH ffmpeg, same
-;     as worker/setup.bat's current behavior; see paths.bundled_ffmpeg())
+; NOT YET VALIDATED — this is Milestone 5, the last unbuilt piece of the
+; desktop launcher plan. Milestone 4's PyInstaller output
+; (desktop\build\dist\dnd-transcriber-worker\) is confirmed built and
+; working on the real target machine, so that dependency is satisfied.
+;
+; Two [Files]/[Run] entries below are optional and will just be silently
+; skipped (Flags: skipifsourcedoesntexist) since neither resource exists in
+; this repo:
+;   - desktop\resources\ffmpeg\ffmpeg.exe — not needed for now: the real
+;     target machine already has ffmpeg on PATH (worker/setup.bat's own
+;     check confirmed it), so the app already falls back to that. Only
+;     matters for sharing with someone who doesn't have ffmpeg installed.
+;   - desktop\resources\MicrosoftEdgeWebview2Setup.exe — not needed for now
+;     either: the real target machine (Windows 11) already had WebView2
+;     with zero prompts or missing-runtime dialogs during actual testing.
+;     Only matters for a stripped/LTSC Windows image that might lack it.
+; Both are cheap, purely defensive inclusions for wider sharing later —
+; skip them for a first installer build.
+;
+; This requires the Inno Setup Compiler (iscc) installed on Windows —
+; https://jrsoftware.org/isdl.php — not part of the Python venv/PyInstaller
+; toolchain already set up.
 ;
 ; Build with: iscc desktop\installer\dnd-transcriber-worker.iss
 
@@ -18,11 +31,23 @@
 #define MyAppExeName "dnd-transcriber-worker.exe"
 
 [Setup]
-AppId={{6E2F9C2E-6E5C-4A6B-9C2C-DND-TRANSCRIBER}}
+; Was previously "6E2F9C2E-6E5C-4A6B-9C2C-DND-TRANSCRIBER" — not a valid GUID
+; (the last group has non-hex characters), which would have hard-failed the
+; Inno Setup compile the first time anyone actually ran iscc on this. Never
+; caught until now since nothing on this side can run iscc to find out.
+AppId={{D836C81D-B261-477B-85F2-A9158B8424E7}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\{#MyAppName}
+; Per-user install (%LOCALAPPDATA%\Programs\...), not Program Files — no
+; admin/UAC prompt required. Deliberate given the "seamless to send to
+; friends" goal: nothing here actually needs elevated install rights
+; (worker.yaml/venv already live in %LOCALAPPDATA% regardless — see
+; desktop/paths.py), so requiring admin would just be friction for a
+; friend on a machine where they aren't one, for no real benefit. Same
+; pattern most consumer Windows apps (VS Code, Discord, etc.) use.
+DefaultDirName={localappdata}\Programs\{#MyAppName}
+PrivilegesRequired=lowest
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 ; Multi-GB payload (bundled PyInstaller shell is small; the actual size cost
@@ -32,10 +57,6 @@ OutputBaseFilename=dnd-transcriber-worker-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-; Standard users can install to Program Files via the elevation prompt Inno
-; already shows; the app itself never needs to write there post-install —
-; worker.yaml/venv live in %LOCALAPPDATA% (see desktop/paths.py).
-PrivilegesRequired=admin
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
