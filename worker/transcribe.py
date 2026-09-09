@@ -248,6 +248,18 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
     players = config.get("players", {})
     vocab_prompt = config.get("vocab_prompt", "")
     use_vad = config.get("vad", True)
+    # use_hotwords: faster-whisper's real biasing param (distinct from
+    # initial_prompt, which is just a soft text-continuation nudge). Verified
+    # via head-to-head comparison (2026-09-09) to beat initial_prompt on
+    # proper-noun accuracy on two independent real session segments with no
+    # sign of the vocab-hallucination regression seen in an earlier, smaller
+    # test — see memory dnd-transcriber-project. Canary is unaffected by this
+    # flag; it has its own separate boosting-tree biasing in canary_utils.py.
+    use_hotwords = config.get("use_hotwords", False)
+    whisper_biasing_kwargs = (
+        {"hotwords": vocab_prompt if vocab_prompt else None} if use_hotwords
+        else {"initial_prompt": vocab_prompt if vocab_prompt else None}
+    )
 
     # Find audio files
     audio_files = []
@@ -346,18 +358,18 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
             result = _transcribe_via_vad_chunks(
                 wav_path, model,
                 language="en",
-                initial_prompt=vocab_prompt if vocab_prompt else None,
+                **whisper_biasing_kwargs,
             )
         else:
             result = transcribe_audio(
                 model,
                 wav_path,
                 language="en",
-                initial_prompt=vocab_prompt if vocab_prompt else None,
                 condition_on_previous_text=False,
                 no_speech_threshold=0.85,
                 compression_ratio_threshold=2.4,
                 vad_filter=False,
+                **whisper_biasing_kwargs,
             )
 
         Path(wav_path).unlink(missing_ok=True)

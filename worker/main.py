@@ -142,8 +142,13 @@ def poll_loop(config: dict, stop_event: threading.Event):
                 print(f"[worker]   {len(audio_files)} audio file(s) found.")
 
                 campaign_config = client.get_campaign_config()
-                # Merge local-only keys (worker machine credentials/settings) into job config
-                LOCAL_KEYS = ("whisper_model", "hf_token", "diarize_tracks", "diarize_all", "diarize_speakers")
+                # Merge local-only keys (worker machine credentials/settings) into job config.
+                # use_hotwords is here (not on the campaign config server-side) because
+                # /worker/config only forwards a fixed whitelist of fields (server.py
+                # worker_get_config) — adding it there would need a server deploy. It's a
+                # worker-side transcription-strategy detail anyway, same category as
+                # whisper_model, which is already overridden locally for this reason.
+                LOCAL_KEYS = ("whisper_model", "use_hotwords", "hf_token", "diarize_tracks", "diarize_all", "diarize_speakers")
                 job_config = {**campaign_config, **{
                     k: config[k] for k in LOCAL_KEYS if k in config
                 }}

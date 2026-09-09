@@ -162,6 +162,11 @@ def transcribe_with_diarization(
     """
     hf_token = config.get("hf_token", "")
     vocab_prompt = config.get("vocab_prompt", "")
+    use_hotwords = config.get("use_hotwords", False)
+    whisper_biasing_kwargs = (
+        {"hotwords": vocab_prompt if vocab_prompt else None} if use_hotwords
+        else {"initial_prompt": vocab_prompt if vocab_prompt else None}
+    )
 
     num_speakers = config.get("diarize_speakers", 2)
     print(f"    Running speaker diarization ({num_speakers} speakers)...")
@@ -201,11 +206,11 @@ def transcribe_with_diarization(
                     whisper_model,
                     seg_wav,
                     language="en",
-                    initial_prompt=vocab_prompt if vocab_prompt else None,
                     condition_on_previous_text=False,
                     no_speech_threshold=0.85,
                     compression_ratio_threshold=2.4,
                     vad_filter=False,  # diarized segments are already trimmed to speech; no internal VAD needed
+                    **whisper_biasing_kwargs,
                 )
             for whisper_seg in result["segments"]:
                 text = whisper_seg["text"].strip()

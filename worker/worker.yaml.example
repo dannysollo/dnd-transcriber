@@ -6,6 +6,11 @@ poll_interval: 30
 # Only set this if you want to override auto-discovery.
 # campaign_slug: your-campaign-slug
 # whisper_model: turbo  # Uncomment to override the campaign's model setting
+# use_hotwords: true    # Use faster-whisper's `hotwords` biasing instead of initial_prompt.
+                         # Verified (2026-09-09) to beat initial_prompt on proper-noun
+                         # accuracy across two real session segments, with no sign of the
+                         # vocab-hallucination regression seen in an earlier, smaller test.
+                         # Only affects Whisper engines, not Canary.
 
 # ── Speaker Diarization (optional) ───────────────────────────────────────────
 # Splits tracks with multiple speakers (e.g. two people on the same mic).
