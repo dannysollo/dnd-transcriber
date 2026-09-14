@@ -60,9 +60,19 @@ def parse_suggestions(suggestions_file: Path) -> dict[int, dict]:
         is_new_page = title.startswith("NEW PAGE:")
         desc_match = re.search(r'^Description:\s*(.+)$', body, re.MULTILINE)
 
+        # Normalize to forward slashes regardless of source: this vault_path
+        # / suggestion["page"] join happens on the Linux server, where a
+        # backslash isn't a directory separator at all — a Windows-style
+        # path here silently creates one flat file with a literal backslash
+        # in its name instead of writing into the intended nested path.
+        # Confirmed on a real run (root-caused to the worker side, now fixed
+        # there too — see worker/main.py's vault index build — but this
+        # guards against any other source of a backslash path too).
+        page_raw = page_match.group(1).strip().replace("\\", "/") if page_match else None
+
         suggestions[num] = {
             "title": title,
-            "page": page_match.group(1).strip() if page_match else None,
+            "page": page_raw,
             "section": section_match.group(1).strip() if section_match else "Notable Actions",
             "bullets": bullets,
             "new_page": is_new_page,
@@ -126,10 +136,26 @@ def insert_bullets(content: str, section: str, bullets: list[str]) -> tuple[str,
     return new_content, new_content != content
 
 
-def create_new_page(vault_path: Path, title: str, description: str, bullets: list[str]) -> Path:
-    """Create a stub page for a newly discovered entity."""
-    # Guess folder from title context — default to Characters/NPCs
-    page_path = vault_path / "Characters" / "NPCs" / f"{title}.md"
+def create_new_page(vault_path: Path, title: str, description: str, bullets: list[str],
+                     relative_path: str | None = None) -> Path:
+    """
+    Create a stub page for a newly discovered entity.
+
+    relative_path comes from the ## Index Update section's `NEW: <path> |
+    <category> | <name>` line (see parse_index_update) — that's the LLM's
+    own categorization for this exact entity (Locations, Items, Factions,
+    etc.), already computed in the same response. Confirmed on a real run
+    without this: every new page landed under Characters/NPCs regardless of
+    what it actually was (e.g. a new *location* filed as an NPC), because
+    this function never looked at that categorization at all — the
+    "Guess folder from title context" comment was aspirational, not real.
+    Falls back to Characters/NPCs only if no matching Index Update line was
+    found (e.g. the model omitted one).
+    """
+    if relative_path:
+        page_path = vault_path / relative_path.replace("\\", "/")
+    else:
+        page_path = vault_path / "Characters" / "NPCs" / f"{title}.md"
     page_path.parent.mkdir(parents=True, exist_ok=True)
 
     content = f"# {title}\n\n{description}\n\n## Notable Actions\n"
@@ -151,7 +177,7 @@ def find_existing_page(vault_path: Path, entity_name: str) -> Path | None:
     return None
 
 
-def apply_suggestion(vault_path: Path, suggestion: dict) -> bool:
+def apply_suggestion(vault_path: Path, suggestion: dict, new_page_paths: dict[str, str] | None = None) -> bool:
     """Apply a single suggestion to the vault. Returns True if successful."""
     if suggestion["new_page"]:
         name = suggestion["title"].replace("NEW PAGE:", "").strip()
@@ -171,10 +197,12 @@ def apply_suggestion(vault_path: Path, suggestion: dict) -> bool:
                 print(f"  ⚠ No changes made (duplicate bullets?)")
                 return False
 
+        relative_path = (new_page_paths or {}).get(name.lower())
         path = create_new_page(
             vault_path, name,
             suggestion.get("description", ""),
-            suggestion["bullets"]
+            suggestion["bullets"],
+            relative_path=relative_path,
         )
         print(f"  ✓ Created new page: {path.relative_to(vault_path)}")
         return True
@@ -345,6 +373,12 @@ def run(session_dir: str, apply_ids: list[int] | None, skip_ids: list[int],
     vault_path = (Path(config_path).parent / config["vault_path"]).resolve()
     suggestions = parse_suggestions(suggestions_file)
 
+    # name.lower() -> intended path, from the ## Index Update section's own
+    # `NEW: <path> | <category> | <name>` lines — see create_new_page's
+    # docstring for why this needs to be threaded through explicitly.
+    new_pages, _ = parse_index_update(suggestions_file)
+    new_page_paths = {display_name.lower(): path for path, _category, display_name in new_pages}
+
     if not suggestions:
         print("No suggestions found in wiki_suggestions.md")
         sys.exit(0)
@@ -372,7 +406,7 @@ def run(session_dir: str, apply_ids: list[int] | None, skip_ids: list[int],
         s = suggestions[num]
         print(f"\n[{num}] {s['title']}")
         if not dry_run:
-            if apply_suggestion(vault_path, s):
+            if apply_suggestion(vault_path, s, new_page_paths):
                 applied.append(num)
         else:
             print(f"  Would apply to: {s.get('page', 'new page')} — {s['section']}")
