@@ -200,7 +200,31 @@ def poll_loop(config: dict, stop_event: threading.Event):
 # ─── Analysis poll loop ──────────────────────────────────────────────────────
 
 ANALYZE_SESSION_MD = Path(__file__).parent.parent / "ANALYZE_SESSION.md"
-CAMPAIGN_VAULT = Path.home() / ".openclaw" / "workspace" / "campaign-vault"
+# Historical default: the original single-machine setup ran the worker on
+# the same box as an OpenClaw agent session, with the vault checked out at
+# this fixed location. Kept as a fallback for that setup; a machine running
+# only the worker (e.g. the Windows desktop launcher) won't have this at
+# all, so _resolve_campaign_vault() below also checks a plain worker.yaml
+# `vault_path` override and tolerates neither existing.
+_DEFAULT_CAMPAIGN_VAULT = Path.home() / ".openclaw" / "workspace" / "campaign-vault"
+
+
+def _resolve_campaign_vault(config: dict) -> Path:
+    """
+    Resolve the local vault checkout used to build the analysis prompt's
+    "existing pages" index. Returns a path either way (matching this
+    function's previous hardcoded-constant behavior) — callers already
+    tolerate it not existing (Path.rglob on a missing dir just yields
+    nothing), so this only affects whether that index is populated, never
+    whether analysis can run at all.
+    """
+    configured = config.get("vault_path")
+    if configured:
+        path = Path(configured).expanduser()
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        return path
+    return _DEFAULT_CAMPAIGN_VAULT
 
 WIKI_ONLY_PROMPT_OVERRIDE = """
 **WIKI-ONLY RUN**: Skip sections 0 (Blurb), 1 (Session Summary), and any proper noun corrections.
@@ -212,16 +236,23 @@ Start your response directly with ## [1] for the first wiki suggestion.
 def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool = False) -> tuple[str, str, str]:
     """
     Run analysis via `claude -p` with ANALYZE_SESSION.md as the system prompt.
-    Runs from /tmp so no CLAUDE.md is auto-loaded. Vault path passed explicitly.
+    Runs from a scratch temp dir so no CLAUDE.md is auto-loaded. Vault path
+    passed explicitly.
     Returns (summary, wiki, blurb) strings. When wiki_only=True, summary and blurb are empty.
     """
     if not ANALYZE_SESSION_MD.exists():
         raise RuntimeError(f"ANALYZE_SESSION.md not found at {ANALYZE_SESSION_MD}")
 
+    campaign_vault = _resolve_campaign_vault(config)
+    if not campaign_vault.is_dir():
+        print(f"[analysis] Warning: vault not found at {campaign_vault} — "
+              f"proceeding without existing-pages context (set vault_path in "
+              f"worker.yaml to point at a local checkout, if you have one).")
+
     system_prompt = ANALYZE_SESSION_MD.read_text(encoding="utf-8")
     # Patch the vault path reference so the agent can find it by absolute path
     system_prompt = system_prompt.replace(
-        "../campaign-vault/", str(CAMPAIGN_VAULT) + "/"
+        "../campaign-vault/", str(campaign_vault) + "/"
     )
 
     # Inject existing vault page index so Claude knows exactly what already exists
@@ -229,10 +260,10 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
     header_re = re.compile(r'^#{2,}\s+(.+)', re.MULTILINE)
     vault_pages = []
     subsections: list[tuple[str, str]] = []  # (display_name, relative_path)
-    for p in sorted(CAMPAIGN_VAULT.rglob("*.md")):
+    for p in sorted(campaign_vault.rglob("*.md")):
         if "campaign-site" in p.parts or p.name == "README.md":
             continue
-        rel = p.relative_to(CAMPAIGN_VAULT)
+        rel = p.relative_to(campaign_vault)
         vault_pages.append((p.stem, rel))
         # Scan section headers to catch subsection names (e.g. "## Shilu (Undercity)")
         try:
@@ -288,7 +319,10 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
         stderr=subprocess.PIPE,  # capture so we can include in error messages
         text=True,
         timeout=1200,
-        cwd="/tmp",
+        # A scratch dir with no CLAUDE.md, cross-platform (was hardcoded to
+        # "/tmp", which doesn't exist on Windows and made this hard-fail
+        # immediately on the desktop launcher's worker).
+        cwd=tempfile.gettempdir(),
     )
 
     if result.stderr:
