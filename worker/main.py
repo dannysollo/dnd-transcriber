@@ -264,7 +264,18 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
     for p in sorted(campaign_vault.rglob("*.md")):
         if "campaign-site" in p.parts or p.name == "README.md":
             continue
-        rel = p.relative_to(campaign_vault)
+        # .as_posix() (forward slashes), not str() (platform-native separator):
+        # this worker often runs on Windows, where str(Path(...)) uses
+        # backslashes — those get embedded in the vault index shown to
+        # Claude, which then echoes the same backslash paths back in its
+        # `Page: <path>` suggestions. apply_updates.py runs on the Linux
+        # server, where a backslash isn't a directory separator at all —
+        # confirmed on a real run: it silently created a flat file literally
+        # named "Characters\NPCs\Hypatia.md" (one file, escaped backslashes
+        # in the name) instead of writing into the real nested
+        # Characters/NPCs/Hypatia.md, since "no existing file at this exact
+        # string" reads as "this must be new."
+        rel = p.relative_to(campaign_vault).as_posix()
         vault_pages.append((p.stem, rel))
         # Scan section headers to catch subsection names (e.g. "## Shilu (Undercity)")
         try:
@@ -275,7 +286,7 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
                 clean = re.sub(r'[*_`\[\]]', '', raw).strip()
                 name = re.split(r'\s*[\(\|]', clean)[0].strip()
                 if name and name != p.stem:
-                    subsections.append((name, str(rel)))
+                    subsections.append((name, rel))
         except Exception:
             pass
 
