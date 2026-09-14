@@ -412,6 +412,17 @@ def main():
     args = parser.parse_args()
 
     # ── Set up log ring buffer + tee stdout ──────────────────────────────────
+    # Force UTF-8 regardless of the host's locale/codepage or how this
+    # process was launched (desktop app subprocess, manual terminal
+    # invocation, etc.) — a PYTHONIOENCODING env var set by the launcher was
+    # tried first and didn't reliably take effect; reconfigure() acts
+    # directly on the already-open stream so there's no environment-variable
+    # propagation to depend on. Without this, a redirected (non-console)
+    # stdout on Windows defaults to the system ANSI codepage (e.g. cp1252),
+    # and the first non-ASCII character logged anywhere (worker/*.py prints
+    # several, e.g. "→") raises UnicodeEncodeError and kills the poll loop.
+    sys.__stdout__.reconfigure(encoding="utf-8", errors="replace")
+    sys.__stderr__.reconfigure(encoding="utf-8", errors="replace")
     start_time = time.time()
     log_ring = LogRingBuffer(maxlen=500)
     sys.stdout = TeeStream(sys.__stdout__, log_ring)
