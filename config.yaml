@@ -4,6 +4,7 @@ vault_path: "../campaign-vault"
 sessions_dir: "sessions"
 whisper_model: "turbo"  # large-v3 recommended for 4060 Ti; "turbo" is faster but less accurate
 vad: true               # Voice Activity Detection — zeros out silence before Whisper to prevent hallucinations
+use_hotwords: false     # bias vocab_prompt via faster-whisper's hotwords param instead of initial_prompt
 
 ## Discord username → character/player info
 ## Keys must match a fragment of the Craig audio filename (Craig uses Discord usernames)
