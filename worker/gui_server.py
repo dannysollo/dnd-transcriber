@@ -18,7 +18,7 @@ _config_path = None  # Path — set by main.py
 _start_time = None   # float — set by main.py
 
 SENSITIVE_FIELDS = {"api_key", "hf_token", "discord_token"}
-EDITABLE_FIELDS = {"poll_interval", "diarize_speakers", "whisper_model", "audio_dir"}
+EDITABLE_FIELDS = {"poll_interval", "diarize_speakers", "whisper_model", "audio_dir", "use_hotwords"}
 
 
 def init(log_buffer, config: dict, config_path, start_time: float):
@@ -162,6 +162,14 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             <option value="turbo">turbo</option>
           </select>
         </div>
+        <div class="field">
+          <label>Use Hotwords</label>
+          <select id="ed-use_hotwords">
+            <option value="">— (from campaign)</option>
+            <option value="true">On</option>
+            <option value="false">Off</option>
+          </select>
+        </div>
       </div>
       <div class="save-row">
         <button class="btn" onclick="saveConfig()">Save</button>
@@ -214,13 +222,13 @@ function renderStatus(d) {
   document.getElementById('server-url').textContent = cfg.server_url || '';
 
   const display = document.getElementById('config-display');
-  const SHOW = ['server_url','campaign_slug','audio_dir','poll_interval','whisper_model','diarize_speakers','api_key','hf_token'];
+  const SHOW = ['server_url','campaign_slug','audio_dir','poll_interval','whisper_model','use_hotwords','diarize_speakers','api_key','hf_token'];
   display.innerHTML = SHOW.filter(k => cfg[k] !== undefined && cfg[k] !== null && cfg[k] !== '').map(k =>
     `<div class="field"><label>${k}</label><div class="val">${cfg[k]}</div></div>`
   ).join('');
 
   // Pre-fill editable fields
-  ['poll_interval','diarize_speakers','whisper_model'].forEach(k => {
+  ['poll_interval','diarize_speakers','whisper_model','use_hotwords'].forEach(k => {
     const el = document.getElementById('ed-'+k);
     if (el && !el._userEdited) el.value = cfg[k] ?? '';
   });
@@ -263,7 +271,7 @@ async function fetchLogs() {
 
 async function saveConfig() {
   const payload = {};
-  const fields = ['poll_interval','diarize_speakers','whisper_model'];
+  const fields = ['poll_interval','diarize_speakers','whisper_model','use_hotwords'];
   fields.forEach(k => {
     const el = document.getElementById('ed-'+k);
     if (!el) return;
@@ -271,6 +279,7 @@ async function saveConfig() {
     if (v === '') return;
     if (k === 'poll_interval') payload[k] = parseInt(v, 10);
     else if (k === 'diarize_speakers') payload[k] = parseInt(v, 10);
+    else if (k === 'use_hotwords') payload[k] = (v === 'true');
     else payload[k] = v;
   });
 
@@ -294,7 +303,7 @@ async function saveConfig() {
 }
 
 // Mark field as user-edited so we don't overwrite while typing
-['poll_interval','diarize_speakers','whisper_model'].forEach(k => {
+['poll_interval','diarize_speakers','whisper_model','use_hotwords'].forEach(k => {
   const el = document.getElementById('ed-'+k);
   if (el) el.addEventListener('change', () => el._userEdited = true);
 });
