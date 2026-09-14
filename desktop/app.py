@@ -382,7 +382,19 @@ def main() -> None:
     # to ship to end users. DND_DEBUG=1 brings it back for future debugging
     # without editing source.
     debug = os.environ.get("DND_DEBUG") == "1"
-    webview.start(_on_gui_start, gui="edgechromium", icon=str(icon) if icon else None, debug=debug)
+    # private_mode defaults to True in pywebview — WebView2's user-data
+    # folder (which holds the Discord login cookie) becomes a fresh
+    # tempfile.TemporaryDirectory() every launch in that mode (see
+    # webview/platforms/winforms.py), so every cookie, the JWT session
+    # cookie included, is gone the moment the app is closed regardless of
+    # its 30-day max_age. Reported directly: Discord logins didn't persist
+    # across restarts. storage_path keeps the persistent profile under this
+    # app's own data dir rather than pywebview's shared default, so
+    # uninstalling can cleanly wipe it along with everything else there.
+    webview.start(
+        _on_gui_start, gui="edgechromium", icon=str(icon) if icon else None, debug=debug,
+        private_mode=False, storage_path=str(paths.data_dir() / "webview_profile"),
+    )
     sys.exit(0)
 
 
