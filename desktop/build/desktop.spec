@@ -55,6 +55,13 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(DESKTOP_DIR / "onboarding_ui.html"), "."),
+        # worker/main.py looks for this at Path(__file__).parent.parent —
+        # one level *above* worker/, i.e. the app's install root (".") for a
+        # frozen build — but it lives at the repo root, not inside worker/,
+        # so _worker_datas' worker/*.py glob below never picks it up.
+        # Confirmed missing on a real install: session-summary generation
+        # failed with "ANALYZE_SESSION.md not found".
+        (str(REPO_ROOT / "ANALYZE_SESSION.md"), "."),
         # assets/ only currently holds a .gitkeep placeholder (no real
         # icon.ico yet) — PyInstaller errors on a missing/nonexistent
         # source path, so guard rather than assume it's there.
