@@ -3408,11 +3408,24 @@ if gui_dist.exists():
     # Mount static assets (JS/CSS/images) under /assets explicitly
     app.mount("/assets", StaticFiles(directory=str(gui_dist / "assets")), name="assets")
 
+    # index.html has no content hash in its filename (unlike /assets/*.js,
+    # which does), so it's the one file a stale browser/WebView2 cache can
+    # keep serving indefinitely even after a new deploy — pointing it at a
+    # JS bundle that no longer exists or predates the deploy entirely.
+    # Reported directly: a feature deployed to production didn't show up in
+    # the desktop app's embedded window even after restarting it, because
+    # that window's WebView2 profile is now persistent across restarts (see
+    # desktop/app.py's private_mode=False) and had cached the pre-deploy
+    # index.html with no header telling it not to. no-cache forces a
+    # revalidation check on every load (cheap — a 304 if nothing changed)
+    # rather than trusting a browser's caching heuristic.
+    _NO_CACHE_HEADERS = {"Cache-Control": "no-cache"}
+
     @app.get("/{full_path:path}", include_in_schema=False)
     def serve_spa(full_path: str):
         # Serve exact file if it exists (favicon, manifest, etc.)
         candidate = gui_dist / full_path
-        if candidate.is_file():
+        if candidate.is_file() and candidate.name != "index.html":
             return FileResponse(str(candidate))
         # Fall back to index.html for all client-side routes
-        return FileResponse(str(gui_dist / "index.html"))
+        return FileResponse(str(gui_dist / "index.html"), headers=_NO_CACHE_HEADERS)
