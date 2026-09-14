@@ -2,7 +2,6 @@ import { useToast } from '../Toast'
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
-import { useApiUrl } from '../CampaignContext'
 
 interface Campaign {
   id: number
@@ -53,13 +52,14 @@ export default function CampaignSettingsPage() {
   const [invites, setInvites] = useState<Invite[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'settings' | 'config' | 'people' | 'worker'>('settings')
-  const apiUrl = useApiUrl()
 
   // Config tab state (mirrors SettingsPage)
   const [config, setConfig] = useState<Record<string, any> | null>(null)
   const [configLoading, setConfigLoading] = useState(false)
   const [configSaving, setConfigSaving] = useState(false)
   const [configSaved, setConfigSaved] = useState(false)
+  const [vocabScraping, setVocabScraping] = useState(false)
+  const [vocabScrapeError, setVocabScrapeError] = useState<string | null>(null)
 
   // Settings form state
   const [editName, setEditName] = useState('')
@@ -129,7 +129,7 @@ export default function CampaignSettingsPage() {
   const loadConfig = async () => {
     setConfigLoading(true)
     try {
-      const r = await fetch(apiUrl('/config'))
+      const r = await fetch(`/campaigns/${slug}/config`)
       if (r.ok) setConfig(await r.json())
     } finally {
       setConfigLoading(false)
@@ -140,7 +140,7 @@ export default function CampaignSettingsPage() {
     if (!config) return
     setConfigSaving(true)
     try {
-      const r = await fetch(apiUrl('/config'), {
+      const r = await fetch(`/campaigns/${slug}/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ config }),
@@ -587,14 +587,58 @@ export default function CampaignSettingsPage() {
                     description="Zeros out silence before Whisper — reduces hallucinations"
                   />
                 </ConfigField>
-                <ConfigField label="Vocabulary Prompt">
-                  <textarea
-                    value={config.vocab_prompt || ''}
-                    onChange={e => updateConfigField('vocab_prompt', e.target.value)}
-                    placeholder="Character names, spell names, locations, proper nouns… (improves transcription accuracy)"
-                    rows={4}
-                    style={{ ...configInputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                <ConfigField label="Use Hotwords">
+                  <ConfigToggle
+                    value={config.use_hotwords ?? false}
+                    onChange={v => updateConfigField('use_hotwords', v)}
+                    description="Bias via faster-whisper's hotwords param instead of initial_prompt — beat initial_prompt on proper-noun accuracy in head-to-head testing"
                   />
+                </ConfigField>
+                <ConfigField label="Vocabulary Prompt">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <textarea
+                      value={config.vocab_prompt || ''}
+                      onChange={e => updateConfigField('vocab_prompt', e.target.value)}
+                      placeholder="Character names, spell names, locations, proper nouns… (improves transcription accuracy)"
+                      rows={4}
+                      style={{ ...configInputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button
+                        onClick={async () => {
+                          setVocabScraping(true)
+                          setVocabScrapeError(null)
+                          try {
+                            const r = await fetch(`/campaigns/${slug}/config/vocab`)
+                            const data = await r.json()
+                            if (data.error) {
+                              setVocabScrapeError(data.error)
+                            } else {
+                              updateConfigField('vocab_prompt', data.vocab || '')
+                            }
+                          } catch {
+                            setVocabScrapeError('Request failed')
+                          } finally {
+                            setVocabScraping(false)
+                          }
+                        }}
+                        disabled={vocabScraping}
+                        style={{
+                          background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
+                          borderRadius: 6, color: '#93c5fd', padding: '4px 12px', fontSize: 12,
+                          fontWeight: 600, cursor: 'pointer', opacity: vocabScraping ? 0.5 : 1,
+                        }}
+                      >
+                        {vocabScraping ? 'Scraping…' : 'Scrape Vault for Proper Nouns'}
+                      </button>
+                      {vocabScrapeError && (
+                        <span style={{ fontSize: 12, color: '#f87171' }}>{vocabScrapeError}</span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 11, color: '#475569' }}>
+                      Pulls the vault's Index.md wikilinks into this field, overwriting whatever's here. Review before saving.
+                    </span>
+                  </div>
                 </ConfigField>
               </ConfigSection>
 

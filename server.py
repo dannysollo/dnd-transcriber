@@ -2117,6 +2117,53 @@ def campaign_get_wiki_suggestions_parsed(
     return result
 
 
+def _sync_vault(campaign_config: dict, slug: str, db: Session) -> tuple[Optional[Path], Optional[str]]:
+    """
+    Clone or pull the campaign's vault repo into BASE_DIR/vaults/{slug}.
+    Returns (vault_dir, error) — vault_dir is None if no vault_repo_url is
+    configured at all (not an error, just nothing to sync); error is set only
+    on a git failure.
+    """
+    vault_repo_url = campaign_config.get("vault_repo_url")
+    # Fallback: check DB settings for vault_repo_url (pre-April-2026 migration case)
+    # If found in DB but not config.yaml, auto-migrate it.
+    if not vault_repo_url:
+        campaign_obj = crud.get_campaign_by_slug(db, slug)
+        db_url = (campaign_obj.settings or {}).get("vault_repo_url") if campaign_obj else None
+        if db_url:
+            vault_repo_url = db_url
+            campaign_config["vault_repo_url"] = db_url
+            save_config(campaign_config, slug)
+    if not vault_repo_url:
+        return None, None
+
+    # Use per-campaign token if set, fall back to global env token
+    github_token = campaign_config.get("vault_github_token") or os.environ.get("GITHUB_TOKEN")
+    if github_token and vault_repo_url.startswith("https://"):
+        authed_url = vault_repo_url.replace("https://", f"https://x-access-token:{github_token}@")
+    else:
+        authed_url = vault_repo_url
+
+    vault_dir = BASE_DIR / "vaults" / slug
+    vault_dir.mkdir(parents=True, exist_ok=True)
+
+    if (vault_dir / ".git").exists():
+        # Update remote URL with current token before pulling (token may have changed)
+        subprocess.run(["git", "remote", "set-url", "origin", authed_url], cwd=vault_dir, capture_output=True)
+        pull = subprocess.run(["git", "pull"], cwd=vault_dir, capture_output=True, text=True)
+        if pull.returncode != 0:
+            return None, f"Git pull failed: {pull.stderr.strip()}"
+    else:
+        clone = subprocess.run(
+            ["git", "clone", authed_url, str(vault_dir)],
+            capture_output=True, text=True
+        )
+        if clone.returncode != 0:
+            return None, f"Git clone failed: {clone.stderr.strip()}"
+
+    return vault_dir, None
+
+
 @app.post("/campaigns/{slug}/sessions/{name}/apply-wiki")
 def campaign_apply_wiki(
     slug: str,
@@ -2131,48 +2178,14 @@ def campaign_apply_wiki(
 
     # ── Vault sync: clone or pull repo if vault_repo_url is set ───────────
     campaign_config = load_config(slug)
+    vault_dir, vault_sync_error = _sync_vault(campaign_config, slug, db)
     vault_repo_url = campaign_config.get("vault_repo_url")
-    # Fallback: check DB settings for vault_repo_url (pre-April-2026 migration case)
-    # If found in DB but not config.yaml, auto-migrate it.
-    if not vault_repo_url:
-        campaign_obj = crud.get_campaign_by_slug(db, slug)
-        db_url = (campaign_obj.settings or {}).get("vault_repo_url") if campaign_obj else None
-        if db_url:
-            vault_repo_url = db_url
-            campaign_config["vault_repo_url"] = db_url
-            save_config(campaign_config, slug)
-    # Use per-campaign token if set, fall back to global env token
-    github_token = campaign_config.get("vault_github_token") or os.environ.get("GITHUB_TOKEN")
 
-    vault_sync_error: str | None = None
-    if vault_repo_url:
-        # Inject token into HTTPS URL for auth
-        if github_token and vault_repo_url.startswith("https://"):
-            authed_url = vault_repo_url.replace("https://", f"https://x-access-token:{github_token}@")
-        else:
-            authed_url = vault_repo_url
+    if vault_sync_error:
+        # Return immediately with error — don't try to apply updates to a broken vault
+        return {"output": f"⚠ Vault sync failed — updates NOT applied.\n{vault_sync_error}\n\nCheck Campaign Settings: vault_repo_url={vault_repo_url!r}", "applied": []}
 
-        vault_dir = BASE_DIR / "vaults" / slug
-        vault_dir.mkdir(parents=True, exist_ok=True)
-
-        if (vault_dir / ".git").exists():
-            # Update remote URL with current token before pulling (token may have changed)
-            subprocess.run(["git", "remote", "set-url", "origin", authed_url], cwd=vault_dir, capture_output=True)
-            pull = subprocess.run(["git", "pull"], cwd=vault_dir, capture_output=True, text=True)
-            if pull.returncode != 0:
-                vault_sync_error = f"Git pull failed: {pull.stderr.strip()}"
-        else:
-            clone = subprocess.run(
-                ["git", "clone", authed_url, str(vault_dir)],
-                capture_output=True, text=True
-            )
-            if clone.returncode != 0:
-                vault_sync_error = f"Git clone failed: {clone.stderr.strip()}"
-
-        if vault_sync_error:
-            # Return immediately with error — don't try to apply updates to a broken vault
-            return {"output": f"⚠ Vault sync failed — updates NOT applied.\n{vault_sync_error}\n\nCheck Campaign Settings: vault_repo_url={vault_repo_url!r}, github_token={'set' if github_token else 'NOT SET'}", "applied": []}
-
+    if vault_dir:
         # Write a temp config pointing to the synced vault
         import tempfile
         campaign_config["vault_path"] = str(vault_dir)
@@ -2185,7 +2198,6 @@ def campaign_apply_wiki(
         config_path = BASE_DIR / "campaigns" / slug / "config.yaml"
         if not config_path.exists():
             config_path = CONFIG_PATH
-        vault_dir = None
 
     cmd = [sys.executable, str(APP_DIR / "apply_updates.py"), str(session_dir),
            "--config", str(config_path)]
@@ -2208,6 +2220,12 @@ def campaign_apply_wiki(
         output = f"[apply_updates.py exited with code {result.returncode}, no output]"
 
     # ── Push vault changes back to GitHub ─────────────────────────────────
+    github_token = campaign_config.get("vault_github_token") or os.environ.get("GITHUB_TOKEN")
+    authed_url = (
+        vault_repo_url.replace("https://", f"https://x-access-token:{github_token}@")
+        if github_token and vault_repo_url and vault_repo_url.startswith("https://")
+        else vault_repo_url
+    )
     if not vault_repo_url:
         output += "\n⚠ No vault_repo_url configured — vault push skipped. Set it in Campaign Settings."
     if vault_repo_url and vault_dir and (vault_dir / ".git").exists() and github_token:
@@ -2720,11 +2738,21 @@ def campaign_test_correction(
 def campaign_get_vocab(
     slug: str,
     _member=Depends(require_campaign_member("spectator")),
+    db: Session = Depends(get_db),
 ):
     config = load_config(slug)
+    # Sync the vault first — config["vault_path"] is only kept up to date by a
+    # prior apply-wiki run (it's rewritten to BASE_DIR/vaults/{slug} there);
+    # scraping vocab shouldn't depend on the wiki-update flow having run.
+    vault_dir, vault_sync_error = _sync_vault(config, slug, db)
+    if vault_sync_error:
+        return {"vocab": "", "error": vault_sync_error}
+    vault_path = str(vault_dir) if vault_dir else config.get("vault_path")
+    if not vault_path:
+        return {"vocab": "", "error": "No vault_repo_url or vault_path configured for this campaign"}
     try:
         from vocab_extractor import extract_from_vault
-        vocab = extract_from_vault(config["vault_path"])
+        vocab = extract_from_vault(vault_path)
         return {"vocab": vocab}
     except Exception as e:
         return {"vocab": "", "error": str(e)}
@@ -3132,6 +3160,7 @@ def worker_get_config(slug: str, db: Session = Depends(get_db), request: Request
         "vocab_prompt": config.get("vocab_prompt", ""),
         "vad": config.get("vad", True),
         "whisper_model": config.get("whisper_model", "turbo"),
+        "use_hotwords": config.get("use_hotwords", False),
     }
 
 
