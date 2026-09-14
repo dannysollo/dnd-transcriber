@@ -324,9 +324,20 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
     scratch_dir = tempfile.mkdtemp(prefix="dnd-transcriber-analysis-", dir=scratch_base)
     print(f"[analysis] scratch dir: {scratch_dir}")
     try:
+        # --system-prompt-file instead of inline --system-prompt <string>:
+        # confirmed on a real machine that a large vault index (system_prompt
+        # can run 60K+ chars once the vault is actually found — see the vault
+        # warning a few lines up) blows past Windows' ~32K character total
+        # command-line length limit, surfacing as the misleadingly-named
+        # "[WinError 206] The filename or extension is too long" from
+        # CreateProcess. A file path as the argument instead of the prompt
+        # itself sidesteps the limit regardless of prompt size, and works
+        # the same on any platform (not Windows-specific either way).
+        prompt_file = Path(scratch_dir) / "system_prompt.txt"
+        prompt_file.write_text(system_prompt, encoding="utf-8")
         result = subprocess.run(
             ["claude", "-p",
-             "--system-prompt", system_prompt,
+             "--system-prompt-file", str(prompt_file),
              "--no-session-persistence",
              "--allowedTools", "Read",
              "--output-format", "text"],
