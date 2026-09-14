@@ -79,6 +79,22 @@ class WorkerProcess:
         # mode on the child fixes it regardless of the host's locale.
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
+        # ctranslate2 needs cuBLAS (cublas64_12.dll) at actual inference time
+        # but doesn't bundle it itself (unlike cuDNN, which it does ship) and
+        # has no equivalent of torch's own os.add_dll_directory() calls to
+        # auto-discover a pip-installed nvidia-cublas-cu12 wheel. Confirmed on
+        # a real machine: torch reported CUDA available (a torch build for a
+        # *different* CUDA major version, e.g. cu13, was already working
+        # fine) while ctranslate2 still failed with "Library cublas64_12.dll
+        # is not found or cannot be loaded" — the two libraries' CUDA
+        # dependencies are independent, not interchangeable across major
+        # versions. Prepending the pip package's own DLL directory to PATH
+        # lets Windows' normal DLL search find it. No-op if the package isn't
+        # installed (older worker installs, or one relying on a system-wide
+        # CUDA Toolkit install instead).
+        cublas_bin = paths.venv_dir() / "Lib" / "site-packages" / "nvidia" / "cublas" / "bin"
+        if cublas_bin.is_dir():
+            env["PATH"] = str(cublas_bin) + os.pathsep + env.get("PATH", "")
 
         cmd = [str(vpy), str(paths.worker_src_dir() / "main.py"),
                "--config", str(paths.worker_yaml_path())]
