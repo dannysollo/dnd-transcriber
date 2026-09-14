@@ -5,6 +5,37 @@ Extracted into a standalone module to avoid circular imports between
 transcribe.py (which imports diarize) and diarize.py (which needs these helpers).
 """
 
+# vocab_extractor.py's scraped format (see its own docstring): a fake
+# transcript-opening sentence, ending with this exact marker, followed by
+# the actual comma-separated proper noun list. That phrasing is deliberate
+# for initial_prompt (a soft text-continuation nudge — natural sentence
+# structure helps it), but hotwords is a real per-word/phrase biasing list,
+# not a continuation prompt, so feeding it the same intro sentence just
+# biases the decoder toward ordinary English words ("this", "session",
+# "campaign", "features"...) alongside the proper nouns it actually needs.
+_HOTWORDS_MARKER = "Campaign proper nouns include: "
+
+
+def build_whisper_biasing_kwargs(config: dict) -> dict:
+    """
+    Build the {"hotwords": ...} or {"initial_prompt": ...} kwarg to pass to
+    WhisperModel.transcribe(), based on config["use_hotwords"]. Shared by
+    transcribe.py and diarize.py so the two can't drift out of sync.
+    """
+    vocab_prompt = config.get("vocab_prompt", "")
+    use_hotwords = config.get("use_hotwords", False)
+    if not use_hotwords:
+        return {"initial_prompt": vocab_prompt if vocab_prompt else None}
+
+    hotwords_text = vocab_prompt
+    idx = vocab_prompt.find(_HOTWORDS_MARKER)
+    if idx != -1:
+        # Just the noun list — strip the intro sentence and trailing period.
+        hotwords_text = vocab_prompt[idx + len(_HOTWORDS_MARKER):].rstrip(". ")
+    # else: a manually-typed vocab_prompt without the scraper's marker —
+    # pass it through unchanged rather than guessing at its structure.
+    return {"hotwords": hotwords_text if hotwords_text else None}
+
 
 def _materialize_symlinks(snapshot_dir: str) -> str:
     """

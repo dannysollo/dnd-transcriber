@@ -18,7 +18,7 @@ import tempfile
 from pathlib import Path
 
 import diarize as diarize_module
-from whisper_utils import load_whisper_model, transcribe_audio
+from whisper_utils import build_whisper_biasing_kwargs, load_whisper_model, transcribe_audio
 
 SAMPLE_RATE = 16000
 
@@ -260,11 +260,9 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
     # sign of the vocab-hallucination regression seen in an earlier, smaller
     # test — see memory dnd-transcriber-project. Canary is unaffected by this
     # flag; it has its own separate boosting-tree biasing in canary_utils.py.
-    use_hotwords = config.get("use_hotwords", False)
-    whisper_biasing_kwargs = (
-        {"hotwords": vocab_prompt if vocab_prompt else None} if use_hotwords
-        else {"initial_prompt": vocab_prompt if vocab_prompt else None}
-    )
+    # See whisper_utils.build_whisper_biasing_kwargs for why the hotwords
+    # case doesn't just reuse vocab_prompt verbatim.
+    whisper_biasing_kwargs = build_whisper_biasing_kwargs(config)
 
     # Find audio files
     audio_files = []
