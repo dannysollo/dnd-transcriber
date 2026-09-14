@@ -334,7 +334,17 @@ def create_app():
 
     @app.route("/")
     def index():
-        return Response(DASHBOARD_HTML, content_type="text/html")
+        # Reported directly: after the login-persistence fix made the
+        # desktop app's WebView2 profile persistent across restarts (see
+        # desktop/app.py's private_mode=False), this page started getting
+        # served from that same persistent cache too — a new toggle added
+        # here didn't show up even after a full app restart, and the
+        # WebView2 window doesn't support a hard-refresh shortcut to bypass
+        # it manually. No-store forces a fresh fetch every load instead.
+        return Response(
+            DASHBOARD_HTML, content_type="text/html",
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+        )
 
     @app.route("/api/status")
     def api_status():
