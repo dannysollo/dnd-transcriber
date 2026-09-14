@@ -1,4 +1,9 @@
 faster-whisper
+nvidia-cublas-cu12  # ctranslate2 (faster-whisper's engine) needs cuBLAS at inference time and
+                    # doesn't bundle it (unlike cuDNN, which it does ship) or auto-discover it the
+                    # way torch's own import machinery does for its own CUDA deps.
+                    # A system-wide CUDA Toolkit install also satisfies this; this pip package is
+                    # the lighter-weight alternative so onboarding doesn't require one.
 nemo_toolkit[asr]  # Canary engine (canary-1b-flash / canary-1b) — CUDA required, ~2GB deps
 torch
 torchaudio
