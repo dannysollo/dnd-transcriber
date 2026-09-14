@@ -432,6 +432,7 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
                 print(f"[analysis]   [DONE] {session_name} — wrote: {', '.join(parts) or 'nothing'}")
             except Exception as e:
                 print(f"[analysis]   [ERROR] {session_name}: {e}")
+                print(traceback.format_exc())
                 # Don't leave flag in place — remove so it doesn't loop forever
                 # (user can re-trigger from the UI)
                 try:
