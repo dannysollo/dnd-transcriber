@@ -6,6 +6,50 @@ transcribe.py (which imports diarize) and diarize.py (which needs these helpers)
 """
 
 
+def _materialize_symlinks(snapshot_dir: str) -> str:
+    """
+    huggingface_hub's cache stores each snapshot as symlinks into a shared
+    blobs/ dir. Confirmed directly on a real Windows machine: ctranslate2's
+    own file-open call can fail on model.bin ("Unable to open file") even
+    when the symlink and its target blob are both completely intact (the
+    blob was verified to be exactly the expected ~3GB) — a quirk of how its
+    C++ file layer handles Windows NTFS reparse points, not a download
+    problem, so re-downloading endlessly never fixes it.
+
+    Hard-linking each file into a sibling directory gives ctranslate2 a
+    plain, non-symlinked path to open. A hard link is just a second
+    directory entry for the same on-disk data (same NTFS volume only, which
+    the cache always satisfies here), so this is effectively instant and
+    uses no extra disk space, unlike copying — and unlike a symlink, opening
+    a hard link involves no reparse-point indirection at all. No-ops
+    entirely wherever nothing here is actually a symlink (Linux/macOS, or a
+    Windows account without Developer Mode where huggingface_hub already
+    fell back to real copies on its own).
+    """
+    import os
+    import shutil
+
+    entries = os.listdir(snapshot_dir)
+    if not any(os.path.islink(os.path.join(snapshot_dir, f)) for f in entries):
+        return snapshot_dir
+
+    materialized_dir = snapshot_dir.rstrip("/\\") + "_materialized"
+    os.makedirs(materialized_dir, exist_ok=True)
+    for fname in entries:
+        src = os.path.join(snapshot_dir, fname)
+        real_src = os.path.realpath(src)
+        dst = os.path.join(materialized_dir, fname)
+        if os.path.exists(dst) and os.path.getsize(dst) == os.path.getsize(real_src):
+            continue  # already materialized from a previous load
+        if os.path.exists(dst):
+            os.remove(dst)
+        try:
+            os.link(real_src, dst)
+        except OSError:
+            shutil.copyfile(real_src, dst)
+    return materialized_dir
+
+
 def _resolve_model_path(model_name: str) -> str:
     """
     Resolve a faster-whisper model name to its local HuggingFace cache path.
@@ -14,9 +58,15 @@ def _resolve_model_path(model_name: str) -> str:
     the model is already cached, which hangs in restricted-network environments
     (e.g. WSL2 with blocked outbound connections).  By walking the cache
     directory directly we get the snapshot path instantly with zero I/O.
+
+    Also always routes through _materialize_symlinks (both the cache-hit
+    path below and the download-it-ourselves fallback) rather than ever
+    handing WhisperModel a bare model name — its own internal download_model()
+    call would otherwise hand ctranslate2 a symlinked path on a first-ever
+    download, hitting the exact same Windows failure this function exists
+    to avoid.
     """
     import os
-    import glob
 
     hf_cache = os.path.expanduser("~/.cache/huggingface/hub")
 
@@ -32,13 +82,15 @@ def _resolve_model_path(model_name: str) -> str:
         if os.path.isdir(snapshots_dir):
             snaps = sorted(os.listdir(snapshots_dir))
             if snaps:
-                resolved = os.path.join(snapshots_dir, snaps[-1])
+                resolved = _materialize_symlinks(os.path.join(snapshots_dir, snaps[-1]))
                 print(f"  resolved {model_name!r} → {resolved}")
                 return resolved
 
-    # Model not in cache — return the name and let faster-whisper download it
-    print(f"  {model_name!r} not found in cache, will download")
-    return model_name
+    # Not cached — download it ourselves rather than returning the bare name
+    # (see docstring above for why).
+    print(f"  {model_name!r} not found in cache, downloading...")
+    from faster_whisper.utils import download_model
+    return _materialize_symlinks(download_model(model_name))
 
 
 def load_whisper_model(model_name: str):
