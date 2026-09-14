@@ -12,6 +12,7 @@ import argparse
 import collections
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -308,22 +309,31 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
         message = f"## DM Notes for this session\n{notes.strip()}\n\n---\n\n{transcript}"
 
     print(f"[analysis] system prompt: {len(system_prompt)} chars, message: {len(message)} chars")
-    result = subprocess.run(
-        ["claude", "-p",
-         "--system-prompt", system_prompt,
-         "--no-session-persistence",
-         "--allowedTools", "Read",
-         "--output-format", "text"],
-        input=message,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,  # capture so we can include in error messages
-        text=True,
-        timeout=1200,
-        # A scratch dir with no CLAUDE.md, cross-platform (was hardcoded to
-        # "/tmp", which doesn't exist on Windows and made this hard-fail
-        # immediately on the desktop launcher's worker).
-        cwd=tempfile.gettempdir(),
-    )
+    # A scratch dir with no CLAUDE.md, cross-platform (was hardcoded to
+    # "/tmp", which doesn't exist on Windows). mkdtemp() actually creates the
+    # directory rather than just returning gettempdir()'s guessed path — that
+    # guess was confirmed invalid on a real machine ("[WinError 267] The
+    # directory name is invalid" from CreateProcess's cwd handling), likely a
+    # stale/malformed %TEMP%. mkdtemp() would fail loudly and clearly at
+    # creation time instead if the underlying temp location is ever genuinely
+    # unusable, rather than handing subprocess.run() a bad path silently.
+    scratch_dir = tempfile.mkdtemp(prefix="dnd-transcriber-analysis-")
+    try:
+        result = subprocess.run(
+            ["claude", "-p",
+             "--system-prompt", system_prompt,
+             "--no-session-persistence",
+             "--allowedTools", "Read",
+             "--output-format", "text"],
+            input=message,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,  # capture so we can include in error messages
+            text=True,
+            timeout=1200,
+            cwd=scratch_dir,
+        )
+    finally:
+        shutil.rmtree(scratch_dir, ignore_errors=True)
 
     if result.stderr:
         print(f"[analysis] claude stderr:\n{result.stderr.strip()}")
