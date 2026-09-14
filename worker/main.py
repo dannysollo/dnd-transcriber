@@ -310,14 +310,19 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
 
     print(f"[analysis] system prompt: {len(system_prompt)} chars, message: {len(message)} chars")
     # A scratch dir with no CLAUDE.md, cross-platform (was hardcoded to
-    # "/tmp", which doesn't exist on Windows). mkdtemp() actually creates the
-    # directory rather than just returning gettempdir()'s guessed path — that
-    # guess was confirmed invalid on a real machine ("[WinError 267] The
-    # directory name is invalid" from CreateProcess's cwd handling), likely a
-    # stale/malformed %TEMP%. mkdtemp() would fail loudly and clearly at
-    # creation time instead if the underlying temp location is ever genuinely
-    # unusable, rather than handing subprocess.run() a bad path silently.
-    scratch_dir = tempfile.mkdtemp(prefix="dnd-transcriber-analysis-")
+    # "/tmp", which doesn't exist on Windows). Deliberately NOT relying on
+    # tempfile.gettempdir()'s default candidate search (nor mkdtemp() without
+    # an explicit dir=, which uses that same search internally) — confirmed
+    # on a real machine that whatever it resolves to isn't usable here
+    # ("[WinError 267] The directory name is invalid" from CreateProcess),
+    # most likely a stale/malformed %TEMP%, and switching gettempdir() ->
+    # bare mkdtemp() previously just moved the failure to mkdtemp() itself
+    # hitting the same underlying problem. audio_dir is a real, local,
+    # already-proven-writable directory (every session's files already live
+    # under it) rather than a guess, so anchor the scratch dir there instead.
+    scratch_base = config.get("audio_dir") or None
+    scratch_dir = tempfile.mkdtemp(prefix="dnd-transcriber-analysis-", dir=scratch_base)
+    print(f"[analysis] scratch dir: {scratch_dir}")
     try:
         result = subprocess.run(
             ["claude", "-p",
