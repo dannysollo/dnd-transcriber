@@ -69,6 +69,16 @@ class WorkerProcess:
         ffmpeg = paths.bundled_ffmpeg()
         if ffmpeg:
             env["FFMPEG_BIN"] = str(ffmpeg)
+        # stdout=self._log_file below hands the child a raw file descriptor,
+        # not the parent's own UTF-8-configured TextIOWrapper — the child's
+        # own Python interpreter re-decides its stdout encoding independently,
+        # and on Windows a *redirected* (non-console) stream defaults to the
+        # system ANSI codepage rather than UTF-8. worker/*.py's log lines
+        # include non-ASCII characters (e.g. "→"), which then raise
+        # UnicodeEncodeError the first time one gets printed. Forcing UTF-8
+        # mode on the child fixes it regardless of the host's locale.
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
 
         cmd = [str(vpy), str(paths.worker_src_dir() / "main.py"),
                "--config", str(paths.worker_yaml_path())]
