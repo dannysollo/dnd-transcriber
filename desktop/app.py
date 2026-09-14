@@ -248,6 +248,15 @@ def _watch_for_login() -> None:
 
 def _start_worker_and_load_site() -> None:
     try:
+        # worker.start() no-ops if a worker is already reachable on :8788
+        # (its single-instance guard) — harmless on first boot (nothing's
+        # running yet, so this is a no-op), but this function is also the
+        # completion path for "Set Up / Reconfigure Worker", where a worker
+        # from *before* the reconfigure is typically still running. Without
+        # stopping it first, start()'s guard would silently keep the stale
+        # process alive — still holding the old campaign_slug/api_key in
+        # memory — even though worker.yaml was just rewritten with new ones.
+        worker.stop()
         worker.start()
     except Exception as e:
         # Don't block the user from at least seeing the site — the worker
