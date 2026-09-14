@@ -25,7 +25,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from whisper_utils import transcribe_audio
+from whisper_utils import build_whisper_biasing_kwargs, transcribe_audio
 
 try:
     import torch
@@ -162,11 +162,7 @@ def transcribe_with_diarization(
     """
     hf_token = config.get("hf_token", "")
     vocab_prompt = config.get("vocab_prompt", "")
-    use_hotwords = config.get("use_hotwords", False)
-    whisper_biasing_kwargs = (
-        {"hotwords": vocab_prompt if vocab_prompt else None} if use_hotwords
-        else {"initial_prompt": vocab_prompt if vocab_prompt else None}
-    )
+    whisper_biasing_kwargs = build_whisper_biasing_kwargs(config)
 
     num_speakers = config.get("diarize_speakers", 2)
     print(f"    Running speaker diarization ({num_speakers} speakers)...")
