@@ -7,18 +7,18 @@ export default function LandingPage() {
       justifyContent: 'center',
       minHeight: '100vh',
       background: 'var(--bg-base)',
-      color: '#e2e8f0',
+      color: 'var(--ink)',
       fontFamily: 'inherit',
       padding: '24px',
       boxSizing: 'border-box',
     }}>
       {/* Icon */}
-      <div style={{ fontSize: '72px', lineHeight: 1, marginBottom: '24px' }}>🎲</div>
+      <div style={{ fontSize: '78px', lineHeight: 1, marginBottom: '24px' }}>🎲</div>
 
       {/* Title */}
       <h1 style={{
         margin: '0 0 12px',
-        fontSize: '36px',
+        fontSize: '42px',
         fontWeight: 800,
         color: 'var(--accent)',
         letterSpacing: '-0.5px',
@@ -29,8 +29,8 @@ export default function LandingPage() {
       {/* Subtitle */}
       <p style={{
         margin: '0 0 40px',
-        fontSize: '15px',
-        color: '#64748b',
+        fontSize: '18px',
+        color: 'var(--ink-faint)',
         textAlign: 'center',
         maxWidth: '460px',
         lineHeight: 1.6,
@@ -47,10 +47,10 @@ export default function LandingPage() {
         justifyContent: 'center',
       }}>
         {[
-          { icon: '🎙️', text: 'Per-speaker transcription powered by Whisper' },
-          { icon: '📜', text: 'Edit, review, and approve transcript changes' },
-          { icon: '⚔️', text: 'Campaign management for your whole party' },
-        ].map(({ icon, text }) => (
+          { text: 'Per-speaker transcription powered by Whisper' },
+          { text: 'Edit, review, and approve transcript changes' },
+          { text: 'Campaign management for your whole party' },
+        ].map(({ text }) => (
           <div key={text} style={{
             display: 'flex',
             flexDirection: 'column',
@@ -59,8 +59,7 @@ export default function LandingPage() {
             maxWidth: '160px',
             textAlign: 'center',
           }}>
-            <span style={{ fontSize: '28px' }}>{icon}</span>
-            <span style={{ fontSize: '13px', color: '#94a3b8', lineHeight: 1.5 }}>{text}</span>
+            <span style={{ fontSize: '16px', color: 'var(--ink-soft)', lineHeight: 1.5 }}>{text}</span>
           </div>
         ))}
       </div>
@@ -75,12 +74,12 @@ export default function LandingPage() {
           background: '#5865f2',
           color: '#fff',
           textDecoration: 'none',
-          borderRadius: '999px',
+          borderRadius: '3px',
           padding: '12px 28px',
-          fontSize: '15px',
+          fontSize: '18px',
           fontWeight: 700,
           letterSpacing: '0.01em',
-          boxShadow: '0 4px 20px rgba(88,101,242,0.4)',
+          boxShadow: 'none',
           transition: 'opacity 0.15s',
         }}
         onMouseEnter={e => (e.currentTarget.style.opacity = '0.88')}
@@ -96,8 +95,8 @@ export default function LandingPage() {
       {/* Footer */}
       <p style={{
         marginTop: '48px',
-        fontSize: '12px',
-        color: '#334155',
+        fontSize: '15px',
+        color: 'var(--rule-strong)',
       }}>
         Built for tabletop sessions
       </p>

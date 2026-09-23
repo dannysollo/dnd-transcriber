@@ -1,0 +1,499 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-23T20:47:02.278067+00:00",
+  "title": "Design System: DnD Transcriber",
+  "extensions": {
+    "colorMeta": {
+      "cover-leather": {
+        "role": "neutral",
+        "displayName": "Tooled Leather Cover",
+        "canonical": "#2A1E17",
+        "tonalRamp": [
+          "#0D0907",
+          "#150F0C",
+          "#1D1510",
+          "#251A14",
+          "#554B45",
+          "#8A837F",
+          "#BFBCB9",
+          "#E5E4E3"
+        ],
+        "cssVar": "--cover"
+      },
+      "laid-paper": {
+        "role": "neutral",
+        "displayName": "Laid Paper",
+        "canonical": "#F5F0E6",
+        "tonalRamp": [
+          "#4A4845",
+          "#7A7873",
+          "#ACA8A1",
+          "#D8D3CA",
+          "#F7F3EB",
+          "#FAF7F1",
+          "#FCFAF8",
+          "#FEFDFC"
+        ],
+        "cssVar": "--page"
+      },
+      "hairline-rule": {
+        "role": "neutral",
+        "displayName": "Hairline Rule",
+        "canonical": "#D8CCB6",
+        "tonalRamp": [
+          "#413D37",
+          "#6C665B",
+          "#978F7F",
+          "#BEB4A0",
+          "#E0D6C5",
+          "#EAE3D7",
+          "#F3F0E9",
+          "#FAF9F6"
+        ],
+        "cssVar": "--rule"
+      },
+      "sepia-ink": {
+        "role": "neutral",
+        "displayName": "Sepia-Black Ink",
+        "canonical": "#2B2622",
+        "tonalRamp": [
+          "#0D0B0A",
+          "#161311",
+          "#1E1B18",
+          "#26211E",
+          "#55514E",
+          "#8A8885",
+          "#BFBEBD",
+          "#E6E5E4"
+        ],
+        "cssVar": "--ink"
+      },
+      "ink-faint": {
+        "role": "neutral",
+        "displayName": "Faint Ink",
+        "canonical": "#716250",
+        "tonalRamp": [
+          "#221D18",
+          "#383128",
+          "#4F4538",
+          "#635646",
+          "#8D8173",
+          "#B1A99F",
+          "#D4D0CA",
+          "#EEECEA"
+        ],
+        "cssVar": "--ink-faint"
+      },
+      "rubric-red": {
+        "role": "primary",
+        "displayName": "Rubric Red",
+        "canonical": "#9E2B25",
+        "tonalRamp": [
+          "#2F0D0B",
+          "#4F1612",
+          "#6F1E1A",
+          "#8B2621",
+          "#B15551",
+          "#CA8A87",
+          "#E2BFBE",
+          "#F3E6E5"
+        ],
+        "cssVar": "--rubric"
+      },
+      "gilt": {
+        "role": "secondary",
+        "displayName": "Gilt Rule",
+        "canonical": "#B08D57",
+        "tonalRamp": [
+          "#352A1A",
+          "#58462C",
+          "#7B633D",
+          "#9B7C4D",
+          "#C0A479",
+          "#D4C0A3",
+          "#E7DDCD",
+          "#F6F1EB"
+        ],
+        "cssVar": "--gilt"
+      },
+      "moss": {
+        "role": "tertiary",
+        "displayName": "Moss (published)",
+        "canonical": "#46632F",
+        "tonalRamp": [
+          "#151E0E",
+          "#233218",
+          "#314521",
+          "#3E5729",
+          "#6B8259",
+          "#99A98D",
+          "#C8D0C1",
+          "#E9ECE6"
+        ],
+        "cssVar": "--moss"
+      },
+      "ochre": {
+        "role": "tertiary",
+        "displayName": "Ochre (reviewed / pending)",
+        "canonical": "#8A5B0C",
+        "tonalRamp": [
+          "#291B04",
+          "#452E06",
+          "#614008",
+          "#79500B",
+          "#A17C3D",
+          "#BFA579",
+          "#DCCEB6",
+          "#F1EBE2"
+        ],
+        "cssVar": "--ochre"
+      },
+      "lamplit-paper": {
+        "role": "neutral",
+        "displayName": "Lamplit Umber Page",
+        "canonical": "#1F1914",
+        "tonalRamp": [
+          "#090806",
+          "#100C0A",
+          "#16120E",
+          "#1B1612",
+          "#4C4743",
+          "#84807E",
+          "#BCBAB8",
+          "#E4E3E3"
+        ],
+        "cssVar": "--page (data-theme=dark)"
+      },
+      "lamplit-ink": {
+        "role": "neutral",
+        "displayName": "Lamplit Pale Ink",
+        "canonical": "#EAE0CE",
+        "tonalRamp": [
+          "#46433E",
+          "#757067",
+          "#A49D90",
+          "#CEC5B5",
+          "#EEE6D8",
+          "#F3EEE4",
+          "#F9F6F0",
+          "#FCFBF9"
+        ],
+        "cssVar": "--ink (data-theme=dark)"
+      },
+      "lamplit-rubric": {
+        "role": "primary",
+        "displayName": "Lamplit Rubric",
+        "canonical": "#E57A6C",
+        "tonalRamp": [
+          "#452520",
+          "#723D36",
+          "#A0554C",
+          "#CA6B5F",
+          "#EA9589",
+          "#F1B6AE",
+          "#F7D7D3",
+          "#FCEFED"
+        ],
+        "cssVar": "--rubric (data-theme=dark)"
+      },
+      "lamplit-gilt": {
+        "role": "secondary",
+        "displayName": "Lamplit Gilt",
+        "canonical": "#C9A66B",
+        "tonalRamp": [
+          "#3C3220",
+          "#645336",
+          "#8D744B",
+          "#B1925E",
+          "#D4B889",
+          "#E1CEAE",
+          "#EFE4D3",
+          "#F9F4ED"
+        ],
+        "cssVar": "--gilt (data-theme=dark)"
+      }
+    },
+    "modes": {
+      "attribute": "data-theme on <html>",
+      "values": {
+        "light": "Daylight (:root)",
+        "dark": "Lamplit (:root[data-theme=\"dark\"])"
+      },
+      "preference": "system | light | dark, localStorage key dnd-color-mode, stamped pre-paint by index.html inline script and kept live by ThemeContext.tsx"
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Chapter Heading",
+        "purpose": "Page titles: session name, Sessions, Preferences. 28px on phones."
+      },
+      "headline": {
+        "displayName": "Entry Title",
+        "purpose": "Session titles in the journal index; empty-state titles."
+      },
+      "title": {
+        "displayName": "Small-Caps Index",
+        "purpose": "Index tabs, fieldset legends, transcript section headings."
+      },
+      "reading": {
+        "displayName": "Reading Text",
+        "purpose": "Transcript lines, max 70ch."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "UI prose; body base size."
+      },
+      "speaker": {
+        "displayName": "Rubric Speaker",
+        "purpose": "Inline speaker names in rubric."
+      },
+      "label": {
+        "displayName": "Marginal Note",
+        "purpose": "Italic labels, status words, placeholders, meta."
+      },
+      "figures": {
+        "displayName": "Tabular Figures",
+        "purpose": "Timestamps, audio time, counts."
+      }
+    },
+    "shadows": [
+      {
+        "name": "cover-edge",
+        "value": "inset -10px 0 16px -8px rgba(0,0,0,0.45), 6px 0 18px -8px rgba(0,0,0,0.35)",
+        "purpose": "The leather cover's spine and cast onto the page. Sidebar only."
+      },
+      {
+        "name": "shadow",
+        "value": "0 10px 30px -12px rgba(42,30,23,0.35)",
+        "lamplit": "0 12px 34px -12px rgba(0,0,0,0.7)",
+        "purpose": "Objects lying on the page: ribbon bookmark, campaign menu."
+      },
+      {
+        "name": "mini-player",
+        "value": "0 -8px 20px -14px rgba(0,0,0,0.35)",
+        "purpose": "Sticky floating audio player overlapping content."
+      },
+      {
+        "name": "place-rule-nav",
+        "value": "inset 3px 0 0 var(--gilt)",
+        "purpose": "Active cover link."
+      },
+      {
+        "name": "place-rule-line",
+        "value": "inset 2px 0 0 var(--gilt)",
+        "purpose": "Current audio line in the transcript."
+      },
+      {
+        "name": "tab-underline",
+        "value": "inset 0 -2px 0 var(--rubric)",
+        "purpose": "Active index tab."
+      },
+      {
+        "name": "focus",
+        "value": "outline: 2px solid var(--gilt); outline-offset: 2px",
+        "purpose": "Universal :focus-visible ring. Boxed inputs: border gilt + 0 0 0 1px gilt; written lines: gilt underline only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state",
+        "value": "0.15s ease",
+        "purpose": "color, background, border, opacity on links and buttons."
+      },
+      {
+        "name": "line-follow",
+        "value": "background 0.4s",
+        "purpose": "Current transcript line wash as audio advances."
+      },
+      {
+        "name": "ribbon-drop",
+        "value": "0.7s cubic-bezier(0.16, 1, 0.3, 1), translateY(-100%) to 0, once",
+        "purpose": "Ribbon bookmark entrance."
+      },
+      {
+        "name": "disclosure",
+        "value": "transform 0.2s, rotate 90deg",
+        "purpose": "Chevron open/close."
+      },
+      {
+        "name": "skeleton",
+        "value": "1.6s ease-in-out infinite",
+        "purpose": "Loading shimmer between page-sunk and page-raised."
+      },
+      {
+        "name": "spinner",
+        "value": "1s linear infinite",
+        "purpose": "Stroke-arc loading icon."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "prefers-reduced-motion: reduce → transitions/animations 0.01ms, skeleton static",
+        "purpose": "Global guard."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "mobile",
+        "value": "768px",
+        "purpose": "Cover becomes bottom tab bar; 16px gutter; 54px time column; ribbon lies horizontal."
+      },
+      {
+        "name": "ribbon-flush",
+        "value": "1180px",
+        "purpose": "Ribbon moves flush to the page's right edge."
+      }
+    ],
+    "iconography": {
+      "source": "gui/src/Icons.tsx",
+      "grid": "24px viewBox",
+      "stroke": "2px, round caps and joins, currentColor",
+      "defaultSize": "14px (16px in cover)",
+      "filled": "play triangle only"
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one rubric action per view (Run pipeline, Create session, Save).",
+      "html": "<button class=\"ds-btn-primary\">Run pipeline</button>",
+      "css": ".ds-btn-primary{font-family:var(--font-journal,'EB Garamond',Garamond,serif);background:var(--rubric,#9E2B25);color:var(--on-rubric,#FBF5EA);border:1px solid var(--rubric,#9E2B25);border-radius:3px;padding:6px 14px;font-size:16px;line-height:1.25;font-weight:500;cursor:pointer;transition:background-color .15s ease,border-color .15s ease}.ds-btn-primary:hover{background:var(--rubric-hover,#85231E);border-color:var(--rubric-hover,#85231E)}.ds-btn-primary:focus-visible{outline:2px solid var(--gilt,#B08D57);outline-offset:2px}.ds-btn-primary:disabled{opacity:.45;cursor:not-allowed}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary actions in ink: Share, Re-merge, Edit transcript, Cancel.",
+      "html": "<button class=\"ds-btn-ghost\">Share</button>",
+      "css": ".ds-btn-ghost{font-family:var(--font-journal,'EB Garamond',Garamond,serif);background:transparent;color:var(--ink-soft,#5E5347);border:1px solid var(--rule-strong,#BFAF93);border-radius:3px;padding:6px 14px;font-size:16px;line-height:1.25;cursor:pointer;transition:color .15s ease,background-color .15s ease,border-color .15s ease}.ds-btn-ghost:hover{color:var(--ink,#2B2622);border-color:var(--ink-faint,#716250);background:color-mix(in srgb,var(--ink,#2B2622) 4%,transparent)}.ds-btn-ghost:focus-visible{outline:2px solid var(--gilt,#B08D57);outline-offset:2px}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Rubric outline that fills on hover; confirms deletes.",
+      "html": "<button class=\"ds-btn-danger\">Delete</button>",
+      "css": ".ds-btn-danger{font-family:var(--font-journal,'EB Garamond',Garamond,serif);background:transparent;color:var(--rubric,#9E2B25);border:1px solid var(--rubric,#9E2B25);border-radius:3px;padding:6px 14px;font-size:16px;font-weight:500;cursor:pointer;transition:background-color .15s ease,color .15s ease}.ds-btn-danger:hover{background:var(--rubric,#9E2B25);color:var(--on-rubric,#FBF5EA)}.ds-btn-danger:focus-visible{outline:2px solid var(--gilt,#B08D57);outline-offset:2px}"
+    },
+    {
+      "name": "Written Line Input",
+      "kind": "input",
+      "refersTo": "written-line",
+      "description": "A field written on a ruled line: underline only, italic placeholder, gilt underline on focus.",
+      "html": "<input class=\"ds-written-line\" placeholder=\"Find a word, name, or phrase\">",
+      "css": ".ds-written-line{font-family:var(--font-journal,'EB Garamond',Garamond,serif);background:transparent;border:none;border-bottom:1px solid var(--rule-strong,#BFAF93);border-radius:0;padding:6px 2px;font-size:18px;color:var(--ink,#2B2622);outline:none;caret-color:var(--rubric,#9E2B25);width:320px}.ds-written-line::placeholder{color:var(--ink-faint,#716250);font-style:italic;opacity:1}.ds-written-line:focus{border-bottom-color:var(--gilt,#B08D57)}"
+    },
+    {
+      "name": "Cover Navigation",
+      "kind": "nav",
+      "refersTo": "cover-link",
+      "description": "Nav on the leather cover; the active link carries a gilt inset rule.",
+      "html": "<nav class=\"ds-cover\"><div class=\"ds-brand\">DnD Transcriber</div><a class=\"ds-cover-link active\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 4h16v16H4z\"/><path d=\"M8 9h8M8 13h8\"/></svg>Sessions</a><a class=\"ds-cover-link\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"m20 20-3.5-3.5\"/></svg>Search</a></nav>",
+      "css": ".ds-cover{font-family:var(--font-journal,'EB Garamond',Garamond,serif);width:232px;padding:20px 0;background-color:var(--cover,#2A1E17);background-image:radial-gradient(rgba(255,255,255,.035) 1px,transparent 1px);background-size:3px 3px;color:var(--cover-ink,#E7D5B3);box-shadow:inset -10px 0 16px -8px rgba(0,0,0,.45),6px 0 18px -8px rgba(0,0,0,.35);border-right:1px solid var(--cover-edge,#120C09)}.ds-brand{font-variant:small-caps;letter-spacing:.06em;font-size:22px;padding:0 24px 16px}.ds-cover-link{display:flex;align-items:center;gap:12px;padding:7px 24px;font-size:18px;color:var(--cover-ink-soft,#A89170);text-decoration:none;transition:color .15s ease,background-color .15s ease}.ds-cover-link svg{opacity:.75}.ds-cover-link:hover{color:var(--cover-ink,#E7D5B3);background:var(--cover-hover,rgba(176,141,87,.13))}.ds-cover-link.active{color:var(--cover-ink,#E7D5B3);background:var(--cover-hover,rgba(176,141,87,.13));box-shadow:inset 3px 0 0 var(--gilt,#B08D57)}.ds-cover-link.active svg{opacity:1}.ds-cover-link:focus-visible{outline:2px solid var(--gilt,#B08D57);outline-offset:-2px}"
+    },
+    {
+      "name": "Index Tabs",
+      "kind": "nav",
+      "refersTo": "index-tab",
+      "description": "Small-caps tabs on a hairline; the active tab is rubric with a 2px rubric underline.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\"><button class=\"ds-tab\" aria-selected=\"true\">Transcript</button><button class=\"ds-tab\">Summary</button><button class=\"ds-tab\">Names<span class=\"ds-count\">9</span></button></div>",
+      "css": ".ds-tabs{font-family:var(--font-journal,'EB Garamond',Garamond,serif);display:flex;gap:28px;border-bottom:1px solid var(--rule,#D8CCB6)}.ds-tab{font:inherit;background:transparent;border:none;padding:10px 0;font-size:19px;font-variant:small-caps;letter-spacing:.04em;font-weight:500;color:var(--ink-faint,#716250);cursor:pointer;transition:color .15s ease}.ds-tab:hover{color:var(--ink,#2B2622)}.ds-tab[aria-selected=true]{color:var(--rubric,#9E2B25);font-weight:600;box-shadow:inset 0 -2px 0 var(--rubric,#9E2B25)}.ds-tab:focus-visible{outline:2px solid var(--gilt,#B08D57);outline-offset:2px}.ds-count{margin-left:6px;font-size:15px;font-variant:normal;font-variant-numeric:lining-nums;color:var(--rubric,#9E2B25)}"
+    },
+    {
+      "name": "Transcript Line",
+      "kind": "custom",
+      "refersTo": "transcript-timestamp",
+      "description": "Time column, rubricated small-caps speaker, italic player, 19px text; the current line gets the gilt rule.",
+      "html": "<div class=\"ds-line ds-current\"><button class=\"ds-ts\">00:00</button><p><span class=\"ds-speaker\">Rowan</span><span class=\"ds-player\">Sam</span>We should check the <span class=\"ds-unsure\">lockbox</span> first.</p></div><div class=\"ds-line\"><button class=\"ds-ts\">00:03</button><p><span class=\"ds-speaker\">Wren</span><span class=\"ds-player\">Alex</span>Then ask the <mark class=\"ds-hit\">ferryman</mark> about the toll.</p></div><div class=\"ds-passes\">a few moments pass</div>",
+      "css": ".ds-line{font-family:var(--font-journal,'EB Garamond',Garamond,serif);display:grid;grid-template-columns:78px minmax(0,1fr);column-gap:18px;padding:4px 0;transition:background .4s}.ds-line p{margin:0;font-size:19px;line-height:1.55;color:var(--ink,#2B2622);max-width:70ch}.ds-current{background:linear-gradient(90deg,color-mix(in srgb,var(--gilt,#B08D57) 16%,transparent),transparent 70%);box-shadow:inset 2px 0 0 var(--gilt,#B08D57)}.ds-current .ds-ts{color:var(--gilt-ink,#86662F)}.ds-ts{font:inherit;background:none;border:none;padding:3px 0 0;text-align:right;font-size:15px;color:var(--ink-faint,#716250);font-variant-numeric:lining-nums tabular-nums;cursor:pointer;align-self:start}.ds-ts:hover{color:var(--rubric,#9E2B25);text-decoration:underline;text-underline-offset:3px}.ds-speaker{color:var(--rubric,#9E2B25);font-variant:small-caps;letter-spacing:.05em;font-weight:600;margin-right:.4em}.ds-player{color:var(--ink-faint,#716250);font-style:italic;font-size:.85em;margin-right:.5em}.ds-unsure{text-decoration:underline wavy color-mix(in srgb,var(--rubric,#9E2B25) 45%,transparent);text-decoration-thickness:1px;text-underline-offset:4px;cursor:help}.ds-hit{background:linear-gradient(transparent 52%,var(--highlighter,rgba(222,184,74,.5)) 52%);color:inherit}.ds-passes{font-family:var(--font-journal,'EB Garamond',Garamond,serif);display:flex;align-items:center;gap:10px;margin:10px 0 8px 96px;max-width:640px;color:var(--ink-faint,#716250);font-style:italic;font-size:14px}.ds-passes::before,.ds-passes::after{content:'';flex:1;border-top:1px dotted var(--rule-strong,#BFAF93)}"
+    },
+    {
+      "name": "Journal Entry",
+      "kind": "card",
+      "refersTo": "journal-entry",
+      "description": "A session in the index: ruled, not boxed; status as italic words; actions brighten on hover.",
+      "html": "<div class=\"ds-entry\"><div class=\"ds-entry-top\"><span class=\"ds-entry-title\">2-22-2026 -- The Lacuna</span><span class=\"ds-entry-meta\">transcript <em class=\"ds-reviewed\">reviewed</em></span></div><div class=\"ds-entry-bottom\"><span class=\"ds-date\">Added Feb 22, 2026</span><button class=\"ds-action\" aria-label=\"Delete\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14\"/></svg></button></div></div>",
+      "css": ".ds-entry{font-family:var(--font-journal,'EB Garamond',Garamond,serif);padding:16px 20px;border-bottom:1px solid var(--rule,#D8CCB6);transition:background-color .15s ease;max-width:760px}.ds-entry:hover{background:color-mix(in srgb,var(--gilt,#B08D57) 7%,transparent)}.ds-entry-top,.ds-entry-bottom{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.ds-entry-bottom{margin-top:10px;align-items:center}.ds-entry-title{font-size:23px;line-height:1.25;color:var(--ink,#2B2622)}.ds-entry-meta{font-size:16px;font-style:italic;color:var(--ink-faint,#716250)}.ds-reviewed{color:var(--ochre,#8A5B0C);margin-left:10px}.ds-date{font-size:14px;color:var(--ink-faint,#716250)}.ds-action{display:flex;background:transparent;border:none;border-radius:3px;padding:6px;color:var(--ink-faint,#716250);cursor:pointer;opacity:.55;transition:opacity .15s ease,color .15s ease}.ds-entry:hover .ds-action,.ds-entry:focus-within .ds-action{opacity:1}.ds-action:hover{color:var(--rubric,#9E2B25);background:color-mix(in srgb,var(--ink,#2B2622) 6%,transparent)}.ds-action:focus-visible{outline:2px solid var(--gilt,#B08D57);outline-offset:2px}"
+    },
+    {
+      "name": "Ribbon Bookmark",
+      "kind": "custom",
+      "refersTo": "journal-ribbon",
+      "description": "Signature: a rubric swallowtail ribbon that drops in once to offer Continue from <time>.",
+      "html": "<div class=\"ds-ribbon-wrap\"><div class=\"ds-ribbon\"><button>Continue from 09:41</button><button class=\"ds-dismiss\" aria-label=\"Dismiss\">×</button></div></div>",
+      "css": ".ds-ribbon-wrap{position:relative;height:220px}.ds-ribbon{position:absolute;top:0;right:36px;display:flex;flex-direction:column;align-items:center;animation:ds-drop .7s cubic-bezier(.16,1,.3,1) both}.ds-ribbon button:first-child{font-family:var(--font-journal,'EB Garamond',Garamond,serif);writing-mode:vertical-rl;background:var(--rubric,#9E2B25);color:var(--on-rubric,#FBF5EA);border:none;padding:14px 7px 26px;font-size:15px;cursor:pointer;clip-path:polygon(0 0,100% 0,100% 100%,50% calc(100% - 12px),0 100%);box-shadow:var(--shadow,0 10px 30px -12px rgba(42,30,23,.35))}.ds-ribbon button:first-child:hover{background:var(--rubric-hover,#85231E)}.ds-dismiss{background:none;border:none;color:var(--ink-faint,#716250);padding:4px;font-size:13px;cursor:pointer}.ds-dismiss:hover{color:var(--ink,#2B2622)}@keyframes ds-drop{from{transform:translateY(-100%)}to{transform:translateY(0)}}@media (prefers-reduced-motion:reduce){.ds-ribbon{animation:none}}"
+    },
+    {
+      "name": "Audio Bar",
+      "kind": "custom",
+      "refersTo": "audio-play",
+      "description": "Hairline player: outlined rubric play circle, lining figures, 2px scrubber, underline-only speed select.",
+      "html": "<div class=\"ds-audio\"><button class=\"ds-play\" aria-label=\"Play\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 4.5v15l12-7.5Z\" fill=\"currentColor\"/></svg></button><span class=\"ds-time\">0:00 / 12:00</span><div class=\"ds-track\"><div class=\"ds-fill\"></div><div class=\"ds-thumb\"></div></div><span class=\"ds-speed\">1×</span></div>",
+      "css": ".ds-audio{font-family:var(--font-journal,'EB Garamond',Garamond,serif);display:flex;align-items:center;gap:14px;padding:8px 0;border-bottom:1px solid var(--rule,#D8CCB6)}.ds-play{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:1px solid var(--rubric,#9E2B25);background:transparent;color:var(--rubric,#9E2B25);cursor:pointer;transition:background-color .15s ease,color .15s ease}.ds-play:hover{background:var(--rubric,#9E2B25);color:var(--on-rubric,#FBF5EA)}.ds-play:focus-visible{outline:2px solid var(--gilt,#B08D57);outline-offset:2px}.ds-time{font-size:16px;font-variant-numeric:lining-nums tabular-nums;color:var(--ink,#2B2622);min-width:118px}.ds-track{position:relative;flex:1;height:2px;background:var(--rule-strong,#BFAF93)}.ds-fill{position:absolute;inset:0 70% 0 0;background:var(--rubric,#9E2B25)}.ds-thumb{position:absolute;left:30%;top:-5.5px;width:11px;height:11px;margin-left:-5.5px;border-radius:50%;background:var(--rubric,#9E2B25);border:2px solid var(--page,#F5F0E6);box-sizing:border-box}.ds-speed{font-size:16px;color:var(--ink-soft,#5E5347);border-bottom:1px solid var(--rule-strong,#BFAF93);padding:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Adventurer's Journal",
+    "overview": "The campaign is kept as a bound book. Navigation lives on a dark tooled-leather cover down the left edge; everything else is a laid-paper page written in sepia ink, with speakers rubricated in red the way a scribe marks names in a manuscript. There are no cards, panels or colored pills: structure comes from hairline rules, measured columns and generous leading. A thin gilt rule marks where you are in the book.\n\nIt is one look shown in two lights. **Daylight** is dark ink on warm paper. **Lamplit** is the same book read at night: an umber page, pale ink and a lifted, warmer rubric. The reader picks System, Daylight or Lamplit under Preferences, in a section called \"Reading light\". The resolved mode is set as `data-theme=\"light|dark\"` on `<html>`, before first paint, by an inline script in `index.html`, then kept in sync by `ThemeContext`. The choice is stored in `localStorage` under the key `dnd-color-mode`. Every token below has a value for both lights, and components use only the tokens, never raw colors.\n\nThe density is set for reading: the transcript is the product, so it runs in one column with a maximum width of 70ch, set at 19px with 1.55 leading, a figure column for time and small-caps speaker names. Tools sit in the margins. They are italic labels, underlined \"written lines\" and quiet stroke icons that brighten when you hover them. The only stagecraft is the ribbon bookmark, which drops in once to offer \"Continue from 1:23:10\", and the dotted \"a few moments pass\" rule in long silences.",
+    "keyCharacteristics": [
+      "Leather cover for navigation, paper page for content, one serif (EB Garamond) for everything.",
+      "Rubric red used sparingly: speaker names, the active tab, primary actions, and the current state of play and scrub.",
+      "Gilt means \"you are here\": the active nav link, the current audio line, focus rings.",
+      "Rules instead of borders, entries instead of cards, italic and small caps instead of badges.",
+      "Two lights, each with a full token set; the mode is a reader preference, not a separate theme."
+    ],
+    "rules": [
+      {
+        "name": "The Rubrication Rule",
+        "body": "Red marks names and the current action, nothing else. If a screen has more than one solid rubric button, one of them is wrong.",
+        "section": "colors"
+      },
+      {
+        "name": "The Gilt Marks the Place Rule",
+        "body": "Gilt means \"you are here\" (the current page, current line or focused field). It never decorates.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Lights Rule",
+        "body": "Every color is a token with a daylight and a lamplit value. A hard-coded hex or a `rgba()` outside `index.css` breaks lamplit, so don't use one.",
+        "section": "colors"
+      },
+      {
+        "name": "The Small Caps, Never Shouting Rule",
+        "body": "Labels are real small caps (`font-variant: small-caps`, 0.04–0.06em tracking), never uppercase text with wide tracking.",
+        "section": "typography"
+      },
+      {
+        "name": "The Two Figures Rule",
+        "body": "Prose keeps old-style figures. Anything that aligns or is compared, such as time, durations or counts, gets lining tabular figures.",
+        "section": "typography"
+      },
+      {
+        "name": "The Only the Cover Casts Rule",
+        "body": "Nothing on the page has a drop shadow except objects lying on it (the ribbon, menus and the floating player). Pages, entries, inputs and buttons are flat.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** use the journal tokens (`--page`, `--ink`, `--rubric`, `--gilt`, `--rule` and the rest) for every color, so both lights come for free.",
+      "**Do** separate content with 1px `--rule` hairlines and whitespace, and let lists be ruled entries.",
+      "**Do** set speaker and section labels in real small caps (0.04–0.06em tracking) and marginal notes in italic.",
+      "**Do** put lining tabular figures on every timestamp, duration and count.",
+      "**Do** keep reading text at 19px/1.55 in a column no wider than 70ch.",
+      "**Do** mark \"you are here\" with a gilt inset rule and focus with a 2px gilt outline at 2px offset.",
+      "**Do** draw new icons in the `Icons.tsx` hand: 24px grid, 2px stroke, round caps, `currentColor`.",
+      "**Do** gate every animation behind `prefers-reduced-motion`."
+    ],
+    "donts": [
+      "**Don't** wrap content in cards, panels or bordered boxes with rounded corners. Entries are ruled, not boxed.",
+      "**Don't** use colored pills or per-speaker color chips. Speakers are rubric small caps, and status is an italic word in moss, ochre or ink.",
+      "**Don't** add drop shadows to page content. Only the cover and objects lying on the page (ribbon, menus, floating player) cast.",
+      "**Don't** introduce a second typeface for display or UI. A system monospace is allowed only for machine strings (regex, keys, URLs, raw markdown).",
+      "**Don't** set labels in uppercase with wide tracking. Use small caps.",
+      "**Don't** use more than one solid rubric button in a view, or use rubric decoratively.",
+      "**Don't** add parchment textures, burnt edges, stains or fantasy display faces. The only texture is the cover's faint dot grain.",
+      "**Don't** hard-code hex or `rgba()` colors in components. They break lamplit.",
+      "**Don't** use emoji as icons."
+    ]
+  }
+}

@@ -1,4 +1,5 @@
 import { useToast } from '../Toast'
+import { CloseIcon } from '../Icons'
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
@@ -327,28 +328,30 @@ export default function CampaignSettingsPage() {
     navigator.clipboard.writeText(url).then(() => toast('Invite link copied!', 'success'))
   }
 
-  if (loading) return <div style={{ padding: '32px', color: '#64748b' }}>Loading...</div>
-  if (!campaign) return <div style={{ padding: '32px', color: '#f87171' }}>Campaign not found.</div>
+  if (loading) return <div style={{ padding: '32px', color: 'var(--ink-faint)' }}>Loading...</div>
+  if (!campaign) return <div style={{ padding: '32px', color: 'var(--rubric)' }}>Campaign not found.</div>
 
   return (
     <div className="page-content" style={{ padding: '32px', maxWidth: '860px' }}>
-      <h1 style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>
+      <h1 style={{ margin: '0 0 4px', fontSize: '34px', fontWeight: 500, color: 'var(--ink)' }}>
         {campaign.name}
       </h1>
-      <div style={{ fontSize: '12px', color: '#475569', marginBottom: '24px' }}>/{campaign.slug}</div>
+      <div style={{ fontSize: '15px', color: 'var(--ink-faint)', marginBottom: '24px' }}>/{campaign.slug}</div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', paddingBottom: '0' }}>
+      <div role="tablist" style={{ display: 'flex', gap: '28px', marginBottom: '28px', borderBottom: '1px solid var(--rule)' }}>
         {(['settings', 'config', 'people', ...(myRole === 'dm' ? ['worker'] : [])] as ('settings' | 'config' | 'people' | 'worker')[]).map(t => (
           <button
             key={t}
+            role="tab"
+            aria-selected={tab === t}
             onClick={() => setTab(t)}
+            className="sc"
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
-              padding: '8px 16px', fontSize: '13px', fontWeight: 600,
-              color: tab === t ? 'var(--accent-text)' : '#64748b',
-              borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
-              marginBottom: '-1px',
+              padding: '10px 0', fontSize: '19px', fontWeight: tab === t ? 600 : 500,
+              color: tab === t ? 'var(--rubric)' : 'var(--ink-faint)',
+              boxShadow: tab === t ? 'inset 0 -2px 0 var(--rubric)' : 'none',
               textTransform: 'capitalize',
             }}
           >
@@ -403,20 +406,20 @@ export default function CampaignSettingsPage() {
                 }}
                 disabled={vaultTesting || !vaultRepoUrl.trim()}
                 style={{
-                  background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
-                  borderRadius: 6, color: '#93c5fd', padding: '4px 12px', fontSize: 12,
+                  background: 'color-mix(in srgb, var(--gilt) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--gilt) 25%, transparent)',
+                  borderRadius: 3, color: 'var(--gilt-ink)', padding: '4px 12px', fontSize: 15,
                   fontWeight: 600, cursor: 'pointer', opacity: (vaultTesting || !vaultRepoUrl.trim()) ? 0.5 : 1,
                 }}
               >
                 {vaultTesting ? 'Testing…' : 'Test Connection'}
               </button>
               {vaultTestResult && (
-                <span style={{ fontSize: 12, color: vaultTestResult.ok ? '#4ade80' : '#f87171' }}>
+                <span style={{ fontSize: 15, color: vaultTestResult.ok ? 'var(--moss)' : 'var(--rubric)' }}>
                   {vaultTestResult.message}
                 </span>
               )}
             </div>
-            <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
+            <div style={{ fontSize: 14, color: 'var(--ink-faint)', marginTop: 4 }}>
               Wiki edits will be committed and pushed to this repo.
             </div>
           </Field>
@@ -429,11 +432,11 @@ export default function CampaignSettingsPage() {
               placeholder="ghp_xxxxxxxxxxxx"
               autoComplete="off"
             />
-            <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
+            <div style={{ fontSize: 14, color: 'var(--ink-faint)', marginTop: 4 }}>
               Personal access token with repo write access. Stored per-campaign — each user can provide their own.
             </div>
           </Field>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '13px', color: '#94a3b8' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '16px', color: 'var(--ink-soft)' }}>
             <input type="checkbox" checked={requireApproval} onChange={e => setRequireApproval(e.target.checked)} />
             Require edit approval for transcript changes
           </label>
@@ -449,12 +452,12 @@ export default function CampaignSettingsPage() {
           {myRole === 'dm' && (
             <div style={{
               marginTop: '20px', padding: '20px', border: '1px solid var(--accent3)',
-              borderRadius: '10px', background: 'var(--bg-elevated)',
+              borderRadius: '3px', background: 'var(--bg-elevated)',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
             }}>
               <div>
-                <div style={{ fontSize: '13px', color: '#e2e8f0' }}>Download all session data</div>
-                <div style={{ fontSize: '11px', color: '#64748b' }}>
+                <div style={{ fontSize: '16px', color: 'var(--ink)' }}>Download all session data</div>
+                <div style={{ fontSize: '14px', color: 'var(--ink-faint)' }}>
                   Every session's transcript and merged audio, zipped — a manual backup, anytime.
                 </div>
               </div>
@@ -462,8 +465,8 @@ export default function CampaignSettingsPage() {
                 onClick={exportCampaignData}
                 disabled={exporting}
                 style={{
-                  background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
-                  borderRadius: 6, color: '#93c5fd', padding: '6px 14px', fontSize: 12,
+                  background: 'color-mix(in srgb, var(--gilt) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--gilt) 25%, transparent)',
+                  borderRadius: 3, color: 'var(--gilt-ink)', padding: '6px 14px', fontSize: 15,
                   fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
                   opacity: exporting ? 0.6 : 1,
                 }}
@@ -475,17 +478,17 @@ export default function CampaignSettingsPage() {
 
           {myRole === 'dm' && (
             <div style={{
-              marginTop: '4px', padding: '20px', border: '1px solid rgba(248,113,113,0.3)',
-              borderRadius: '10px', background: 'rgba(248,113,113,0.05)',
+              marginTop: '4px', padding: '20px', border: '1px solid color-mix(in srgb, var(--rubric) 30%, transparent)',
+              borderRadius: '3px', background: 'color-mix(in srgb, var(--rubric) 5%, transparent)',
               display: 'flex', flexDirection: 'column', gap: '14px',
             }}>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#f87171' }}>Danger Zone</div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--rubric)' }}>Danger Zone</div>
 
               {!showDeleteConfirm ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                   <div>
-                    <div style={{ fontSize: '13px', color: '#e2e8f0' }}>Delete this campaign</div>
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>
+                    <div style={{ fontSize: '16px', color: 'var(--ink)' }}>Delete this campaign</div>
+                    <div style={{ fontSize: '14px', color: 'var(--ink-faint)' }}>
                       Permanently removes all sessions, transcripts, audio, members, and invites. Cannot be undone —
                       consider downloading a backup above first.
                     </div>
@@ -493,8 +496,8 @@ export default function CampaignSettingsPage() {
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
                     style={{
-                      background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)',
-                      borderRadius: 6, color: '#f87171', padding: '6px 14px', fontSize: 12,
+                      background: 'color-mix(in srgb, var(--rubric) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--rubric) 30%, transparent)',
+                      borderRadius: 3, color: 'var(--rubric)', padding: '6px 14px', fontSize: 15,
                       fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
                     }}
                   >
@@ -503,7 +506,7 @@ export default function CampaignSettingsPage() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ fontSize: '12px', color: '#f87171' }}>
+                  <div style={{ fontSize: '15px', color: 'var(--rubric)' }}>
                     This cannot be undone. Type <strong>{campaign?.slug}</strong> to confirm.
                   </div>
                   <input
@@ -518,8 +521,8 @@ export default function CampaignSettingsPage() {
                       onClick={deleteCampaign}
                       disabled={deleting || deleteConfirmText !== campaign?.slug}
                       style={{
-                        background: '#f87171', border: 'none', borderRadius: 6, color: '#1e1b1b',
-                        padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        background: 'var(--rubric)', border: 'none', borderRadius: 3, color: 'var(--on-rubric)',
+                        padding: '6px 14px', fontSize: 15, fontWeight: 700, cursor: 'pointer',
                         opacity: (deleting || deleteConfirmText !== campaign?.slug) ? 0.5 : 1,
                       }}
                     >
@@ -528,8 +531,8 @@ export default function CampaignSettingsPage() {
                     <button
                       onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText('') }}
                       style={{
-                        background: 'transparent', border: '1px solid var(--accent3)', borderRadius: 6,
-                        color: '#94a3b8', padding: '6px 14px', fontSize: 12, cursor: 'pointer',
+                        background: 'transparent', border: '1px solid var(--accent3)', borderRadius: 3,
+                        color: 'var(--ink-soft)', padding: '6px 14px', fontSize: 15, cursor: 'pointer',
                       }}
                     >
                       Cancel
@@ -546,21 +549,21 @@ export default function CampaignSettingsPage() {
         <div className="page-content" style={{ maxWidth: '720px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <p style={{ margin: '0', fontSize: '13px', color: '#64748b' }}>Transcription model and player configuration for this campaign</p>
+              <p style={{ margin: '0', fontSize: '16px', color: 'var(--ink-faint)' }}>Transcription model and player configuration for this campaign</p>
             </div>
             <button
               onClick={saveConfig}
               disabled={configSaving || !config}
               className="btn-primary"
             >
-              {configSaving ? 'Saving...' : configSaved ? '✓ Saved' : 'Save'}
+              {configSaving ? 'Saving...' : configSaved ? 'Saved' : 'Save'}
             </button>
           </div>
 
           {configLoading ? (
-            <div style={{ color: '#64748b' }}>Loading...</div>
+            <div style={{ color: 'var(--ink-faint)' }}>Loading...</div>
           ) : !config ? (
-            <div style={{ color: '#64748b' }}>No config found.</div>
+            <div style={{ color: 'var(--ink-faint)' }}>No config found.</div>
           ) : (
             <>
               {/* Whisper / transcription */}
@@ -624,18 +627,18 @@ export default function CampaignSettingsPage() {
                         }}
                         disabled={vocabScraping}
                         style={{
-                          background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
-                          borderRadius: 6, color: '#93c5fd', padding: '4px 12px', fontSize: 12,
+                          background: 'color-mix(in srgb, var(--gilt) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--gilt) 25%, transparent)',
+                          borderRadius: 3, color: 'var(--gilt-ink)', padding: '4px 12px', fontSize: 15,
                           fontWeight: 600, cursor: 'pointer', opacity: vocabScraping ? 0.5 : 1,
                         }}
                       >
                         {vocabScraping ? 'Scraping…' : 'Scrape Vault for Proper Nouns'}
                       </button>
                       {vocabScrapeError && (
-                        <span style={{ fontSize: 12, color: '#f87171' }}>{vocabScrapeError}</span>
+                        <span style={{ fontSize: 15, color: 'var(--rubric)' }}>{vocabScrapeError}</span>
                       )}
                     </div>
-                    <span style={{ fontSize: 11, color: '#475569' }}>
+                    <span style={{ fontSize: 14, color: 'var(--ink-faint)' }}>
                       Pulls the vault's Index.md wikilinks into this field, overwriting whatever's here. Review before saving.
                     </span>
                   </div>
@@ -645,7 +648,7 @@ export default function CampaignSettingsPage() {
               {/* Players */}
               <ConfigSection title="Players">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 80px 32px', gap: '8px', padding: '0 4px', fontSize: '11px', fontWeight: 600, color: '#64748b', letterSpacing: '0.04em' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 80px 32px', gap: '8px', padding: '0 4px', fontSize: '14px', fontWeight: 600, color: 'var(--ink-faint)', letterSpacing: '0.04em' }}>
                     <span>Discord Username</span>
                     <span>Display Name</span>
                     <span>Character</span>
@@ -656,24 +659,24 @@ export default function CampaignSettingsPage() {
                     <div key={username} style={{
                       display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 80px 32px',
                       gap: '8px', padding: '8px', background: 'var(--bg-surface)',
-                      border: '1px solid var(--accent3)', borderRadius: '8px', alignItems: 'center',
+                      border: '1px solid var(--accent3)', borderRadius: '3px', alignItems: 'center',
                     }}>
-                      <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{username}</span>
+                      <span style={{ fontFamily: 'monospace', fontSize: '15px', color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{username}</span>
                       <input
                         value={info.name || ''}
                         onChange={e => updateConfigPlayer(username, 'name', e.target.value)}
-                        style={{ ...configInputStyle, fontSize: '12px', padding: '5px 8px' }}
+                        style={{ ...configInputStyle, fontSize: '15px', padding: '5px 8px' }}
                       />
                       <input
                         value={info.character || ''}
                         onChange={e => updateConfigPlayer(username, 'character', e.target.value || null)}
                         placeholder="(none)"
-                        style={{ ...configInputStyle, fontSize: '12px', padding: '5px 8px' }}
+                        style={{ ...configInputStyle, fontSize: '15px', padding: '5px 8px' }}
                       />
                       <select
                         value={info.role || 'player'}
                         onChange={e => updateConfigPlayer(username, 'role', e.target.value)}
-                        style={{ ...configSelectStyle, fontSize: '12px', padding: '5px 8px' }}
+                        style={{ ...configSelectStyle, fontSize: '15px', padding: '5px 8px' }}
                       >
                         <option value="player">Player</option>
                         <option value="dm">DM</option>
@@ -681,17 +684,17 @@ export default function CampaignSettingsPage() {
                       <button
                         onClick={() => removeConfigPlayer(username)}
                         title="Remove player"
-                        style={{ background: 'transparent', border: 'none', color: '#475569', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontSize: '18px', lineHeight: 1 }}
                       >
-                        ×
+                        <CloseIcon />
                       </button>
                     </div>
                   ))}
                   <button
                     onClick={addConfigPlayer}
                     style={{
-                      background: 'transparent', border: '1px dashed var(--accent3)', borderRadius: '8px',
-                      color: '#475569', padding: '8px', fontSize: '12px', cursor: 'pointer', textAlign: 'center',
+                      background: 'transparent', border: '1px dashed var(--accent3)', borderRadius: '3px',
+                      color: 'var(--ink-faint)', padding: '8px', fontSize: '15px', cursor: 'pointer', textAlign: 'center',
                     }}
                   >
                     + Add player
@@ -707,13 +710,13 @@ export default function CampaignSettingsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {/* Members */}
           <div>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-muted)', fontVariant: 'small-caps', letterSpacing: '0.05em', marginBottom: '12px' }}>
               Members
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {members.map(m => (
                 <div key={m.id} style={{
-                  background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '10px',
+                  background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '3px',
                   padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px',
                 }}>
                   {m.avatar && (
@@ -723,7 +726,7 @@ export default function CampaignSettingsPage() {
                       alt=""
                     />
                   )}
-                  <div style={{ flex: 1, fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                  <div style={{ flex: 1, fontSize: '17px', color: 'var(--text-primary)', fontWeight: 500 }}>
                     {m.username}
                   </div>
                   <select
@@ -731,8 +734,8 @@ export default function CampaignSettingsPage() {
                     onChange={e => changeRole(m.user_id, e.target.value)}
                     disabled={m.user_id === user?.id || myRole !== 'dm'}
                     style={{
-                      background: 'var(--bg-base)', border: '1px solid var(--accent3)', borderRadius: '6px',
-                      color: 'var(--text-secondary)', padding: '4px 8px', fontSize: '12px',
+                      background: 'var(--bg-base)', border: '1px solid var(--accent3)', borderRadius: '3px',
+                      color: 'var(--text-secondary)', padding: '4px 8px', fontSize: '15px',
                       opacity: myRole !== 'dm' ? 0.5 : 1,
                     }}
                   >
@@ -744,7 +747,7 @@ export default function CampaignSettingsPage() {
                     <button
                       onClick={() => removeMember(m.user_id)}
                       className="btn-danger"
-                      style={{ padding: '4px 10px', fontSize: '12px', borderRadius: '6px' }}
+                      style={{ padding: '4px 10px', fontSize: '15px', borderRadius: '3px' }}
                     >
                       Remove
                     </button>
@@ -757,16 +760,16 @@ export default function CampaignSettingsPage() {
           {/* Invites */}
           {myRole === 'dm' && (
             <div>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-muted)', fontVariant: 'small-caps', letterSpacing: '0.05em', marginBottom: '12px' }}>
                 Invite Links
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {/* Create invite form */}
                 <div style={{
-                  background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '12px',
+                  background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '3px',
                   padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px',
                 }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Create Invite Link</div>
+                  <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>Create Invite Link</div>
                   <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                     <Field label="Role to grant">
                       <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ ...inputStyle, width: 'auto' }}>
@@ -800,26 +803,26 @@ export default function CampaignSettingsPage() {
 
                 {/* Invite list */}
                 {invites.length === 0 ? (
-                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No invite links yet.</div>
+                  <div style={{ fontSize: '16px', color: 'var(--text-muted)' }}>No invite links yet.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {invites.map(i => (
                       <div key={i.id} style={{
-                        background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '10px',
+                        background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '3px',
                         padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px',
                       }}>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--accent-text)' }}>{i.token}</div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          <div style={{ fontSize: '15px', fontFamily: 'monospace', color: 'var(--accent-text)' }}>{i.token}</div>
+                          <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginTop: '2px' }}>
                             Role: <strong style={{ color: 'var(--text-secondary)' }}>{i.role}</strong>
-                            {' · '}Uses: {i.use_count}{i.max_uses ? `/${i.max_uses}` : ''}
-                            {i.expires_at && ` · Expires: ${new Date(i.expires_at).toLocaleDateString()}`}
+                            {', '}used {i.use_count}{i.max_uses ? `/${i.max_uses}` : ''}
+                            {i.expires_at && `, expires ${new Date(i.expires_at).toLocaleDateString()}`}
                           </div>
                         </div>
                         <button
                           onClick={() => copyInviteLink(i.token)}
                           className="btn-secondary"
-                          style={{ padding: '4px 12px', fontSize: '12px', borderRadius: '6px' }}
+                          style={{ padding: '4px 12px', fontSize: '15px', borderRadius: '3px' }}
                         >
                           Copy Link
                         </button>
@@ -835,16 +838,16 @@ export default function CampaignSettingsPage() {
 
       {tab === 'worker' && myRole === 'dm' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '540px' }}>
-          <div style={{ fontSize: '13px', color: '#94a3b8', lineHeight: '1.5' }}>
+          <div style={{ fontSize: '16px', color: 'var(--ink-soft)', lineHeight: '1.5' }}>
             Install the worker package on the transcription machine, then paste this key into <code style={{ background: 'var(--bg-elevated)', padding: '1px 5px', borderRadius: '4px' }}>worker.yaml</code>.
           </div>
-          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0' }}>Worker API Key</div>
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '3px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--ink)' }}>Worker API Key</div>
             {workerKey ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <code style={{
-                  flex: 1, background: 'var(--bg-base)', border: '1px solid var(--accent3)', borderRadius: '6px',
-                  padding: '8px 12px', fontSize: '12px', color: 'var(--accent-text)', fontFamily: 'monospace',
+                  flex: 1, background: 'var(--bg-base)', border: '1px solid var(--accent3)', borderRadius: '3px',
+                  padding: '8px 12px', fontSize: '15px', color: 'var(--accent-text)', fontFamily: 'monospace',
                   overflowX: 'auto', whiteSpace: 'nowrap',
                 }}>
                   {workerKeyVisible ? workerKey : '•'.repeat(32)}
@@ -852,20 +855,20 @@ export default function CampaignSettingsPage() {
                 <button
                   onClick={() => setWorkerKeyVisible(v => !v)}
                   className="btn-ghost"
-                  style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px' }}
+                  style={{ padding: '6px 10px', fontSize: '15px', borderRadius: '3px' }}
                 >
                   {workerKeyVisible ? 'Hide' : 'Show'}
                 </button>
                 <button
                   onClick={() => navigator.clipboard.writeText(workerKey).then(() => toast('Key copied!', 'success'))}
                   className="btn-secondary"
-                  style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px' }}
+                  style={{ padding: '6px 10px', fontSize: '15px', borderRadius: '3px' }}
                 >
                   Copy
                 </button>
               </div>
             ) : (
-              <div style={{ fontSize: '13px', color: '#64748b' }}>No key generated yet.</div>
+              <div style={{ fontSize: '16px', color: 'var(--ink-faint)' }}>No key generated yet.</div>
             )}
             <button
               onClick={generateWorkerKey}
@@ -876,7 +879,7 @@ export default function CampaignSettingsPage() {
               {generatingKey ? 'Generating...' : workerKey ? 'Rotate Key' : 'Generate Key'}
             </button>
           </div>
-          <div style={{ fontSize: '12px', color: '#475569' }}>
+          <div style={{ fontSize: '15px', color: 'var(--ink-faint)' }}>
             Last worker heartbeat: {workerLastSeen ? (() => {
               const ms = Date.now() - new Date(workerLastSeen).getTime()
               const mins = Math.floor(ms / 60000)
@@ -890,15 +893,16 @@ export default function CampaignSettingsPage() {
   )
 }
 
+// A written line, like the rest of the journal's inputs.
 const inputStyle: React.CSSProperties = {
-  background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '8px',
-  color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', outline: 'none', width: '100%',
+  background: 'transparent', border: 'none', borderBottom: '1px solid var(--rule-strong)', borderRadius: 0,
+  color: 'var(--ink)', padding: '6px 2px', fontSize: '18px', outline: 'none', width: '100%',
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>{label}</label>
+      <label style={{ fontSize: '16px', color: 'var(--ink-soft)' }}>{label}</label>
       {children}
     </div>
   )
@@ -909,10 +913,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function ConfigSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--ink-faint)', fontVariant: 'small-caps', letterSpacing: '0.05em', marginBottom: '12px' }}>
         {title}
       </div>
-      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '10px', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '3px', overflow: 'hidden' }}>
         {children}
       </div>
     </div>
@@ -922,7 +926,7 @@ function ConfigSection({ title, children }: { title: string; children: React.Rea
 function ConfigField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
-      <label style={{ fontSize: '13px', color: '#94a3b8', width: '200px', flexShrink: 0 }}>{label}</label>
+      <label style={{ fontSize: '16px', color: 'var(--ink-soft)', width: '200px', flexShrink: 0 }}>{label}</label>
       <div style={{ flex: 1 }}>{children}</div>
     </div>
   )
@@ -934,7 +938,7 @@ function ConfigToggle({ value, onChange, description }: { value: boolean; onChan
       <button
         onClick={() => onChange(!value)}
         style={{
-          width: '40px', height: '22px', borderRadius: '11px',
+          width: '40px', height: '22px', borderRadius: '3px',
           background: value ? 'var(--accent)' : 'var(--accent3)',
           border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s',
         }}
@@ -942,20 +946,20 @@ function ConfigToggle({ value, onChange, description }: { value: boolean; onChan
         <span style={{
           position: 'absolute', top: '3px', left: value ? '21px' : '3px',
           width: '16px', height: '16px', borderRadius: '50%',
-          background: '#fff', transition: 'left 0.2s',
+          background: 'var(--page-raised)', transition: 'left 0.2s',
         }} />
       </button>
-      {description && <span style={{ fontSize: '12px', color: '#64748b' }}>{description}</span>}
+      {description && <span style={{ fontSize: '15px', color: 'var(--ink-faint)' }}>{description}</span>}
     </div>
   )
 }
 
 const configInputStyle: React.CSSProperties = {
-  background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '7px',
-  color: '#e2e8f0', padding: '7px 10px', fontSize: '13px', outline: 'none', width: '100%',
+  background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '3px',
+  color: 'var(--ink)', padding: '7px 10px', fontSize: '16px', outline: 'none', width: '100%',
 }
 
 const configSelectStyle: React.CSSProperties = {
-  background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '7px',
-  color: '#e2e8f0', padding: '7px 10px', fontSize: '13px', outline: 'none', width: '100%',
+  background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '3px',
+  color: 'var(--ink)', padding: '7px 10px', fontSize: '16px', outline: 'none', width: '100%',
 }

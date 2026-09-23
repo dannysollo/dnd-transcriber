@@ -163,214 +163,160 @@ export default function App() {
   return (
     <div className="app-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
       {/* Sidebar */}
-      <nav className="app-sidebar" style={{
+      <nav className="app-sidebar journal-cover" aria-label="Main" style={{
         display: 'flex',
         flexDirection: 'column',
-        width: '200px',
+        width: '232px',
         flexShrink: 0,
-        background: 'var(--bg-surface)',
-        borderRight: '1px solid color-mix(in srgb, var(--accent3) 60%, transparent)',
       }}>
-        {/* Logo */}
-        <div className="sidebar-logo" style={{ padding: '20px 16px 16px', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-heading)' }}>DnD Transcriber</div>
-            <div style={{ fontSize: '10px', color: 'color-mix(in srgb, var(--text-muted) 50%, transparent)', fontFamily: 'monospace' }}>v{APP_VERSION}</div>
+        {/* Title, as stamped on the cover */}
+        <div className="sidebar-logo" style={{ padding: '28px 24px 18px' }}>
+          <div className="sc" style={{ fontSize: '22px', lineHeight: 1.15, color: 'var(--cover-ink)', letterSpacing: '0.06em' }}>
+            DnD Transcriber
           </div>
           {!authEnabled && (
-            <div style={{
-              marginTop: '6px', fontSize: '10px', fontWeight: 600,
-              color: '#fbbf24', background: 'rgba(251,191,36,0.1)',
-              borderRadius: '4px', padding: '2px 6px', display: 'inline-block',
-            }}>
-              Dev Mode
+            <div style={{ marginTop: '6px', fontSize: '14px', fontStyle: 'italic', color: 'var(--cover-ink-soft)' }}>
+              Development build, v{APP_VERSION}
             </div>
           )}
         </div>
 
-        {/* Campaign selector */}
+        {/* Campaign: the book this cover belongs to */}
         {!campaignLoading && campaigns.length > 0 && (
-          <div className="sidebar-campaign" style={{ padding: '8px 12px', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', position: 'relative' }}>
-            <div
-              onClick={() => setCampaignDropdownOpen(o => !o)}
+          <div className="sidebar-campaign" style={{ margin: '0 16px 18px', position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => campaigns.length > 1 && setCampaignDropdownOpen(o => !o)}
+              aria-haspopup={campaigns.length > 1 ? 'listbox' : undefined}
+              aria-expanded={campaigns.length > 1 ? campaignDropdownOpen : undefined}
               style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '6px 10px', borderRadius: '6px', cursor: 'pointer',
-                background: 'var(--accent-muted)', border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+                display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px',
+                width: '100%', textAlign: 'left', padding: '10px 8px',
+                background: 'none', border: 'none',
+                borderTop: '1px solid var(--gilt)', borderBottom: '1px solid var(--gilt)',
+                cursor: campaigns.length > 1 ? 'pointer' : 'default',
               }}
             >
-              <div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '1px' }}>Campaign</div>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-text)' }}>
-                  {activeCampaign?.name ?? 'None'}
-                </div>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: '14px', fontStyle: 'italic', color: 'var(--cover-ink-soft)' }}>Campaign</span>
+                <span style={{ display: 'block', fontSize: '18px', color: 'var(--cover-ink)', lineHeight: 1.25 }}>
+                  {activeCampaign?.name ?? 'None chosen'}
+                </span>
                 {activeCampaign?.role === 'dm' && workerLastSeen && (() => {
                   const mins = Math.floor((Date.now() - new Date(workerLastSeen).getTime()) / 60000)
                   const online = mins < 3
-                  const label = online ? 'Worker online' : mins < 60 ? `Worker ${mins}m ago` : 'Worker offline'
+                  const label = online ? 'Worker online' : mins < 60 ? `Worker seen ${mins}m ago` : 'Worker offline'
                   return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                      <span style={{
-                        width: 6, height: 6, borderRadius: '50%',
-                        background: online ? 'var(--success)' : 'var(--error)',
-                        flexShrink: 0, display: 'inline-block',
-                        boxShadow: online ? '0 0 4px var(--success)' : 'none',
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: '14px', color: 'var(--cover-ink-soft)' }}>
+                      <span aria-hidden style={{
+                        width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                        background: online ? 'var(--moss)' : 'transparent',
+                        border: online ? 'none' : '1px solid var(--cover-ink-soft)',
                       }} />
-                      <span style={{ fontSize: '10px', color: online ? 'var(--success)' : 'var(--error)' }}>{label}</span>
-                    </div>
+                      {label}
+                    </span>
                   )
                 })()}
-              </div>
+              </span>
               {campaigns.length > 1 && (
-                <span style={{ fontSize: '10px', color: '#475569' }}>
-                  {campaignDropdownOpen ? '▲' : '▼'}
-                </span>
+                <svg aria-hidden width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                  style={{ marginTop: 22, color: 'var(--cover-ink-soft)', transform: campaignDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
               )}
-            </div>
+            </button>
 
             {campaignDropdownOpen && campaigns.length > 1 && (
-              <div style={{
-                position: 'absolute', left: '12px', right: '12px', top: '100%',
-                background: 'var(--bg-elevated)', border: '1px solid var(--accent3)',
-                borderRadius: '6px', zIndex: 100, overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+              <div role="listbox" style={{
+                position: 'absolute', left: 0, right: 0, top: 'calc(100% + 4px)',
+                background: 'var(--page-raised)', color: 'var(--ink)',
+                border: '1px solid var(--rule-strong)', borderRadius: '3px',
+                zIndex: 100, overflow: 'hidden', boxShadow: 'var(--shadow)',
               }}>
-                {campaigns.map(c => (
-                  <div
-                    key={c.slug}
-                    onClick={() => {
-                      setActiveCampaign(c)
-                      setCampaignDropdownOpen(false)
-                    }}
-                    style={{
-                      padding: '8px 12px', fontSize: '12px', cursor: 'pointer',
-                      color: activeCampaign?.slug === c.slug ? 'var(--accent-text)' : 'var(--text-secondary)',
-                      background: activeCampaign?.slug === c.slug ? 'var(--accent-muted)' : 'transparent',
-                    }}
-                  >
-                    {c.name}
-                    <span style={{ fontSize: '10px', color: '#475569', marginLeft: '6px' }}>
-                      [{c.role}]
-                    </span>
-                  </div>
-                ))}
+                {campaigns.map(c => {
+                  const on = activeCampaign?.slug === c.slug
+                  return (
+                    <button
+                      key={c.slug}
+                      type="button"
+                      role="option"
+                      aria-selected={on}
+                      onClick={() => { setActiveCampaign(c); setCampaignDropdownOpen(false) }}
+                      style={{
+                        display: 'block', width: '100%', textAlign: 'left',
+                        padding: '8px 12px', fontSize: '16px', cursor: 'pointer', border: 'none',
+                        color: on ? 'var(--rubric)' : 'var(--ink)',
+                        background: on ? 'color-mix(in srgb, var(--rubric) 8%, transparent)' : 'transparent',
+                      }}
+                    >
+                      {c.name}
+                      <span style={{ fontSize: '14px', fontStyle: 'italic', color: 'var(--ink-faint)', marginLeft: '6px' }}>{c.role}</span>
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
         )}
 
-        {/* Nav links */}
-        <div className="sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '12px', flex: 1 }}>
+        {/* Contents */}
+        <div className="sidebar-nav" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
           {navItems.map(({ to, label, Icon }) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/'}
-              style={({ isActive }) => ({
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                textDecoration: 'none',
-                transition: 'all 0.15s ease',
-                background: isActive ? 'color-mix(in srgb, var(--accent2) 12%, transparent)' : 'transparent',
-                color: isActive ? 'var(--accent2-text)' : 'var(--text-secondary)',
-                fontWeight: isActive ? 600 : 400,
-                borderLeft: isActive ? '3px solid var(--accent2)' : '3px solid transparent',
-                paddingLeft: isActive ? '9px' : '9px',
-              })}
+              // A session page is still inside "Sessions".
+              className={({ isActive }) => 'cover-link' + (isActive || (to === '/' && isSessionView) ? ' active' : '')}
             >
               <Icon />
               <span style={{ flex: 1 }}>{label}</span>
               {to === '/search' && (
-                <span className="nav-shortcut-hint" style={{ fontSize: '10px', color: '#334155', fontFamily: 'monospace' }}>⌘K</span>
+                <kbd className="nav-shortcut-hint">Ctrl K</kbd>
               )}
             </NavLink>
           ))}
           {activeCampaign?.role === 'dm' && (
-            <NavLink
-              to="/edit-queue"
-              style={({ isActive }) => ({
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '8px 9px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                textDecoration: 'none',
-                transition: 'all 0.15s ease',
-                background: isActive ? 'color-mix(in srgb, var(--accent2) 12%, transparent)' : 'transparent',
-                color: isActive ? 'var(--accent2-text)' : 'var(--text-secondary)',
-                fontWeight: isActive ? 600 : 400,
-                borderLeft: isActive ? '3px solid var(--accent2)' : '3px solid transparent',
-              })}
-              className="sidebar-nav-item"
-            >
+            <NavLink to="/edit-queue" className="cover-link sidebar-nav-item">
               <EditQueueIcon />
               <span style={{ flex: 1 }}>Edit Queue</span>
               {pendingEditCount > 0 && (
-                <span style={{
-                  fontSize: '10px', fontWeight: 700,
-                  background: 'rgba(251,191,36,0.2)', color: '#fbbf24',
-                  border: '1px solid rgba(251,191,36,0.4)',
-                  borderRadius: '10px', padding: '1px 6px', minWidth: '18px', textAlign: 'center',
+                <span aria-label={`${pendingEditCount} pending`} style={{
+                  fontSize: '14px', fontVariantNumeric: 'lining-nums',
+                  background: 'var(--gilt)', color: 'var(--cover)',
+                  borderRadius: '3px', padding: '0 7px', minWidth: '20px', textAlign: 'center',
                 }}>
                   {pendingEditCount}
                 </span>
               )}
             </NavLink>
           )}
-          <NavLink
-            to="/settings"
-            className="sidebar-nav-item"
-            style={({ isActive }) => ({
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '8px 9px',
-              borderRadius: '8px',
-              fontSize: '13px',
-              textDecoration: 'none',
-              transition: 'all 0.15s ease',
-              background: isActive ? 'color-mix(in srgb, var(--accent2) 12%, transparent)' : 'transparent',
-              color: isActive ? 'var(--accent2-text)' : 'var(--text-secondary)',
-              fontWeight: isActive ? 600 : 400,
-              borderLeft: isActive ? '3px solid var(--accent2)' : '3px solid transparent',
-            })}
-          >
+          <NavLink to="/settings" className="cover-link sidebar-nav-item">
             <GearIcon />
             <span style={{ flex: 1 }}>Preferences</span>
           </NavLink>
         </div>
 
-        {/* User / auth section */}
-        <div className="sidebar-user" style={{ padding: '12px', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
+        {/* Owner's name, inside the back cover */}
+        <div className="sidebar-user" style={{ padding: '16px 24px 22px', borderTop: '1px solid color-mix(in srgb, var(--gilt) 45%, transparent)' }}>
           {loading ? null : isLoggedIn && user ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
-                onClick={() => navigate('/campaigns')}
-              >
-                <img
-                  src={avatarUrl(user)}
-                  alt=""
-                  style={{ width: 28, height: 28, borderRadius: '50%' }}
-                />
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{user.username}</div>
-                  {user.is_admin && (
-                    <div style={{ fontSize: '10px', color: 'var(--accent)' }}>admin</div>
-                  )}
-                </div>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <button
+                type="button"
+                onClick={() => navigate('/campaigns')}
+                title="Your campaigns"
+                style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', flex: 1, minWidth: 0, textAlign: 'left' }}
+              >
+                <img src={avatarUrl(user)} alt="" style={{ width: 28, height: 28, borderRadius: '50%', boxShadow: '0 0 0 1px var(--gilt)' }} />
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: '16px', color: 'var(--cover-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.username}</span>
+                  {user.is_admin && <span style={{ display: 'block', fontSize: '13px', fontStyle: 'italic', color: 'var(--cover-ink-soft)' }}>admin</span>}
+                </span>
+              </button>
+              <button
+                type="button"
                 onClick={logout}
-                style={{
-                  background: 'transparent', border: '1px solid color-mix(in srgb, var(--accent3) 70%, transparent)',
-                  borderRadius: '6px', color: 'var(--text-muted)', padding: '4px 0',
-                  fontSize: '11px', cursor: 'pointer', width: '100%',
-                }}
+                style={{ background: 'none', border: 'none', color: 'var(--cover-ink-soft)', fontSize: '15px', cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 3 }}
               >
                 Log out
               </button>
@@ -380,15 +326,13 @@ export default function App() {
               href="/auth/discord"
               style={{
                 display: 'block', textAlign: 'center',
-                background: '#5865f2', color: '#fff', borderRadius: '8px',
-                padding: '7px 0', textDecoration: 'none', fontSize: '12px', fontWeight: 600,
+                background: '#5865f2', color: '#fff', borderRadius: '3px',
+                padding: '7px 0', textDecoration: 'none', fontSize: '16px',
               }}
             >
-              Login with Discord
+              Log in with Discord
             </a>
-          ) : (
-            <div style={{ fontSize: '11px', color: '#334155' }}>v1.0</div>
-          )}
+          ) : null}
         </div>
       </nav>
 
@@ -397,18 +341,19 @@ export default function App() {
           so main must be a height-bounded flex column there (mobile CSS does
           this for every page). Other pages scroll main itself. */}
       <main className="app-main" style={isSessionView
-        ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
-        : { flex: 1, overflow: 'auto' }}>
+        ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--page)' }
+        : { flex: 1, overflow: 'auto', background: 'var(--page)' }}>
         {/* Mobile campaign indicator — hidden on session view (has its own header) */}
         {!isSessionView && (
           <div className="mobile-campaign-bar" style={{
             display: 'none',
             padding: '8px 16px',
-            background: 'var(--bg-surface)',
-            borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
-            fontSize: '12px',
-            color: 'var(--accent-text)',
-            fontWeight: 600,
+            background: 'var(--page)',
+            borderBottom: '1px solid var(--rule)',
+            fontSize: '15px',
+            fontVariant: 'small-caps',
+            letterSpacing: '0.04em',
+            color: 'var(--ink-soft)',
           }}>
             {activeCampaign?.name ?? 'No campaign'}
           </div>
@@ -437,12 +382,11 @@ function NotFoundPage() {
   const navigate = useNavigate()
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 32, textAlign: 'center' }}>
-      <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.4 }}>🎲</div>
-      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>404 — Not Found</div>
-      <div style={{ fontSize: 14, color: '#475569', marginBottom: 24 }}>This page doesn't exist or has been moved.</div>
+      <div style={{ fontSize: 34, color: 'var(--ink)', marginBottom: 8 }}>This page isn't in the journal</div>
+      <div style={{ fontSize: 17, fontStyle: 'italic', color: 'var(--ink-soft)', marginBottom: 24 }}>The link may be old, or the page was moved.</div>
       <button
         onClick={() => navigate('/')}
-        style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+        style={{ background: 'var(--accent)', border: 'none', borderRadius: 3, color: 'var(--on-rubric)', padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
       >
         Back to Sessions
       </button>

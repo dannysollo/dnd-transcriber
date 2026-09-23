@@ -65,7 +65,7 @@ export default function CampaignsPage() {
 
   if (authEnabled && !isLoggedIn) {
     return (
-      <div style={{ padding: '32px', color: '#64748b' }}>
+      <div style={{ padding: '32px', color: 'var(--ink-faint)' }}>
         Please <a href="/auth/discord" style={{ color: 'var(--accent)' }}>log in</a> to view campaigns.
       </div>
     )
@@ -75,16 +75,16 @@ export default function CampaignsPage() {
     <div className="page-content" style={{ padding: '32px', maxWidth: '900px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>Campaigns</h1>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
+          <h1 style={{ margin: 0, fontSize: '34px', fontWeight: 500, color: 'var(--ink)' }}>Campaigns</h1>
+          <p style={{ margin: '4px 0 0', fontSize: '16px', color: 'var(--ink-faint)' }}>
             {user ? `Campaigns for ${user.username}` : 'All campaigns'}
           </p>
         </div>
         <button
           onClick={() => setShowCreate(v => !v)}
           style={{
-            background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
-            padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+            background: 'var(--accent)', border: 'none', borderRadius: '3px', color: 'var(--on-rubric)',
+            padding: '8px 16px', fontSize: '16px', fontWeight: 600, cursor: 'pointer',
           }}
         >
           + New Campaign
@@ -93,10 +93,10 @@ export default function CampaignsPage() {
 
       {showCreate && (
         <div style={{
-          background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '12px',
+          background: 'var(--bg-surface)', border: '1px solid var(--accent3)', borderRadius: '3px',
           padding: '24px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '12px',
         }}>
-          <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0' }}>New Campaign</div>
+          <div style={{ fontSize: '17px', fontWeight: 600, color: 'var(--ink)' }}>New Campaign</div>
           <Field label="Slug (URL-safe, e.g. as-above-so-below)">
             <input
               value={slug}
@@ -116,8 +116,8 @@ export default function CampaignsPage() {
               onClick={createCampaign}
               disabled={creating || !slug.trim() || !name.trim()}
               style={{
-                background: 'var(--accent)', border: 'none', borderRadius: '8px', color: '#fff',
-                padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                background: 'var(--accent)', border: 'none', borderRadius: '3px', color: 'var(--on-rubric)',
+                padding: '8px 16px', fontSize: '16px', fontWeight: 600, cursor: 'pointer',
                 opacity: (creating || !slug.trim() || !name.trim()) ? 0.5 : 1,
               }}
             >
@@ -126,8 +126,8 @@ export default function CampaignsPage() {
             <button
               onClick={() => setShowCreate(false)}
               style={{
-                background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '8px',
-                color: '#94a3b8', padding: '8px 16px', fontSize: '13px', cursor: 'pointer',
+                background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '3px',
+                color: 'var(--ink-soft)', padding: '8px 16px', fontSize: '16px', cursor: 'pointer',
               }}
             >
               Cancel
@@ -137,11 +137,11 @@ export default function CampaignsPage() {
       )}
 
       {loading ? (
-        <div style={{ color: '#64748b', fontSize: '14px' }}>Loading...</div>
+        <div style={{ color: 'var(--ink-faint)', fontSize: '17px' }}>Loading...</div>
       ) : campaigns.length === 0 ? (
         <div style={{
-          background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '12px',
-          padding: '48px', textAlign: 'center', color: '#64748b',
+          background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '3px',
+          padding: '48px', textAlign: 'center', color: 'var(--ink-faint)',
         }}>
           No campaigns yet. Create one above.
         </div>
@@ -151,7 +151,7 @@ export default function CampaignsPage() {
             <div
               key={c.id}
               style={{
-                background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '10px',
+                background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '3px',
                 padding: '16px 20px', transition: 'border-color 0.15s',
                 display: 'flex', alignItems: 'center', gap: '12px',
               }}
@@ -159,20 +159,20 @@ export default function CampaignsPage() {
               onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--accent3)')}
             >
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '15px', fontWeight: 600, color: '#e2e8f0', marginBottom: 2 }}>{c.name}</div>
+                <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>{c.name}</div>
                 {c.description && (
-                  <div style={{ fontSize: '12px', color: '#64748b', marginBottom: 4 }}>{c.description}</div>
+                  <div style={{ fontSize: '15px', color: 'var(--ink-faint)', marginBottom: 4 }}>{c.description}</div>
                 )}
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '11px', color: '#334155' }}>/{c.slug}</span>
+                  <span style={{ fontSize: '14px', color: 'var(--rule-strong)' }}>/{c.slug}</span>
                   {c.session_count !== undefined && (
-                    <span style={{ fontSize: '11px', color: '#475569' }}>📜 {c.session_count} session{c.session_count !== 1 ? 's' : ''}</span>
+                    <span style={{ fontSize: '14px', color: 'var(--ink-faint)' }}>{c.session_count} session{c.session_count !== 1 ? 's' : ''}</span>
                   )}
                   {c.member_count !== undefined && (
-                    <span style={{ fontSize: '11px', color: '#475569' }}>👥 {c.member_count} member{c.member_count !== 1 ? 's' : ''}</span>
+                    <span style={{ fontSize: '14px', color: 'var(--ink-faint)' }}>👥 {c.member_count} member{c.member_count !== 1 ? 's' : ''}</span>
                   )}
                   {c.role && (
-                    <span style={{ fontSize: '10px', color: '#475569', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--accent3)', borderRadius: 4, padding: '1px 6px' }}>{c.role}</span>
+                    <span style={{ fontSize: '13px', color: 'var(--ink-faint)', background: 'color-mix(in srgb, var(--ink) 4%, transparent)', border: '1px solid var(--accent3)', borderRadius: 4, padding: '1px 6px' }}>{c.role}</span>
                   )}
                 </div>
               </div>
@@ -180,8 +180,8 @@ export default function CampaignsPage() {
                 <button
                   onClick={() => navigate('/')}
                   style={{
-                    background: 'rgba(124,108,252,0.1)', border: '1px solid rgba(124,108,252,0.25)',
-                    borderRadius: 7, color: 'var(--accent-text)', padding: '5px 12px', fontSize: '12px',
+                    background: 'color-mix(in srgb, var(--rubric) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--rubric) 25%, transparent)',
+                    borderRadius: 3, color: 'var(--accent-text)', padding: '5px 12px', fontSize: '15px',
                     fontWeight: 600, cursor: 'pointer',
                   }}
                 >
@@ -191,7 +191,7 @@ export default function CampaignsPage() {
                   onClick={() => navigate(`/campaigns/${c.slug}/settings`)}
                   style={{
                     background: 'transparent', border: '1px solid var(--accent3)',
-                    borderRadius: 7, color: '#64748b', padding: '5px 12px', fontSize: '12px',
+                    borderRadius: 3, color: 'var(--ink-faint)', padding: '5px 12px', fontSize: '15px',
                     cursor: 'pointer',
                   }}
                 >
@@ -207,14 +207,14 @@ export default function CampaignsPage() {
 }
 
 const inputStyle: React.CSSProperties = {
-  background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '8px',
-  color: '#e2e8f0', padding: '8px 12px', fontSize: '13px', outline: 'none', width: '100%',
+  background: 'var(--bg-elevated)', border: '1px solid var(--accent3)', borderRadius: '3px',
+  color: 'var(--ink)', padding: '8px 12px', fontSize: '16px', outline: 'none', width: '100%',
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <label style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>{label}</label>
+      <label style={{ fontSize: '14px', color: 'var(--ink-faint)', fontWeight: 500 }}>{label}</label>
       {children}
     </div>
   )

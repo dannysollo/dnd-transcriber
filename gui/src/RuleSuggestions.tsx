@@ -88,7 +88,7 @@ export function RuleSuggestionBar({
         gap: '6px',
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border-default)',
-        borderRadius: '8px',
+        borderRadius: '3px',
         padding: '10px 12px',
         marginBottom: '12px',
         ...(floating && {
@@ -104,7 +104,7 @@ export function RuleSuggestionBar({
         }),
       }}
     >
-      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+      <div style={{ fontSize: '15px', color: 'var(--text-secondary)' }}>
         {suggestions.length === 1
           ? 'Save this fix as a correction rule so future transcripts get it automatically?'
           : 'Save these fixes as correction rules so future transcripts get them automatically?'}
@@ -113,13 +113,13 @@ export function RuleSuggestionBar({
         const key = `${s.session}|${s.wrong}`
         return (
           <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+            <span style={{ fontSize: '16px', color: 'var(--text-primary)' }}>
               <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)' }}>{s.wrong}</span>
               {' → '}
               <strong>{s.right}</strong>
             </span>
             {s.common_word && (
-              <span style={{ fontSize: '11px', color: 'var(--warning)' }}>
+              <span style={{ fontSize: '14px', color: 'var(--warning)' }}>
                 “{s.wrong}” is an ordinary word; the rule replaces it everywhere
               </span>
             )}
@@ -128,7 +128,7 @@ export function RuleSuggestionBar({
               className="btn-ghost"
               onClick={() => add(s)}
               disabled={busy === key}
-              style={{ fontSize: '12px', padding: '3px 10px' }}
+              style={{ fontSize: '15px', padding: '3px 10px' }}
             >
               {busy === key ? 'Adding…' : 'Add rule'}
             </button>
@@ -136,7 +136,7 @@ export function RuleSuggestionBar({
               className="btn-ghost"
               onClick={() => onDismiss(s)}
               aria-label={`Dismiss ${s.wrong} → ${s.right}`}
-              style={{ fontSize: '12px', padding: '3px 8px' }}
+              style={{ fontSize: '15px', padding: '3px 8px' }}
             >
               Dismiss
             </button>

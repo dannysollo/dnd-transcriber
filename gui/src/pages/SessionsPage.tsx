@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { CloseIcon } from '../Icons'
 import { useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
@@ -91,9 +92,9 @@ const REVIEW_CYCLE: Record<ReviewStatus, ReviewStatus> = {
 }
 
 const REVIEW_BADGE: Record<ReviewStatus, { bg: string; color: string; label: string }> = {
-  unreviewed: { bg: 'rgba(100,116,139,0.12)', color: '#94a3b8', label: 'Unreviewed' },
-  reviewed:   { bg: 'rgba(251,191,36,0.12)',  color: '#fbbf24', label: 'Reviewed' },
-  published:  { bg: 'rgba(34,197,94,0.12)',   color: '#4ade80', label: 'Published' },
+  unreviewed: { bg: 'color-mix(in srgb, var(--ink-faint) 12%, transparent)', color: 'var(--ink-soft)', label: 'Unreviewed' },
+  reviewed:   { bg: 'color-mix(in srgb, var(--ochre) 12%, transparent)',  color: 'var(--ochre)', label: 'Reviewed' },
+  published:  { bg: 'color-mix(in srgb, var(--moss) 12%, transparent)',   color: 'var(--moss)', label: 'Published' },
 }
 
 export default function SessionsPage() {
@@ -399,47 +400,39 @@ export default function SessionsPage() {
   }
 
   return (
-    <div className="page-content" style={{ padding: '24px 28px', maxWidth: '860px' }}>
+    <div className="page-content" style={{ padding: '40px 56px', maxWidth: '920px' }}>
       {/* Header */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: '28px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-          <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h1 style={{ margin: 0, fontSize: '34px', lineHeight: 1.15, color: 'var(--ink)' }}>
             Sessions
             {!loading && sessions.length > 0 && (
-              <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}>
-                {sessions.length}
+              <span style={{ marginLeft: 12, fontSize: 20, fontStyle: 'italic', color: 'var(--ink-faint)' }}>
+                {sessions.length} {sessions.length === 1 ? 'entry' : 'entries'}
               </span>
             )}
           </h1>
-          <span style={{ fontSize: '13px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-            {activeCampaign ? activeCampaign.name : 'All sessions'}
-          </span>
         </div>
 
         {/* Sort + Filter + New session row */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, marginRight: 2 }}>Sort:</span>
+            <span style={{ fontSize: 16, color: 'var(--ink-faint)', fontStyle: 'italic', marginRight: 4, minWidth: 64 }}>Order by</span>
             {(['name', 'date_added', 'modified'] as SortKey[]).map(k => (
               <button
                 key={k}
                 onClick={() => setSortKey(k)}
-                style={{
-                  background: sortKey === k ? 'color-mix(in srgb, var(--accent2) 12%, transparent)' : 'transparent',
-                  border: `1px solid ${sortKey === k ? 'var(--accent2)' : 'var(--border-default)'}`,
-                  borderRadius: 5, color: sortKey === k ? 'var(--accent2-text)' : 'var(--text-muted)',
-                  padding: '3px 9px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
+                aria-pressed={sortKey === k}
+                className="index-link"
               >
-                {k === 'name' ? 'Name' : k === 'date_added' ? 'Date Added' : 'Modified'}
+                {k === 'name' ? 'name' : k === 'date_added' ? 'date added' : 'last changed'}
               </button>
             ))}
           </div>
 
           {/* Filter row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, marginRight: 2 }}>Filter:</span>
+            <span style={{ fontSize: 16, color: 'var(--ink-faint)', fontStyle: 'italic', marginRight: 4, minWidth: 64 }}>Show</span>
             {([
               ['all', 'All'],
               ['transcript', 'Transcript'],
@@ -452,17 +445,12 @@ export default function SessionsPage() {
               <button
                 key={k}
                 onClick={() => setFilterKey(k)}
-                style={{
-                  background: filterKey === k ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
-                  border: `1px solid ${filterKey === k ? 'var(--accent)' : 'var(--border-default)'}`,
-                  borderRadius: 5, color: filterKey === k ? 'var(--accent-text)' : 'var(--text-muted)',
-                  padding: '3px 9px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
+                aria-pressed={filterKey === k}
+                className="index-link"
               >
-                {label}
+                {label.toLowerCase()}
                 {k !== 'all' && sessions.length > 0 && (
-                  <span style={{ marginLeft: 4, opacity: 0.6 }}>
+                  <span style={{ marginLeft: 4, color: 'var(--ink-faint)', fontVariantNumeric: 'lining-nums' }}>
                     {k === 'transcript' ? sessions.filter(s => s.has_transcript).length
                       : k === 'summary' ? sessions.filter(s => s.has_summary).length
                       : k === 'wiki' ? sessions.filter(s => s.has_wiki).length
@@ -476,17 +464,16 @@ export default function SessionsPage() {
           </div>
 
           {(!authEnabled || (isLoggedIn && activeCampaign != null)) && (
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 14 }}>
               <input
                 type="text"
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && createSession()}
-                placeholder="Session name, e.g. 2026-03-15"
-                style={{
-                  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '8px',
-                  color: 'var(--text-primary)', padding: '8px 12px', fontSize: '13px', flex: 1, outline: 'none',
-                }}
+                placeholder="New session, e.g. 3-22-2026"
+                aria-label="New session name"
+                className="written-line"
+                style={{ flex: '1 1 220px' }}
               />
               {(!authEnabled || activeCampaign?.role === 'dm') && activeCampaign && (
                 <input
@@ -497,10 +484,8 @@ export default function SessionsPage() {
                   placeholder="Craig link (optional)"
                   title="Paste the Craig download link — the worker fetches the audio and transcribes it"
                   aria-label="Craig download link (optional)"
-                  style={{
-                    background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '8px',
-                    color: 'var(--text-primary)', padding: '8px 12px', fontSize: '13px', flex: 1, minWidth: 0, outline: 'none',
-                  }}
+                  className="written-line"
+                  style={{ flex: '1 1 220px', minWidth: 0 }}
                 />
               )}
               <button
@@ -509,7 +494,7 @@ export default function SessionsPage() {
                 className="btn-primary"
                 style={{ whiteSpace: 'nowrap' }}
               >
-                + New
+                Create session
               </button>
             </div>
           )}
@@ -530,7 +515,7 @@ export default function SessionsPage() {
       />
 
       {!activeCampaign ? (
-        <EmptyState icon="⚔️" title="No campaign selected" body="Pick a campaign from the dropdown above to see its sessions." />
+        <EmptyState title="No campaign selected" body="Pick a campaign from the dropdown above to see its sessions." />
       ) : loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {[0,1,2].map(i => (
@@ -543,20 +528,19 @@ export default function SessionsPage() {
         </div>
       ) : sessions.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--text-muted)' }}>
-          <div style={{ fontSize: '32px', marginBottom: '12px' }}>📜</div>
-          <h3 style={{ margin: '0 0 8px', color: 'var(--text-secondary)', fontSize: '16px' }}>No sessions yet</h3>
-          <p style={{ margin: 0, fontSize: '13px', maxWidth: '280px', marginLeft: 'auto', marginRight: 'auto' }}>
-            Create your first session above to start transcribing D&amp;D sessions.
+          <h3 style={{ margin: '0 0 8px', color: 'var(--ink)', fontSize: '24px' }}>The journal is empty</h3>
+          <p style={{ margin: 0, fontSize: '17px', maxWidth: '380px', marginLeft: 'auto', marginRight: 'auto', color: 'var(--ink-soft)' }}>
+            Name your first session above. Paste its Craig link too and the worker will fetch the audio and transcribe it.
           </p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {filteredSessions.length === 0 && sessions.length > 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 24px', color: 'var(--text-muted)' }}>
-              <div style={{ fontSize: 13 }}>No sessions match this filter.</div>
+              <div style={{ fontSize: 16 }}>No sessions match this filter.</div>
               <button
                 onClick={() => setFilterKey('all')}
-                style={{ marginTop: 10, background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13 }}
+                style={{ marginTop: 10, background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 16 }}
               >
                 Clear filter
               </button>
@@ -575,15 +559,15 @@ export default function SessionsPage() {
                 <div
                   key={s.name}
                   className="session-card"
-                  style={{ border: '1px solid rgba(239,68,68,0.4)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}
+                  style={{ border: '1px solid color-mix(in srgb, var(--rubric) 40%, transparent)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}
                 >
-                  <span style={{ flex: 1, fontSize: '14px', color: 'var(--danger)' }}>
+                  <span style={{ flex: 1, fontSize: '17px', color: 'var(--danger)' }}>
                     Delete <strong>{s.name}</strong>?
                   </span>
-                  <button onClick={() => deleteSession(s.name)} className="btn-danger" style={{ padding: '5px 14px', fontSize: '13px', borderRadius: '6px' }}>
+                  <button onClick={() => deleteSession(s.name)} className="btn-danger" style={{ padding: '5px 14px', fontSize: '16px', borderRadius: '3px' }}>
                     Yes, delete
                   </button>
-                  <button onClick={() => setConfirmDelete(null)} className="btn-ghost" style={{ padding: '5px 14px', fontSize: '13px', borderRadius: '6px' }}>
+                  <button onClick={() => setConfirmDelete(null)} className="btn-ghost" style={{ padding: '5px 14px', fontSize: '16px', borderRadius: '3px' }}>
                     Cancel
                   </button>
                 </div>
@@ -599,10 +583,10 @@ export default function SessionsPage() {
                 onDragOver={handleDragOver}
                 onDrop={e => handleDrop(e, s.name)}
                 style={{
-                  background: isDragOver ? 'rgba(124,108,252,0.06)' : undefined,
+                  background: isDragOver ? 'color-mix(in srgb, var(--rubric) 6%, transparent)' : undefined,
                   border: isDragOver ? '1px solid var(--accent)' : undefined,
-                  boxShadow: isDragOver ? '0 0 0 2px rgba(124,108,252,0.2)' : undefined,
-                  padding: '13px 16px',
+                  boxShadow: isDragOver ? '0 0 0 2px color-mix(in srgb, var(--rubric) 20%, transparent)' : undefined,
+                  padding: '18px 4px 16px',
                   overflow: 'hidden',
                 }}
               >
@@ -617,8 +601,8 @@ export default function SessionsPage() {
                     }}
                     onBlur={() => renameSession(s.name, renameValue)}
                     style={{
-                      background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: '6px',
-                      color: 'var(--text-primary)', padding: '6px 10px', fontSize: '15px', fontWeight: 600,
+                      background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: '3px',
+                      color: 'var(--text-primary)', padding: '6px 10px', fontSize: '18px', fontWeight: 600,
                       outline: 'none', width: '100%', boxSizing: 'border-box',
                     }}
                   />
@@ -631,24 +615,20 @@ export default function SessionsPage() {
                         style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
                       >
                         <div style={{
-                          fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)',
+                          fontSize: '23px', color: 'var(--ink)',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          lineHeight: 1.3,
+                          lineHeight: 1.25,
                         }}>
                           {s.name}
                         </div>
                       </div>
 
                       {/* Status badges — top right */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                        {s.has_transcript && (
-                          <ContentBadge label="T" title="Transcript" color="var(--accent2)" />
-                        )}
-                        {s.has_summary && (
-                          <ContentBadge label="S" title="Summary" color="var(--accent)" />
-                        )}
-                        {s.has_wiki && (
-                          <ContentBadge label="W" title="Wiki" color="#22c55e" />
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {(s.has_transcript || s.has_summary || s.has_wiki) && (
+                          <span style={{ fontSize: '16px', fontStyle: 'italic', color: 'var(--ink-faint)' }}>
+                            {[s.has_transcript && 'transcript', s.has_summary && 'summary', s.has_wiki && 'wiki'].filter(Boolean).join(', ')}
+                          </span>
                         )}
                         {s.has_craig_link && !s.has_transcript && (
                           <span title="Audio comes from a Craig link" style={{ color: 'var(--text-muted)', display: 'flex' }}>
@@ -666,7 +646,7 @@ export default function SessionsPage() {
                           <JobStatusBadge job={job} onCancel={() => cancelJob(s.name)} />
                         )}
                         {isDragOver && (
-                          <span style={{ fontSize: '11px', color: 'var(--accent-text)', fontStyle: 'italic' }}>
+                          <span style={{ fontSize: '14px', color: 'var(--accent-text)', fontStyle: 'italic' }}>
                             Drop to upload
                           </span>
                         )}
@@ -679,7 +659,7 @@ export default function SessionsPage() {
                         onClick={() => navigate(`/sessions/${s.name}`)}
                         style={{
                           margin: '0 0 8px 0',
-                          fontSize: '13px',
+                          fontSize: '16px',
                           color: 'var(--text-secondary)',
                           fontStyle: 'italic',
                           lineHeight: 1.55,
@@ -697,7 +677,7 @@ export default function SessionsPage() {
 
                     {/* Bottom row: timestamp + actions */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: s.description ? 0 : 10 }}>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
                         {timestamp ? `${timestampLabel} ${relativeTime(timestamp)}` : ''}
                       </span>
 
@@ -765,15 +745,15 @@ export default function SessionsPage() {
                           placeholder="https://craig.horse/rec/…?key=…"
                           aria-label={`Craig link for ${s.name}`}
                           style={{
-                            background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: '6px',
-                            color: 'var(--text-primary)', padding: '6px 10px', fontSize: '13px', flex: 1, minWidth: 0, outline: 'none',
+                            background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: '3px',
+                            color: 'var(--text-primary)', padding: '6px 10px', fontSize: '16px', flex: 1, minWidth: 0, outline: 'none',
                           }}
                         />
-                        <button className="btn-primary" style={{ fontSize: '12px', padding: '5px 12px', whiteSpace: 'nowrap' }}
+                        <button className="btn-primary" style={{ fontSize: '15px', padding: '5px 12px', whiteSpace: 'nowrap' }}
                           disabled={!craigValue.trim()} onClick={() => attachCraigLink(s.name)}>
                           Fetch &amp; transcribe
                         </button>
-                        <button className="btn-ghost" style={{ fontSize: '12px', padding: '5px 10px' }} onClick={() => setCraigFor(null)}>
+                        <button className="btn-ghost" style={{ fontSize: '15px', padding: '5px 10px' }} onClick={() => setCraigFor(null)}>
                           Cancel
                         </button>
                       </div>
@@ -789,24 +769,20 @@ export default function SessionsPage() {
   )
 }
 
-function EmptyState({ icon, title, body }: { icon: string; title: string; body: string }) {
+function EmptyState({ title, body }: { icon?: string; title: string; body: string }) {
   return (
-    <div style={{
-      background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px',
-      padding: '56px 32px', textAlign: 'center',
-    }}>
-      <div style={{ fontSize: 36, marginBottom: 14 }}>{icon}</div>
-      <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>{title}</div>
-      <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{body}</div>
+    <div style={{ padding: '56px 32px', textAlign: 'center', borderTop: '1px solid var(--rule)', borderBottom: '1px solid var(--rule)' }}>
+      <div style={{ color: 'var(--ink)', marginBottom: 6, fontSize: 24 }}>{title}</div>
+      <div style={{ color: 'var(--ink-soft)', fontSize: 17, fontStyle: 'italic' }}>{body}</div>
     </div>
   )
 }
 
 const JOB_BADGE: Record<string, { bg: string; text: string; label: string }> = {
-  pending:   { bg: 'rgba(251,191,36,0.12)',  text: '#fbbf24', label: 'Queued' },
-  claimed:   { bg: 'rgba(59,130,246,0.12)',  text: '#60a5fa', label: 'Transcribing' },
-  done:      { bg: 'rgba(34,197,94,0.12)',   text: '#4ade80', label: 'Done' },
-  error:     { bg: 'rgba(248,113,113,0.12)', text: '#f87171', label: 'Error' },
+  pending:   { bg: 'color-mix(in srgb, var(--ochre) 12%, transparent)',  text: 'var(--ochre)', label: 'Queued' },
+  claimed:   { bg: 'color-mix(in srgb, var(--gilt) 12%, transparent)',  text: 'var(--gilt-ink)', label: 'Transcribing' },
+  done:      { bg: 'color-mix(in srgb, var(--moss) 12%, transparent)',   text: 'var(--moss)', label: 'Done' },
+  error:     { bg: 'color-mix(in srgb, var(--rubric) 12%, transparent)', text: 'var(--rubric)', label: 'Error' },
 }
 
 function JobStatusBadge({ job, onCancel }: { job: TranscriptionJob; onCancel?: () => void }) {
@@ -818,9 +794,8 @@ function JobStatusBadge({ job, onCancel }: { job: TranscriptionJob; onCancel?: (
       <div
         title={job.status === 'error' ? (job.error_message ?? undefined) : undefined}
         style={{
-          background: b.bg, color: b.text, borderRadius: '4px',
-          padding: '2px 8px', fontSize: '10px', fontWeight: 700,
-          letterSpacing: '0.03em', textTransform: 'uppercase',
+          color: b.text,
+          fontSize: '16px', fontStyle: 'italic',
           whiteSpace: 'nowrap', cursor: job.status === 'error' ? 'help' : 'default',
         }}
       >
@@ -832,9 +807,9 @@ function JobStatusBadge({ job, onCancel }: { job: TranscriptionJob; onCancel?: (
           title="Cancel job"
           style={{
             background: 'transparent', border: 'none', color: 'var(--text-muted)',
-            cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1,
+            cursor: 'pointer', fontSize: '15px', padding: '0 2px', lineHeight: 1,
           }}
-        >✕</button>
+        ><CloseIcon /></button>
       )}
     </div>
   )
@@ -848,46 +823,12 @@ function ActionBtn({ children, onClick, title, loading, danger }: {
       onClick={e => { e.stopPropagation(); onClick() }}
       title={title}
       disabled={loading}
-      style={{
-        background: 'transparent',
-        border: `1px solid ${danger ? 'rgba(248,113,113,0.25)' : 'var(--border-default)'}`,
-        borderRadius: '6px',
-        color: danger ? '#f87171' : 'var(--text-muted)',
-        padding: '5px 7px',
-        fontSize: '13px',
-        cursor: 'pointer',
-        opacity: loading ? 0.5 : 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        transition: 'all 0.15s ease',
-      }}
+      aria-label={title}
+      className={'entry-action' + (danger ? ' danger' : '')}
+      style={{ opacity: loading ? 0.5 : undefined }}
     >
       {children}
     </button>
-  )
-}
-
-/** Small colored letter badge for Transcript / Summary / Wiki */
-function ContentBadge({ label, title, color }: { label: string; title: string; color: string }) {
-  return (
-    <span
-      title={title}
-      style={{
-        background: `color-mix(in srgb, ${color} 15%, transparent)`,
-        color: color,
-        border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`,
-        borderRadius: '4px',
-        padding: '2px 6px',
-        fontSize: '10px',
-        fontWeight: 700,
-        letterSpacing: '0.05em',
-        textTransform: 'uppercase',
-        userSelect: 'none',
-      }}
-    >
-      {label}
-    </span>
   )
 }
 
@@ -899,21 +840,14 @@ function ReviewStatusBadge({ status, onClick, isDm }: { status: ReviewStatus; on
       onClick={isDm ? e => { e.stopPropagation(); onClick() } : undefined}
       title={isDm ? `Click to advance review status (currently: ${b.label})` : b.label}
       style={{
-        background: b.bg,
         color: b.color,
-        border: `1px solid color-mix(in srgb, ${b.color} 40%, transparent)`,
-        borderRadius: '4px',
-        padding: '2px 7px',
-        fontSize: '10px',
-        fontWeight: 700,
-        letterSpacing: '0.03em',
-        textTransform: 'uppercase',
+        fontSize: '16px',
+        fontStyle: 'italic',
         cursor: isDm ? 'pointer' : 'default',
         userSelect: 'none',
-        transition: 'all 0.15s ease',
       }}
     >
-      {b.label}
+      {b.label.toLowerCase()}
     </span>
   )
 }
@@ -933,7 +867,7 @@ function ReviewIcon({ status }: { status: ReviewStatus }) {
   if (status === 'reviewed') {
     // Single check — reviewed, clicking marks as published
     return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ochre)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="20 6 9 17 4 12"/>
       </svg>
     )

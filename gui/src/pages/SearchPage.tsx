@@ -24,7 +24,7 @@ interface SearchResponse {
 const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   transcript: { label: 'Transcript', color: 'var(--accent)' },
   summary:    { label: 'Summary',    color: 'var(--accent2)' },
-  wiki:       { label: 'Wiki',       color: '#4ade80' },
+  wiki:       { label: 'Wiki',       color: 'var(--moss)' },
 }
 
 function highlightQuery(text: string, query: string) {
@@ -34,7 +34,7 @@ function highlightQuery(text: string, query: string) {
   return (
     <>
       {text.slice(0, idx)}
-      <mark style={{ background: 'color-mix(in srgb, var(--accent) 30%, transparent)', color: '#e2e8f0', borderRadius: 2, padding: '0 2px' }}>
+      <mark style={{ background: 'color-mix(in srgb, var(--accent) 30%, transparent)', color: 'var(--ink)', borderRadius: 2, padding: '0 2px' }}>
         {text.slice(idx, idx + query.length)}
       </mark>
       {text.slice(idx + query.length)}
@@ -76,7 +76,7 @@ export default function SearchPage() {
 
   if (!activeCampaign) {
     return (
-      <div style={{ padding: 32, color: '#94a3b8' }}>
+      <div style={{ padding: 32, color: 'var(--ink-soft)' }}>
         Select a campaign to search.
       </div>
     )
@@ -85,40 +85,33 @@ export default function SearchPage() {
   return (
     <div className="session-view-root" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ padding: '24px 24px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
-        <h2 style={{ margin: '0 0 16px', fontSize: 20, fontWeight: 600, color: '#e2e8f0' }}>
-          Search Sessions
-        </h2>
+      <div style={{ padding: '40px 56px 16px', borderBottom: '1px solid var(--rule)', flexShrink: 0 }}>
+        <h1 style={{ margin: '0 0 16px', fontSize: 34, fontWeight: 500, color: 'var(--ink)' }}>
+          Search every session
+        </h1>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
             ref={inputRef}
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search transcripts, summaries, wiki…"
+            placeholder="A name, a place, a line someone said…"
             autoFocus
-            style={{
-              flex: 1,
-              padding: '10px 14px',
-              borderRadius: 8,
-              border: '1px solid var(--accent3)',
-              background: 'rgba(255,255,255,0.05)',
-              color: '#e2e8f0',
-              fontSize: 15,
-              outline: 'none',
-            }}
+            aria-label="Search every session"
+            className="written-line"
+            style={{ flex: 1, fontSize: 20 }}
           />
           <button
             onClick={() => doSearch(query)}
             disabled={loading || query.trim().length < 2}
             style={{
               padding: '10px 20px',
-              borderRadius: 8,
+              borderRadius: 3,
               border: 'none',
-              background: loading ? 'rgba(124,108,252,0.3)' : 'var(--accent)',
-              color: '#fff',
+              background: loading ? 'color-mix(in srgb, var(--rubric) 30%, transparent)' : 'var(--accent)',
+              color: 'var(--on-rubric)',
               fontWeight: 600,
-              fontSize: 14,
+              fontSize: 17,
               cursor: loading ? 'not-allowed' : 'pointer',
             }}
           >
@@ -130,27 +123,27 @@ export default function SearchPage() {
       {/* Results */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
         {error && (
-          <div style={{ color: '#f87171', background: 'rgba(248,113,113,0.1)', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
+          <div style={{ color: 'var(--rubric)', background: 'color-mix(in srgb, var(--rubric) 10%, transparent)', borderRadius: 3, padding: '12px 16px', marginBottom: 16 }}>
             {error}
           </div>
         )}
 
         {results === null && !loading && (
-          <div style={{ color: '#475569', textAlign: 'center', marginTop: 48, fontSize: 15 }}>
+          <div style={{ color: 'var(--ink-faint)', textAlign: 'center', marginTop: 48, fontSize: 18 }}>
             Type something and press Enter or click Search
           </div>
         )}
 
         {results !== null && results.length === 0 && (
-          <div style={{ color: '#475569', textAlign: 'center', marginTop: 48, fontSize: 15 }}>
-            No results for <strong style={{ color: '#94a3b8' }}>"{lastQuery}"</strong>
+          <div style={{ color: 'var(--ink-faint)', textAlign: 'center', marginTop: 48, fontSize: 18 }}>
+            No results for <strong style={{ color: 'var(--ink-soft)' }}>"{lastQuery}"</strong>
           </div>
         )}
 
         {results !== null && results.length > 0 && (
           <>
-            <div style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>
-              {results.reduce((n, r) => n + r.hit_count, 0)} hit{results.reduce((n, r) => n + r.hit_count, 0) !== 1 ? 's' : ''} across {results.length} session{results.length !== 1 ? 's' : ''} for <strong style={{ color: '#94a3b8' }}>"{lastQuery}"</strong>
+            <div style={{ color: 'var(--ink-faint)', fontSize: 16, marginBottom: 16 }}>
+              {results.reduce((n, r) => n + r.hit_count, 0)} hit{results.reduce((n, r) => n + r.hit_count, 0) !== 1 ? 's' : ''} across {results.length} session{results.length !== 1 ? 's' : ''} for <strong style={{ color: 'var(--ink-soft)' }}>"{lastQuery}"</strong>
             </div>
 
             {results.map(sessionResult => (
@@ -159,9 +152,9 @@ export default function SearchPage() {
                 style={{
                   marginBottom: 20,
                   border: '1px solid var(--accent3)',
-                  borderRadius: 10,
+                  borderRadius: 3,
                   overflow: 'hidden',
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'color-mix(in srgb, var(--ink) 2%, transparent)',
                 }}
               >
                 {/* Session header */}
@@ -171,55 +164,55 @@ export default function SearchPage() {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '12px 16px',
-                    background: 'rgba(255,255,255,0.04)',
-                    borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    background: 'color-mix(in srgb, var(--ink) 4%, transparent)',
+                    borderBottom: '1px solid color-mix(in srgb, var(--ink) 6%, transparent)',
                     cursor: 'pointer',
                   }}
                   onClick={() => navigate(`/sessions/${sessionResult.session}`)}
                 >
-                  <span style={{ fontWeight: 600, color: 'var(--accent-text)', fontSize: 14 }}>
+                  <span style={{ fontWeight: 600, color: 'var(--accent-text)', fontSize: 17 }}>
                     {sessionResult.session}
                   </span>
-                  <span style={{ fontSize: 12, color: '#64748b' }}>
+                  <span style={{ fontSize: 15, color: 'var(--ink-faint)' }}>
                     {sessionResult.hit_count} hit{sessionResult.hit_count !== 1 ? 's' : ''} →
                   </span>
                 </div>
 
                 {/* Hits */}
                 {sessionResult.hits.map((hit, i) => {
-                  const src = SOURCE_LABELS[hit.source] ?? { label: hit.source, color: '#94a3b8' }
+                  const src = SOURCE_LABELS[hit.source] ?? { label: hit.source, color: 'var(--ink-soft)' }
                   return (
                     <div
                       key={i}
                       style={{
                         padding: '10px 16px',
-                        borderBottom: i < sessionResult.hits.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                        borderBottom: i < sessionResult.hits.length - 1 ? '1px solid color-mix(in srgb, var(--ink) 4%, transparent)' : 'none',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <span style={{
-                          fontSize: 11,
+                          fontSize: 14,
                           fontWeight: 600,
                           color: src.color,
                           background: `${src.color}1a`,
                           borderRadius: 4,
                           padding: '2px 6px',
-                          textTransform: 'uppercase',
+                          fontVariant: 'small-caps',
                           letterSpacing: '0.05em',
                         }}>
                           {src.label}
                         </span>
-                        <span style={{ fontSize: 11, color: '#475569' }}>line {hit.line_number}</span>
+                        <span style={{ fontSize: 14, color: 'var(--ink-faint)' }}>line {hit.line_number}</span>
                       </div>
-                      <div style={{ fontFamily: 'monospace', fontSize: 13, lineHeight: 1.6 }}>
+                      <div style={{ fontFamily: 'monospace', fontSize: 16, lineHeight: 1.6 }}>
                         {hit.context.map((ctxLine, j) => {
                           const isMatch = ctxLine === hit.line
                           return (
                             <div
                               key={j}
                               style={{
-                                color: isMatch ? '#e2e8f0' : '#475569',
-                                background: isMatch ? 'rgba(124,108,252,0.08)' : 'transparent',
+                                color: isMatch ? 'var(--ink)' : 'var(--ink-faint)',
+                                background: isMatch ? 'color-mix(in srgb, var(--rubric) 8%, transparent)' : 'transparent',
                                 borderLeft: isMatch ? '2px solid var(--accent)' : '2px solid transparent',
                                 paddingLeft: 8,
                                 borderRadius: 2,

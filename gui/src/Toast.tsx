@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useRef, useState } from 'react'
+import { AlertIcon, CheckIcon, CloseIcon, InfoIcon } from './Icons'
 
 export type ToastKind = 'success' | 'error' | 'info' | 'warning'
 
@@ -18,18 +19,18 @@ export function useToast() {
   return useContext(ToastContext)
 }
 
-const KIND_STYLES: Record<ToastKind, { bg: string; border: string; icon: string }> = {
-  success: { bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.3)',  icon: '✓' },
-  error:   { bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.3)', icon: '✕' },
-  warning: { bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)',  icon: '!' },
-  info:    { bg: 'rgba(96,165,250,0.12)', border: 'rgba(96,165,250,0.3)',  icon: 'i' },
+const KIND_STYLES: Record<ToastKind, { bg: string; border: string; icon: React.ReactNode }> = {
+  success: { bg: 'color-mix(in srgb, var(--moss) 12%, transparent)',  border: 'color-mix(in srgb, var(--moss) 30%, transparent)',  icon: <CheckIcon size={15} /> },
+  error:   { bg: 'color-mix(in srgb, var(--rubric) 12%, transparent)', border: 'color-mix(in srgb, var(--rubric) 30%, transparent)', icon: <CloseIcon size={15} /> },
+  warning: { bg: 'color-mix(in srgb, var(--ochre) 12%, transparent)', border: 'color-mix(in srgb, var(--ochre) 30%, transparent)',  icon: <AlertIcon size={15} /> },
+  info:    { bg: 'color-mix(in srgb, var(--gilt) 12%, transparent)', border: 'color-mix(in srgb, var(--gilt) 30%, transparent)',  icon: <InfoIcon size={15} /> },
 }
 
 const KIND_TEXT: Record<ToastKind, string> = {
-  success: '#4ade80',
-  error:   '#f87171',
-  warning: '#fbbf24',
-  info:    '#60a5fa',
+  success: 'var(--moss)',
+  error:   'var(--rubric)',
+  warning: 'var(--ochre)',
+  info:    'var(--gilt-ink)',
 }
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -72,10 +73,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 background: 'var(--bg-elevated)',
                 border: `1px solid ${s.border}`,
                 borderLeft: `3px solid ${KIND_TEXT[t.kind]}`,
-                borderRadius: 10,
+                borderRadius: 3,
                 padding: '10px 14px',
-                fontSize: 13,
-                color: '#e2e8f0',
+                fontSize: 16,
+                color: 'var(--ink)',
                 boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
                 minWidth: 260,
                 maxWidth: 380,
@@ -93,7 +94,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 10,
+                fontSize: 13,
                 fontWeight: 700,
                 color: KIND_TEXT[t.kind],
                 flexShrink: 0,

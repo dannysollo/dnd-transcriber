@@ -104,7 +104,7 @@ function renderTokens(tokens: Token[], lineType: 'add' | 'remove') {
     return (
       <span key={i} style={{
         background: isHighlight
-          ? (lineType === 'add' ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)')
+          ? (lineType === 'add' ? 'color-mix(in srgb, var(--moss) 30%, transparent)' : 'color-mix(in srgb, var(--rubric) 30%, transparent)')
           : 'transparent',
         borderRadius: '2px',
         textDecoration: isHighlight ? undefined : 'none',
@@ -121,19 +121,19 @@ function DiffView({ original, proposed }: { original: string; proposed: string }
     // Single-line: word diff inline
     const tokens = lcsWordDiff(tokenize(original), tokenize(proposed))
     const hasChange = tokens.some(t => t.type !== 'equal')
-    if (!hasChange) return <div style={{ fontSize: '11px', color: '#475569', fontStyle: 'italic' }}>No changes.</div>
+    if (!hasChange) return <div style={{ fontSize: '14px', color: 'var(--ink-faint)', fontStyle: 'italic' }}>No changes.</div>
     return (
-      <div style={{ background: '#0d0f18', borderRadius: '6px', padding: '10px 14px', fontFamily: 'monospace', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <div style={{ color: '#f87171' }}>
+      <div style={{ background: 'var(--page-sunk)', borderRadius: '3px', padding: '10px 14px', fontFamily: 'monospace', fontSize: '15px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div style={{ color: 'var(--rubric)' }}>
           <span style={{ marginRight: '8px', opacity: 0.5 }}>−</span>
           {tokens.map((t, i) => (
-            <span key={i} style={{ background: t.type === 'remove' ? 'rgba(248,113,113,0.3)' : 'transparent', borderRadius: '2px', opacity: t.type === 'add' ? 0.3 : 1 }}>{t.text}</span>
+            <span key={i} style={{ background: t.type === 'remove' ? 'color-mix(in srgb, var(--rubric) 30%, transparent)' : 'transparent', borderRadius: '2px', opacity: t.type === 'add' ? 0.3 : 1 }}>{t.text}</span>
           ))}
         </div>
-        <div style={{ color: '#4ade80' }}>
+        <div style={{ color: 'var(--moss)' }}>
           <span style={{ marginRight: '8px', opacity: 0.5 }}>+</span>
           {tokens.map((t, i) => (
-            <span key={i} style={{ background: t.type === 'add' ? 'rgba(74,222,128,0.3)' : 'transparent', borderRadius: '2px', opacity: t.type === 'remove' ? 0.3 : 1 }}>{t.text}</span>
+            <span key={i} style={{ background: t.type === 'add' ? 'color-mix(in srgb, var(--moss) 30%, transparent)' : 'transparent', borderRadius: '2px', opacity: t.type === 'remove' ? 0.3 : 1 }}>{t.text}</span>
           ))}
         </div>
       </div>
@@ -142,30 +142,30 @@ function DiffView({ original, proposed }: { original: string; proposed: string }
 
   const fullDiff = computeLineDiff(original, proposed)
   const hasChanges = fullDiff.some(l => l.type !== 'equal')
-  if (!hasChanges) return <div style={{ fontSize: '11px', color: '#475569', fontStyle: 'italic' }}>No changes detected.</div>
+  if (!hasChanges) return <div style={{ fontSize: '14px', color: 'var(--ink-faint)', fontStyle: 'italic' }}>No changes detected.</div>
   const diff = collapseLineDiff(fullDiff)
 
   return (
-    <div style={{ background: '#0d0f18', borderRadius: '6px', fontFamily: 'monospace', fontSize: '12px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+    <div style={{ background: 'var(--page-sunk)', borderRadius: '3px', fontFamily: 'monospace', fontSize: '15px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
       {diff.map((line, i) => {
         if (line.type === 'separator') return (
-          <div key={i} style={{ padding: '2px 12px', color: '#334155', background: 'rgba(255,255,255,0.02)', fontStyle: 'italic' }}>
+          <div key={i} style={{ padding: '2px 12px', color: 'var(--rule-strong)', background: 'color-mix(in srgb, var(--ink) 2%, transparent)', fontStyle: 'italic' }}>
             … {line.skipped} unchanged {line.skipped === 1 ? 'line' : 'lines'} …
           </div>
         )
         if (line.type === 'equal') return (
-          <div key={i} style={{ padding: '2px 12px', color: '#475569', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>
+          <div key={i} style={{ padding: '2px 12px', color: 'var(--ink-faint)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>
             <span style={{ marginRight: '10px', opacity: 0.4 }}> </span>{line.text}
           </div>
         )
         const tokens = line.tokens ?? []
-        const bg = line.type === 'add' ? 'rgba(74,222,128,0.06)' : 'rgba(248,113,113,0.06)'
+        const bg = line.type === 'add' ? 'color-mix(in srgb, var(--moss) 6%, transparent)' : 'color-mix(in srgb, var(--rubric) 6%, transparent)'
         const prefix = line.type === 'add' ? '+' : '−'
-        const prefixColor = line.type === 'add' ? '#4ade80' : '#f87171'
+        const prefixColor = line.type === 'add' ? 'var(--moss)' : 'var(--rubric)'
         return (
           <div key={i} style={{ padding: '2px 12px', background: bg, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>
             <span style={{ marginRight: '10px', color: prefixColor, opacity: 0.7, userSelect: 'none' }}>{prefix}</span>
-            <span style={{ color: line.type === 'add' ? '#4ade80' : '#f87171' }}>
+            <span style={{ color: line.type === 'add' ? 'var(--moss)' : 'var(--rubric)' }}>
               {renderTokens(tokens, line.type as 'add' | 'remove')}
             </span>
           </div>
@@ -272,7 +272,7 @@ export default function EditQueuePage() {
   }
 
   if (!activeCampaign) {
-    return <div style={{ padding: '32px', color: '#64748b' }}>No active campaign selected.</div>
+    return <div style={{ padding: '32px', color: 'var(--ink-faint)' }}>No active campaign selected.</div>
   }
 
   const editTypeLabel = (e: PendingEdit) => {
@@ -284,13 +284,13 @@ export default function EditQueuePage() {
   return (
     <div className="page-content" style={{ padding: '32px', maxWidth: '900px' }}>
       <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>
+        <h1 style={{ margin: 0, fontSize: '34px', fontWeight: 500, color: 'var(--ink)' }}>
           Edit Queue
           {edits.length > 0 && (
             <span style={{
-              marginLeft: '10px', fontSize: '13px', fontWeight: 700,
-              background: 'rgba(251,191,36,0.15)', color: '#fbbf24',
-              border: '1px solid rgba(251,191,36,0.3)',
+              marginLeft: '10px', fontSize: '16px', fontWeight: 700,
+              background: 'color-mix(in srgb, var(--ochre) 15%, transparent)', color: 'var(--ochre)',
+              border: '1px solid color-mix(in srgb, var(--ochre) 30%, transparent)',
               borderRadius: '20px', padding: '2px 10px',
             }}>
               {edits.length} pending
@@ -298,7 +298,7 @@ export default function EditQueuePage() {
           )}
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px' }}>
-          <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
+          <p style={{ margin: 0, fontSize: '16px', color: 'var(--ink-faint)' }}>
             Review and approve edits submitted by players
           </p>
           {edits.length > 0 && (
@@ -306,10 +306,10 @@ export default function EditQueuePage() {
               onClick={approveAll}
               disabled={Object.values(processing).some(Boolean)}
               style={{
-                background: 'rgba(52,211,153,0.15)',
-                border: '1px solid rgba(52,211,153,0.3)',
-                borderRadius: '8px', color: '#34d399',
-                padding: '6px 14px', fontSize: '12px', fontWeight: 700,
+                background: 'color-mix(in srgb, var(--moss) 15%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--moss) 30%, transparent)',
+                borderRadius: '3px', color: 'var(--moss)',
+                padding: '6px 14px', fontSize: '15px', fontWeight: 700,
                 cursor: 'pointer', marginLeft: 'auto',
                 opacity: Object.values(processing).some(Boolean) ? 0.5 : 1,
               }}
@@ -329,11 +329,11 @@ export default function EditQueuePage() {
       )}
 
       {loading ? (
-        <div style={{ color: '#64748b', fontSize: '14px' }}>Loading...</div>
+        <div style={{ color: 'var(--ink-faint)', fontSize: '17px' }}>Loading...</div>
       ) : edits.length === 0 ? (
         <div style={{
-          background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px',
-          padding: '48px', textAlign: 'center', color: '#64748b', fontSize: '14px',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '3px',
+          padding: '48px', textAlign: 'center', color: 'var(--ink-faint)', fontSize: '17px',
         }}>
           No pending edits. All caught up!
         </div>
@@ -341,7 +341,7 @@ export default function EditQueuePage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {Object.entries(grouped).map(([sessionName, sessionEdits]) => (
             <div key={sessionName}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8', marginBottom: '10px' }}>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink-soft)', marginBottom: '10px' }}>
                 Session: {sessionName}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -350,22 +350,22 @@ export default function EditQueuePage() {
                     key={edit.id}
                     style={{
                       background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
-                      borderRadius: '10px', padding: '16px',
+                      borderRadius: '3px', padding: '16px',
                       display: 'flex', flexDirection: 'column', gap: '12px',
                     }}
                   >
                     {/* Header */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                       <span style={{
-                        fontSize: '11px', fontWeight: 700, color: 'var(--accent-text)',
-                        background: 'rgba(124,108,252,0.1)', borderRadius: '5px', padding: '2px 8px',
+                        fontSize: '14px', fontWeight: 700, color: 'var(--accent-text)',
+                        background: 'color-mix(in srgb, var(--rubric) 10%, transparent)', borderRadius: '3px', padding: '2px 8px',
                       }}>
                         {editTypeLabel(edit)}
                       </span>
-                      <span style={{ fontSize: '11px', color: '#64748b' }}>
-                        by <strong style={{ color: '#94a3b8' }}>{edit.submitter_username ?? 'unknown'}</strong>
+                      <span style={{ fontSize: '14px', color: 'var(--ink-faint)' }}>
+                        by <strong style={{ color: 'var(--ink-soft)' }}>{edit.submitter_username ?? 'unknown'}</strong>
                       </span>
-                      <span style={{ fontSize: '11px', color: '#475569' }}>
+                      <span style={{ fontSize: '14px', color: 'var(--ink-faint)' }}>
                         {new Date(edit.submitted_at).toLocaleString()}
                       </span>
                     </div>
@@ -380,8 +380,8 @@ export default function EditQueuePage() {
                       onChange={e => setRejectNotes(prev => ({ ...prev, [edit.id]: e.target.value }))}
                       placeholder="Rejection note (optional)"
                       style={{
-                        background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '6px',
-                        color: '#94a3b8', padding: '6px 10px', fontSize: '12px', outline: 'none',
+                        background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '3px',
+                        color: 'var(--ink-soft)', padding: '6px 10px', fontSize: '15px', outline: 'none',
                       }}
                     />
 
@@ -391,9 +391,9 @@ export default function EditQueuePage() {
                         onClick={() => approve(edit.id)}
                         disabled={processing[edit.id]}
                         style={{
-                          background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.3)',
-                          borderRadius: '6px', color: '#4ade80', padding: '6px 16px',
-                          fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                          background: 'color-mix(in srgb, var(--moss) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--moss) 30%, transparent)',
+                          borderRadius: '3px', color: 'var(--moss)', padding: '6px 16px',
+                          fontSize: '15px', fontWeight: 700, cursor: 'pointer',
                           opacity: processing[edit.id] ? 0.5 : 1,
                         }}
                       >
@@ -403,9 +403,9 @@ export default function EditQueuePage() {
                         onClick={() => reject(edit.id)}
                         disabled={processing[edit.id]}
                         style={{
-                          background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.3)',
-                          borderRadius: '6px', color: '#f87171', padding: '6px 16px',
-                          fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                          background: 'color-mix(in srgb, var(--rubric) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--rubric) 30%, transparent)',
+                          borderRadius: '3px', color: 'var(--rubric)', padding: '6px 16px',
+                          fontSize: '15px', fontWeight: 700, cursor: 'pointer',
                           opacity: processing[edit.id] ? 0.5 : 1,
                         }}
                       >

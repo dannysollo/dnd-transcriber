@@ -34,3 +34,14 @@ desktop/resources/
 # asset, not in git history (would bloat the repo forever with multi-GB
 # binaries across versions).
 desktop/installer/Output/
+
+# Impeccable design-process scratch: decision mockups and review screenshots
+# render real campaign transcripts (private), so they stay local. The surface
+# brief and design tokens (.impeccable/surfaces, .impeccable/design.json) are
+# committed alongside DESIGN.md.
+.impeccable/mocks/
+.impeccable/review/
+.impeccable/questions/
+.impeccable/build/
+.impeccable/direction-round-*.json
+.impeccable/brief-app.md

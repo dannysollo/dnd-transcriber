@@ -85,18 +85,18 @@ export default function PipelinePage() {
   }
 
   const getLineColor = (line: string) => {
-    if (line.startsWith('ERROR') || line.includes('✗') || line.includes('failed')) return '#f87171'
-    if (line.includes('✓') || line.includes('complete') || line.includes('saved')) return '#4ade80'
+    if (line.startsWith('ERROR') || line.includes('✗') || line.includes('failed')) return 'var(--rubric)'
+    if (line.includes('✓') || line.includes('complete') || line.includes('saved')) return 'var(--moss)'
     if (line.startsWith('=') || line.startsWith('[')) return 'var(--accent-text)'
-    if (line.startsWith('  ')) return '#94a3b8'
-    return '#cbd5e1'
+    if (line.startsWith('  ')) return 'var(--ink-soft)'
+    return 'var(--ink)'
   }
 
   return (
     <div style={{ padding: '32px', maxWidth: '900px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div>
-        <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#e2e8f0' }}>Pipeline Runner</h1>
-        <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
+        <h1 style={{ margin: 0, fontSize: '34px', fontWeight: 500, color: 'var(--ink)' }}>Pipeline Runner</h1>
+        <p style={{ margin: '4px 0 0', fontSize: '16px', color: 'var(--ink-faint)' }}>
           Transcribe audio and generate wiki suggestions
         </p>
       </div>
@@ -105,7 +105,7 @@ export default function PipelinePage() {
       <div style={{
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border-default)',
-        borderRadius: '12px',
+        borderRadius: '3px',
         padding: '20px',
         display: 'flex',
         flexDirection: 'column',
@@ -113,7 +113,7 @@ export default function PipelinePage() {
       }}>
         {/* Session selector */}
         <div>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
+          <label style={{ display: 'block', fontSize: '15px', fontWeight: 600, color: 'var(--ink-soft)', marginBottom: '6px' }}>
             Session
           </label>
           <select
@@ -122,10 +122,10 @@ export default function PipelinePage() {
             style={{
               background: 'var(--bg-surface)',
               border: '1px solid var(--border-default)',
-              borderRadius: '8px',
-              color: '#e2e8f0',
+              borderRadius: '3px',
+              color: 'var(--ink)',
               padding: '8px 12px',
-              fontSize: '13px',
+              fontSize: '16px',
               width: '240px',
               outline: 'none',
             }}
@@ -139,7 +139,7 @@ export default function PipelinePage() {
 
         {/* Step selector */}
         <div>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '8px' }}>
+          <label style={{ display: 'block', fontSize: '15px', fontWeight: 600, color: 'var(--ink-soft)', marginBottom: '8px' }}>
             Steps
           </label>
           <div style={{ display: 'flex', gap: '16px' }}>
@@ -161,18 +161,18 @@ export default function PipelinePage() {
                     else { setTranscribeOnly(false); setWikiOnly(true) }
                   }}
                   style={{
-                    background: active ? 'rgba(124,108,252,0.15)' : 'transparent',
-                    border: `1px solid ${active ? 'rgba(124,108,252,0.4)' : 'var(--border-default)'}`,
-                    borderRadius: '8px',
+                    background: active ? 'color-mix(in srgb, var(--rubric) 15%, transparent)' : 'transparent',
+                    border: `1px solid ${active ? 'color-mix(in srgb, var(--rubric) 40%, transparent)' : 'var(--border-default)'}`,
+                    borderRadius: '3px',
                     padding: '10px 14px',
                     cursor: 'pointer',
                     textAlign: 'left',
                   }}
                 >
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: active ? 'var(--accent-text)' : '#e2e8f0' }}>
+                  <div style={{ fontSize: '16px', fontWeight: 600, color: active ? 'var(--accent-text)' : 'var(--ink)' }}>
                     {opt.label}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{opt.desc}</div>
+                  <div style={{ fontSize: '14px', color: 'var(--ink-faint)', marginTop: '2px' }}>{opt.desc}</div>
                 </button>
               )
             })}
@@ -187,10 +187,10 @@ export default function PipelinePage() {
             style={{
               background: running ? 'var(--border-default)' : 'var(--accent)',
               border: 'none',
-              borderRadius: '8px',
-              color: running ? '#64748b' : '#fff',
+              borderRadius: '3px',
+              color: running ? 'var(--ink-faint)' : 'var(--on-rubric)',
               padding: '10px 24px',
-              fontSize: '14px',
+              fontSize: '17px',
               fontWeight: 700,
               cursor: (running || !selectedSession) ? 'not-allowed' : 'pointer',
               display: 'flex',
@@ -211,9 +211,9 @@ export default function PipelinePage() {
       {/* Log output */}
       {(logs.length > 0 || running) && (
         <div style={{
-          background: '#0d0f18',
+          background: 'var(--page-sunk)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: '12px',
+          borderRadius: '3px',
           overflow: 'hidden',
         }}>
           <div style={{
@@ -223,15 +223,15 @@ export default function PipelinePage() {
             alignItems: 'center',
             gap: '8px',
           }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Output</span>
+            <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--ink-faint)' }}>Output</span>
             {running && <Spinner size={10} />}
             {exitCode !== null && (
               <span style={{
-                fontSize: '11px',
-                color: exitCode === 0 ? '#4ade80' : '#f87171',
+                fontSize: '14px',
+                color: exitCode === 0 ? 'var(--moss)' : 'var(--rubric)',
                 fontWeight: 600,
               }}>
-                {exitCode === 0 ? '✓ Completed' : `✗ Exit code ${exitCode}`}
+                {exitCode === 0 ? 'Completed' : `Failed (exit ${exitCode})`}
               </span>
             )}
           </div>
@@ -240,7 +240,7 @@ export default function PipelinePage() {
             style={{
               padding: '12px 16px',
               fontFamily: 'monospace',
-              fontSize: '12px',
+              fontSize: '15px',
               lineHeight: 1.7,
               maxHeight: '480px',
               overflowY: 'auto',
@@ -266,7 +266,7 @@ function Spinner({ size = 14 }: { size?: number }) {
     <div style={{
       width: size,
       height: size,
-      border: `2px solid rgba(124,108,252,0.3)`,
+      border: `2px solid color-mix(in srgb, var(--rubric) 30%, transparent)`,
       borderTopColor: 'var(--accent)',
       borderRadius: '50%',
       animation: 'spin 0.7s linear infinite',

@@ -63,7 +63,7 @@
     flex-direction: column !important;
     gap: 2px !important;
     padding: 8px 4px !important;
-    font-size: 10px !important;
+    font-size: 12px !important;
     min-width: 0 !important;
     text-align: center;
     border-radius: 0 !important;
@@ -185,6 +185,6 @@
 /* Desktop: offset sticky mini player by sidebar width so it doesn't cover the logout button */
 @media (min-width: 769px) {
   .sticky-mini-player {
-    left: 200px !important;
+    left: 232px !important;  /* the journal cover's width */
   }
 }

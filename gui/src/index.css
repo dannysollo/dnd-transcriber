@@ -1,229 +1,353 @@
 @import "tailwindcss";
+@import "@fontsource-variable/eb-garamond/wght.css";
+@import "@fontsource-variable/eb-garamond/wght-italic.css";
 
-/* Default CSS variable values (arcane theme fallback) */
+/* ── The Adventurer's Journal ──────────────────────────────────────────────────
+   One look, two lights: "daylight" (warm laid paper) and "lamplit" (the same
+   book read by lamplight). The journal tokens below are the source of truth;
+   the older --bg-* / --text-* / --accent* names are aliases so every existing
+   var() usage picks up the journal without per-component rewiring. */
 :root {
-  --bg-base: #0f1117;
-  --bg-surface: #13151f;
-  --bg-elevated: #191c2a;
-  --bg-overlay: #1e2130;
-  --bg-card: #1b1e2e;
-  --border-subtle: #1e2130;
-  --border-default: #262936;
-  --border-strong: #2e3142;
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --accent: #7c6cfc;
-  --accent-hover: #9d8fff;
-  --accent-muted: rgba(124, 108, 252, 0.15);
-  --accent-text: #a89cff;
-  --accent2: #e879f9;
-  --accent2-text: #f0abfc;
-  --accent3: #2a1e6e;
-  --accent3-muted: color-mix(in srgb, #2a1e6e 60%, transparent);
-  --success: #4ade80;
-  --error: #f87171;
-  --warning: #fbbf24;
-  --danger: #ef4444;
-  --font-heading: system-ui, sans-serif;
-  --font-body: 'Inter', system-ui, sans-serif;
+  color-scheme: light;
+  /* the cover: navigation lives on the book's leather */
+  --cover: #2A1E17;
+  --cover-edge: #120C09;
+  --cover-ink: #E7D5B3;
+  --cover-ink-soft: #A89170;
+  --cover-hover: rgba(176, 141, 87, 0.13);
+  /* the page */
+  --page: #F5F0E6;
+  --page-sunk: #EDE6D8;
+  --page-raised: #FBF8F1;
+  --rule: #D8CCB6;
+  --rule-strong: #BFAF93;
+  /* ink */
+  --ink: #2B2622;
+  --ink-soft: #5E5347;
+  --ink-faint: #716250;
+  --rubric: #9E2B25;
+  --rubric-hover: #85231E;
+  --on-rubric: #FBF5EA;
+  --gilt: #B08D57;
+  --gilt-ink: #86662F;
+  --moss: #46632F;
+  --ochre: #8A5B0C;
+  --highlighter: rgba(222, 184, 74, 0.5);
+  --selection: rgba(158, 43, 37, 0.16);
+  --shadow: 0 10px 30px -12px rgba(42, 30, 23, 0.35);
+
+  --font-journal: 'EB Garamond Variable', 'EB Garamond', Garamond, 'Times New Roman', serif;
+
+  /* legacy aliases */
+  --bg-base: var(--page);
+  --bg-page: var(--page);
+  --bg-surface: var(--page);
+  --bg-card: var(--page);
+  --bg-elevated: var(--page-sunk);
+  --bg-overlay: var(--page-raised);
+  --border-subtle: var(--rule);
+  --border-default: var(--rule);
+  --border-strong: var(--rule-strong);
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-soft);
+  --text-muted: var(--ink-faint);
+  --accent: var(--rubric);
+  --accent-hover: var(--rubric-hover);
+  --accent-muted: color-mix(in srgb, var(--rubric) 10%, transparent);
+  --accent-text: var(--rubric);
+  --accent2: var(--gilt-ink);
+  --accent2-text: var(--gilt-ink);
+  --accent3: var(--rule);
+  --accent3-muted: color-mix(in srgb, var(--rule) 70%, transparent);
+  --success: var(--moss);
+  --error: var(--rubric);
+  --warning: var(--ochre);
+  --danger: var(--rubric);
+  --font-heading: var(--font-journal);
+  --font-body: var(--font-journal);
 }
 
-html {
-  height: 100%;
+/* Lamplit: explicit choice, or the system preference when the reader chose "system". */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --cover: #120D0A;
+  --cover-edge: #070504;
+  --cover-ink: #D9C7A8;
+  --cover-ink-soft: #9A8465;
+  --cover-hover: rgba(201, 166, 107, 0.1);
+  --page: #1F1914;
+  --page-sunk: #282019;
+  --page-raised: #2C241D;
+  --rule: #3E3329;
+  --rule-strong: #57493B;
+  --ink: #EAE0CE;
+  --ink-soft: #BFAF97;
+  --ink-faint: #9C8C73;
+  --rubric: #E57A6C;
+  --rubric-hover: #EE9285;
+  --on-rubric: #1F1914;
+  --gilt: #C9A66B;
+  --gilt-ink: #D2B27A;
+  --moss: #9DBB7E;
+  --ochre: #DDAA4B;
+  --highlighter: rgba(201, 166, 107, 0.32);
+  --selection: rgba(229, 122, 108, 0.24);
+  --shadow: 0 12px 34px -12px rgba(0, 0, 0, 0.7);
 }
+
+html { height: 100%; }
 
 body {
   margin: 0;
   min-height: 100vh;
   min-height: 100dvh;
-  background-color: var(--bg-base);
-  color: var(--text-primary);
-  font-family: var(--font-body);
+  background-color: var(--page);
+  color: var(--ink);
+  font-family: var(--font-journal);
+  font-size: 17px;
+  font-variant-numeric: oldstyle-nums proportional-nums;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
-/* Apply heading font to all heading elements and prominent labels */
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading);
+  font-family: var(--font-journal);
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  text-wrap: balance;
 }
 
-/* Global transitions */
-a, button {
-  transition: all 0.15s ease;
+/* Form controls inherit the journal's type instead of the platform sans. */
+button, input, select, textarea { font: inherit; color: inherit; }
+
+::selection { background: var(--selection); color: inherit; }
+input, textarea { caret-color: var(--rubric); }
+a { color: var(--rubric); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+/* Numbers that line up: timestamps, counts, durations. */
+.tnum, time, [data-tnum] { font-variant-numeric: lining-nums tabular-nums; }
+
+/* Small caps: the journal's label voice (never all-caps tracking). */
+.sc { font-variant: small-caps; letter-spacing: 0.04em; }
+
+a, button { transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease; }
+
+:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: 2px;
 }
 
-/* ── Button hierarchy ───────────────────────────────────────────────────────── */
-.btn-primary {
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
+/* ── Buttons: inked labels on paper; the primary is the rubric ─────────────── */
+.btn-primary, .btn-secondary, .btn-ghost, .btn-danger {
+  border-radius: 3px;
+  padding: 6px 14px;
+  font-size: 16px;
+  line-height: 1.25;
   cursor: pointer;
-  transition: all 0.15s ease;
 }
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+.btn-primary {
+  background: var(--rubric);
+  color: var(--on-rubric);
+  border: 1px solid var(--rubric);
+  font-weight: 500;
 }
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
+.btn-primary:hover:not(:disabled) { background: var(--rubric-hover); border-color: var(--rubric-hover); }
 .btn-secondary {
   background: transparent;
-  color: var(--accent-text);
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  color: var(--rubric);
+  border: 1px solid color-mix(in srgb, var(--rubric) 55%, var(--rule));
 }
-.btn-secondary:hover:not(:disabled) {
-  background: var(--accent-muted);
-}
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
+.btn-secondary:hover:not(:disabled) { background: color-mix(in srgb, var(--rubric) 8%, transparent); }
 .btn-ghost {
   background: transparent;
-  color: var(--text-secondary);
-  border: 1px solid var(--accent3);
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule-strong);
 }
-.btn-ghost:hover:not(:disabled) {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-}
-.btn-ghost:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
+.btn-ghost:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-faint); background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .btn-danger {
-  background: rgba(239,68,68,0.15);
-  color: var(--danger);
-  border: 1px solid rgba(239,68,68,0.4);
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  background: transparent;
+  color: var(--rubric);
+  border: 1px solid var(--rubric);
+  font-weight: 500;
 }
-.btn-danger:hover:not(:disabled) {
-  background: rgba(239,68,68,0.25);
-  border-color: var(--danger);
-}
-.btn-danger:disabled {
-  opacity: 0.5;
+.btn-danger:hover:not(:disabled) { background: var(--rubric); color: var(--on-rubric); }
+.btn-primary:disabled, .btn-secondary:disabled, .btn-ghost:disabled, .btn-danger:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-/* ── Session / content cards ────────────────────────────────────────────────── */
+/* ── Entries (formerly cards): rules and space, not boxes ──────────────────── */
 .session-card {
-  background: var(--bg-card);
-  border: 1px solid var(--accent3);
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  transition: all 0.15s ease;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
 }
-.session-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0,0,0,0.4);
-  border-color: color-mix(in srgb, var(--accent3) 180%, var(--border-strong));
-}
+.session-card:hover { background: color-mix(in srgb, var(--gilt) 7%, transparent); }
 
-/* ── Themed dividers ────────────────────────────────────────────────────────── */
 .themed-divider {
   border: none;
-  border-top: 1px solid var(--accent3);
+  border-top: 1px solid var(--rule);
   margin: 16px 0;
-  opacity: 0.7;
 }
 
-/* ── Tab active underline ───────────────────────────────────────────────────── */
-.tab-active-underline {
-  position: relative;
-}
+.tab-active-underline { position: relative; }
 .tab-active-underline::after {
   content: '';
   position: absolute;
-  bottom: -2px;
-  left: 0;
-  right: 0;
+  bottom: -2px; left: 0; right: 0;
   height: 2px;
-  background: var(--accent3);
-  border-radius: 1px;
+  background: var(--rubric);
 }
 
-/* ── Input focus ring ───────────────────────────────────────────────────────── */
+/* ── Inputs: a written line, not a box, unless it is a textarea ────────────── */
 input:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  border-color: var(--accent3) !important;
-  box-shadow: 0 0 0 2px var(--accent3-muted);
+  border-color: var(--gilt) !important;
+  box-shadow: 0 0 0 1px var(--gilt);
 }
+::placeholder { color: var(--ink-faint); opacity: 1; font-style: italic; }
 
-/* Skeleton loading */
+/* Skeleton: faint ruled lines filling in */
 .skeleton {
-  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-surface) 50%, var(--bg-elevated) 75%);
+  background: linear-gradient(90deg, var(--page-sunk) 25%, var(--page-raised) 50%, var(--page-sunk) 75%);
   background-size: 200% 100%;
-  animation: skeleton-shimmer 1.5s ease-in-out infinite;
-  border-radius: 6px;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  border-radius: 2px;
 }
 @keyframes skeleton-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
 
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Scrollbars: a thin bookmark cord */
+* { scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: 4px; border: 2px solid var(--page); }
+
+/* ── The cover (app sidebar) ───────────────────────────────────────────────── */
+.journal-cover {
+  background-color: var(--cover);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 3px 3px;
+  color: var(--cover-ink);
+  box-shadow: inset -10px 0 16px -8px rgba(0, 0, 0, 0.45), 6px 0 18px -8px rgba(0, 0, 0, 0.35);
+  border-right: 1px solid var(--cover-edge);
+  position: relative;
+  z-index: 2;
 }
-::-webkit-scrollbar-track {
-  background: var(--bg-base);
+.journal-cover a, .journal-cover button { color: inherit; }
+
+.cover-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 24px;
+  font-size: 18px;
+  color: var(--cover-ink-soft) !important;
+  text-decoration: none;
 }
-::-webkit-scrollbar-thumb {
-  background: var(--accent3);
-  border-radius: 3px;
+.cover-link svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.75; }
+.cover-link:hover { color: var(--cover-ink) !important; background: var(--cover-hover); }
+.cover-link.active {
+  color: var(--cover-ink) !important;
+  background: var(--cover-hover);
+  box-shadow: inset 3px 0 0 var(--gilt);
+}
+.cover-link.active svg { opacity: 1; }
+.nav-shortcut-hint {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--cover-ink-soft);
+  opacity: 0.7;
+}
+
+/* ── Transcript page ───────────────────────────────────────────────────────── */
+.speaker-name {
+  color: var(--rubric);
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+.speaker-player { color: var(--ink-faint); font-style: italic; font-size: 0.85em; }
+.time-passes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-faint);
+  font-style: italic;
+  font-size: 14px;
+  margin: 10px 0 8px;
+  max-width: 640px;
+}
+.time-passes::before, .time-passes::after {
+  content: '';
+  flex: 1;
+  border-top: 1px dotted var(--rule-strong);
+}
+.search-hit {
+  background: linear-gradient(transparent 52%, var(--highlighter) 52%);
+  color: inherit;
+}
+
+/* The ribbon bookmark: where you stopped reading */
+.journal-ribbon {
+  position: absolute;
+  top: 0;
+  right: 36px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: ribbon-drop 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.journal-ribbon button {
+  writing-mode: vertical-rl;
+  background: var(--rubric);
+  color: var(--on-rubric);
+  border: none;
+  padding: 14px 7px 26px;
+  font-size: 15px;
+  cursor: pointer;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 12px), 0 100%);
+  box-shadow: var(--shadow);
+}
+.journal-ribbon button:hover { background: var(--rubric-hover); }
+.journal-ribbon .dismiss {
+  writing-mode: horizontal-tb;
+  background: none; color: var(--ink-faint);
+  clip-path: none; box-shadow: none;
+  padding: 4px; font-size: 13px;
+}
+.journal-ribbon .dismiss:hover { background: none; color: var(--ink); }
+@keyframes ribbon-drop {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
 }
 
 /* ── Low-confidence words (Whisper word probability) ───────────────────────── */
 .lowconf-word {
-  text-decoration: underline wavy color-mix(in srgb, var(--warning) 55%, transparent);
+  text-decoration: underline wavy color-mix(in srgb, var(--rubric) 45%, transparent);
   text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
+  text-underline-offset: 4px;
   cursor: help;
 }
 .lowconf-word[data-strong] {
-  text-decoration-color: var(--warning);
+  text-decoration-color: var(--rubric);
 }
 .lowconf-badge {
-  font-size: 11px;
-  color: var(--warning);
-  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
-  border-radius: 10px;
-  padding: 0 7px;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--rubric);
 }
 .unknown-word-example {
   display: flex;
@@ -234,10 +358,175 @@ select:focus {
   border: none;
   padding: 2px 0;
   text-align: left;
-  font-size: 12px;
+  font-size: 15px;
   color: var(--text-secondary);
   cursor: pointer;
 }
 .unknown-word-example:hover {
   color: var(--text-primary);
+}
+.transcript-ts {
+  background: none;
+  border: none;
+  padding: 3px 0 0;
+  text-align: right;
+  font-size: 15px;
+  color: var(--ink-faint);
+  font-variant-numeric: lining-nums tabular-nums;
+  cursor: pointer;
+  align-self: start;
+}
+button.transcript-ts:hover { color: var(--rubric); text-decoration: underline; text-underline-offset: 3px; }
+span.transcript-ts { cursor: default; }
+@media (max-width: 1180px) {
+  .journal-ribbon { right: 0 !important; }
+}
+
+/* ── Journal index (Sessions and similar lists) ────────────────────────────── */
+.index-link {
+  background: none;
+  border: none;
+  padding: 2px 0;
+  margin-right: 14px;
+  font-size: 17px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.index-link:hover { color: var(--ink); }
+.index-link[aria-pressed="true"] {
+  color: var(--rubric);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+.written-line {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--rule-strong);
+  border-radius: 0;
+  padding: 6px 2px;
+  font-size: 18px;
+  color: var(--ink);
+  outline: none;
+}
+.entry-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 6px;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+.entry-action:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.entry-action.danger:hover { color: var(--rubric); }
+.session-card .entry-action { opacity: 0.55; }
+.session-card:hover .entry-action, .session-card:focus-within .entry-action { opacity: 1; }
+.desc-add {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--ink-faint); font-style: italic; font-size: 16px;
+  opacity: 0; transition: opacity 0.15s ease;
+}
+.session-header:hover .desc-add, .desc-add:focus-visible { opacity: 1; }
+@media (hover: none) { .desc-add { opacity: 1; } }
+
+/* ── Phones: one 16px gutter for the whole session page ────────────────────── */
+@media (max-width: 768px) {
+  .session-header,
+  .session-toolbar,
+  .session-audio-panel,
+  .session-view-root .session-tabs-row,
+  .session-content {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  .session-view-root .session-tabs-row {
+    gap: 22px !important;
+    -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+    mask-image: linear-gradient(90deg, #000 85%, transparent);
+  }
+  .session-content { --ts-col: 54px; --ts-gap: 10px; }
+  .session-header h1 { font-size: 28px !important; }
+  .transcript-ts { font-size: 13px; }
+  /* The ribbon lies across the top of the page instead of hanging down its edge. */
+  .journal-ribbon {
+    position: static !important;
+    flex-direction: row;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .journal-ribbon button:first-child {
+    writing-mode: horizontal-tb;
+    clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 50%, 100% 100%, 0 100%);
+    padding: 6px 22px 6px 12px;
+  }
+}
+
+/* ── Audio bar: hairline scrubber, drawn controls, Garamond figures ────────── */
+.audio-play {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--rubric);
+  background: transparent;
+  color: var(--rubric);
+  cursor: pointer;
+}
+.audio-play:hover { background: var(--rubric); color: var(--on-rubric); }
+.audio-time {
+  font-size: 16px;
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+  min-width: 118px;
+}
+.journal-scrubber {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-width: 60px;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+  --pct: 0%;
+}
+.journal-scrubber::-webkit-slider-runnable-track {
+  height: 2px;
+  background: linear-gradient(90deg, var(--rubric) var(--pct), var(--rule-strong) var(--pct));
+}
+.journal-scrubber::-moz-range-track { height: 2px; background: var(--rule-strong); }
+.journal-scrubber::-moz-range-progress { height: 2px; background: var(--rubric); }
+.journal-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px; height: 11px; margin-top: -4.5px;
+  border-radius: 50%;
+  background: var(--rubric);
+  border: 2px solid var(--page);
+}
+.journal-scrubber::-moz-range-thumb {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--rubric); border: 2px solid var(--page);
+}
+.journal-scrubber:focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
+.audio-speed {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--rule-strong);
+  border-radius: 0;
+  color: var(--ink-soft);
+  padding: 2px 2px;
+  font-size: 16px;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+}
+
+/* Written lines keep their single underline when focused (no boxed ring). */
+.written-line:focus,
+input.written-line:focus {
+  box-shadow: none;
+  border-color: transparent !important;
+  border-bottom-color: var(--gilt) !important;
 }

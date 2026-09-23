@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Chevron, CloseIcon, CopyIcon, PauseIcon, PlayIcon, SpinnerIcon } from '../Icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
@@ -6,30 +7,6 @@ import { useToast } from '../Toast'
 import { RuleSuggestionBar, type SessionRuleSuggestion, addCorrectionRule } from '../RuleSuggestions'
 import ReactMarkdown from 'react-markdown'
 
-// Speaker color palette
-const SPEAKER_PALETTE = [
-  '#60a5fa', // blue
-  '#f472b6', // pink
-  '#34d399', // green
-  '#fb923c', // orange
-  '#a78bfa', // purple
-  '#facc15', // yellow
-  '#38bdf8', // sky
-  '#f87171', // red
-]
-
-function speakerHash(name: string): number {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = (Math.imul(31, h) + name.charCodeAt(i)) | 0
-  return Math.abs(h)
-}
-
-function getSpeakerColor(speaker: string, colorMap: Map<string, string>): string {
-  if (!colorMap.has(speaker)) {
-    colorMap.set(speaker, SPEAKER_PALETTE[speakerHash(speaker) % SPEAKER_PALETTE.length])
-  }
-  return colorMap.get(speaker)!
-}
 
 interface AudioFile {
   filename: string
@@ -95,6 +72,18 @@ function parseTimestampToSeconds(ts: string): number {
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
   return 0
 }
+
+/** "Kali [Marko]" -> {name: Kali, player: Marko}; "DM (Danny)" -> {name: DM, player: Danny}. */
+function splitSpeaker(speaker?: string): { name: string; player: string } {
+  if (!speaker) return { name: '', player: '' }
+  const m = speaker.match(/^(.*?)\s*[[(]([^\])]+)[\])]\s*$/)
+  return m ? { name: m[1], player: m[2] } : { name: speaker, player: '' }
+}
+
+const SILENCE_BREAK_SECONDS = 12
+
+// ─── Ribbon bookmark: where each reader stopped in each session ──────────────
+const ribbonKey = (campaign: string, session: string) => `dnd-ribbon:${campaign}:${session}`
 
 // ─── Low-confidence words ─────────────────────────────────────────────────────
 // The worker records words Whisper decoded with low probability, keyed by the
@@ -165,10 +154,9 @@ function renderMarked(text: string, marks: Mark[]) {
     parts.push(
       <span
         key={a}
-        className={low ? 'lowconf-word' : undefined}
+        className={[low ? 'lowconf-word' : '', hit ? 'search-hit' : ''].join(' ').trim() || undefined}
         data-strong={low && low.prob! < 0.35 ? '' : undefined}
         title={low ? `Whisper was ${Math.round(low.prob! * 100)}% sure of this word` : undefined}
-        style={hit ? { background: 'rgba(251,191,36,0.3)', color: '#fbbf24', borderRadius: '2px' } : undefined}
       >
         {piece}
       </span>
@@ -239,6 +227,13 @@ export default function SessionView() {
     try { return localStorage.getItem('dnd-show-lowconf') !== 'false' } catch { return true }
   })
   const [namesKey, setNamesKey] = useState(0)
+  const [namesPending, setNamesPending] = useState(0)
+  const tabsRowRef = useRef<HTMLDivElement | null>(null)
+  // On narrow screens the tab row scrolls; keep the active tab in view.
+  useEffect(() => {
+    tabsRowRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'center' })
+  }, [tab])
   const [loading, setLoading] = useState(true)
   const [merging, setMerging] = useState(false)
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
@@ -286,7 +281,6 @@ export default function SessionView() {
   const audioPanelRef = useRef<HTMLDivElement | null>(null)
   const pendingSeekRef = useRef<number | null>(null)
   const dragCounter = useRef(0)
-  const speakerColors = useMemo(() => new Map<string, string>(), [name])
 
   const handleDownloadTranscript = () => {
     if (!transcript) return
@@ -342,6 +336,11 @@ export default function SessionView() {
       fetch(apiUrl(`/sessions/${name}/analysis-pending`)).then(r => r.ok ? r.json() : null),
     ])
     if (activeCampaign) {
+      // Names tab badge: how many likely-misheard names are waiting for a decision.
+      fetch(apiUrl(`/sessions/${name}/unknown-words`))
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => setNamesPending(d ? d.words.filter((w: { suggestion: string | null }) => w.suggestion).length : 0))
+        .catch(() => setNamesPending(0))
       fetch(apiUrl(`/sessions/${name}/confidence`))
         .then(r => (r.ok ? r.json() : null))
         .then(setConfidence)
@@ -469,6 +468,9 @@ export default function SessionView() {
     if (tab === 'changes') {
       loadChanges()
     }
+    // Each tab starts at its own top; otherwise Names/Wiki open mid-list at
+    // whatever depth the transcript was scrolled to.
+    if (sessionContentRef.current && !targetTimestamp) sessionContentRef.current.scrollTop = 0
   }, [tab])
 
   // After toggling edit mode, scroll the anchor line into view
@@ -712,8 +714,8 @@ export default function SessionView() {
         <div style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(124,108,252,0.08)',
-          border: '3px dashed rgba(124,108,252,0.5)',
+          background: 'color-mix(in srgb, var(--rubric) 8%, transparent)',
+          border: '3px dashed color-mix(in srgb, var(--rubric) 50%, transparent)',
           zIndex: 1000,
           display: 'flex',
           alignItems: 'center',
@@ -724,10 +726,10 @@ export default function SessionView() {
             background: 'var(--bg-elevated)',
             borderRadius: '16px',
             padding: '32px 64px',
-            color: '#a78bfa',
-            fontSize: '18px',
+            color: 'var(--gilt-ink)',
+            fontSize: '20px',
             fontWeight: 700,
-            border: '1px solid rgba(124,108,252,0.4)',
+            border: '1px solid color-mix(in srgb, var(--rubric) 40%, transparent)',
           }}>
             {uploadingAudio ? 'Uploading...' : 'Drop audio files or ZIP to import'}
           </div>
@@ -741,141 +743,98 @@ export default function SessionView() {
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '8px 28px',
-          background: 'rgba(245,158,11,0.10)',
-          borderBottom: '1px solid rgba(245,158,11,0.3)',
+          background: 'color-mix(in srgb, var(--ochre) 10%, transparent)',
+          borderBottom: '1px solid color-mix(in srgb, var(--ochre) 30%, transparent)',
           flexShrink: 0,
         }}>
-          <span style={{ fontSize: '13px', fontWeight: 600, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ animation: 'pulse 2s infinite' }}>⏳</span>
+          <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--ochre)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <SpinnerIcon size={14} />
             Worker is analyzing this session — summary and wiki will appear when done.
           </span>
           <button
             onClick={cancelAnalysis}
             style={{
-              background: 'rgba(239,68,68,0.12)',
-              border: '1px solid rgba(239,68,68,0.3)',
-              borderRadius: '6px',
-              color: '#f87171',
+              background: 'color-mix(in srgb, var(--rubric) 12%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--rubric) 30%, transparent)',
+              borderRadius: '3px',
+              color: 'var(--rubric)',
               padding: '4px 12px',
-              fontSize: '12px',
+              fontSize: '15px',
               fontWeight: 700,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
               flexShrink: 0,
             }}
           >
-            ✕ Cancel
+            Cancel
           </button>
         </div>
       )}
 
-      {/* Header */}
-      <div style={{
-        padding: '16px 28px 12px',
-        borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
+      {/* Header: the entry's chapter heading */}
+      <div className="session-header" style={{
+        padding: '26px 48px 10px',
         flexShrink: 0,
       }}>
-        {/* Top row: back, title, actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
           <button
             onClick={() => navigate('/')}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              padding: '4px 0',
-              fontSize: '13px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              flexShrink: 0,
-            }}
+            aria-label="Back to sessions"
+            title="Back to sessions"
+            className="entry-action"
+            style={{ marginLeft: '-8px', color: 'var(--ink-faint)' }}
           >
-            ← Sessions
+            <svg aria-hidden width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
           </button>
-          <div style={{ height: '14px', width: '1px', background: 'var(--accent3)', flexShrink: 0 }} />
-          <h1 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{name}</h1>
-          <div style={{ flex: 1 }} />
+          <h1 style={{ margin: 0, fontSize: '34px', lineHeight: 1.15, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: '0 1 auto' }}>{name}</h1>
+          {!description && !editingDescription && summary && (
+            <button
+              className="desc-add"
+              onClick={() => { setEditingDescription(true); setDescriptionDraft('') }}
+            >
+              Add a description
+            </button>
+          )}
+          <span style={{ flex: '1 1 0' }} />
 
-          {/* Edit mode badge */}
           {editMode && tab === 'transcript' && (
-            <span style={{
-              background: 'rgba(251,191,36,0.15)',
-              border: '1px solid rgba(251,191,36,0.4)',
-              borderRadius: '6px',
-              color: '#fbbf24',
-              padding: '3px 10px',
-              fontSize: '11px',
-              fontWeight: 700,
-              letterSpacing: '0.06em',
-              flexShrink: 0,
-            }}>
-              EDITING
+            <span style={{ color: 'var(--rubric)', fontStyle: 'italic', fontSize: '17px', flexShrink: 0, paddingBottom: '4px' }}>
+              Editing
             </span>
           )}
 
-          <button
-            onClick={async () => {
-              setShareModalOpen(true); setShareToken(null); setShareCopied(false)
-              setSharesLoading(true)
-              try {
-                const r = await fetch(apiUrl(`/sessions/${name}/shares`))
-                if (r.ok) setExistingShares(await r.json())
-              } catch { /* ignore */ } finally { setSharesLoading(false) }
-            }}
-            style={{
-              background: 'rgba(96,165,250,0.12)',
-              border: '1px solid rgba(96,165,250,0.25)',
-              borderRadius: '8px',
-              color: '#93c5fd',
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Share
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexShrink: 0, paddingBottom: '4px' }}>
+            <button
+              className="btn-ghost"
+              onClick={async () => {
+                setShareModalOpen(true); setShareToken(null); setShareCopied(false)
+                setSharesLoading(true)
+                try {
+                  const r = await fetch(apiUrl(`/sessions/${name}/shares`))
+                  if (r.ok) setExistingShares(await r.json())
+                } catch { /* ignore */ } finally { setSharesLoading(false) }
+              }}
+            >
+              Share
+            </button>
 
-          {/* Re-merge and Run Pipeline — secondary actions, shown when NOT in transcript edit mode */}
-          {!(editMode && tab === 'transcript') && (
-            <>
-              <button
-                onClick={doMerge}
-                disabled={merging}
-                style={{
-                  background: 'rgba(124,108,252,0.15)',
-                  border: '1px solid rgba(124,108,252,0.3)',
-                  borderRadius: '8px',
-                  color: 'var(--accent-text)',
-                  padding: '6px 14px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  opacity: merging ? 0.5 : 1,
-                }}
-              >
-                {merging ? 'Merging...' : 'Re-merge'}
-              </button>
-              <button
-                onClick={() => setPipelinePanel(p => !p)}
-                style={{
-                  background: pipelineRunning ? 'rgba(251,191,36,0.15)' : 'rgba(124,108,252,0.15)',
-                  border: `1px solid ${pipelineRunning ? 'rgba(251,191,36,0.3)' : 'rgba(124,108,252,0.3)'}`,
-                  borderRadius: '8px',
-                  color: pipelineRunning ? '#fbbf24' : 'var(--accent-text)',
-                  padding: '6px 14px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                {pipelineRunning ? 'Running...' : 'Run Pipeline'}
-              </button>
-            </>
-          )}
-        </div>{/* end top row */}
+            {!(editMode && tab === 'transcript') && (
+              <>
+                <button className="btn-ghost" onClick={doMerge} disabled={merging}
+                  title="Re-apply correction rules to this session">
+                  {merging ? 'Re-merging…' : 'Re-merge'}
+                </button>
+                <button
+                  className={pipelineRunning ? 'btn-secondary' : 'btn-primary'}
+                  onClick={() => setPipelinePanel(p => !p)}
+                  aria-expanded={pipelinePanel}
+                >
+                  {pipelineRunning ? 'Pipeline running…' : 'Run pipeline'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
 
         {/* Episode description row */}
         {(description || editingDescription) ? (
@@ -890,10 +849,10 @@ export default function SessionView() {
                     flex: 1,
                     background: 'var(--bg-elevated)',
                     border: '1px solid var(--accent3)',
-                    borderRadius: '8px',
+                    borderRadius: '3px',
                     color: 'var(--text-primary)',
                     padding: '8px 12px',
-                    fontSize: '13px',
+                    fontSize: '16px',
                     resize: 'vertical',
                     fontFamily: 'inherit',
                     lineHeight: 1.5,
@@ -902,15 +861,15 @@ export default function SessionView() {
                   autoFocus
                 />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <button className="btn-primary" style={{ fontSize: '12px', padding: '6px 14px', whiteSpace: 'nowrap' }} onClick={() => saveDescription(descriptionDraft)}>Save</button>
-                  <button className="btn-ghost" style={{ fontSize: '12px', padding: '6px 14px' }} onClick={() => { setEditingDescription(false); setDescriptionDraft(description ?? '') }}>Cancel</button>
+                  <button className="btn-primary" style={{ fontSize: '15px', padding: '6px 14px', whiteSpace: 'nowrap' }} onClick={() => saveDescription(descriptionDraft)}>Save</button>
+                  <button className="btn-ghost" style={{ fontSize: '15px', padding: '6px 14px' }} onClick={() => { setEditingDescription(false); setDescriptionDraft(description ?? '') }}>Cancel</button>
                 </div>
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                 <p style={{
                   margin: 0,
-                  fontSize: '13px',
+                  fontSize: '16px',
                   color: 'var(--text-muted)',
                   lineHeight: 1.6,
                   fontStyle: 'italic',
@@ -921,7 +880,7 @@ export default function SessionView() {
                 <button
                   onClick={() => { setEditingDescription(true); setDescriptionDraft(description ?? '') }}
                   className="btn-ghost"
-                  style={{ fontSize: '11px', padding: '3px 8px', flexShrink: 0 }}
+                  style={{ fontSize: '14px', padding: '3px 8px', flexShrink: 0 }}
                   title="Edit description"
                 >
                   Edit
@@ -929,13 +888,6 @@ export default function SessionView() {
               </div>
             )}
           </div>
-        ) : summary ? (
-          <button
-            onClick={() => { setEditingDescription(true); setDescriptionDraft('') }}
-            style={{ marginTop: '8px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '12px', cursor: 'pointer', padding: '0', opacity: 0.6 }}
-          >
-            + Add episode description
-          </button>
         ) : null}
       </div>
 
@@ -960,12 +912,12 @@ export default function SessionView() {
               return (
                 <button key={opt.id} onClick={() => setPipelineStep(opt.id as any)}
                   style={{
-                    background: active ? 'rgba(124,108,252,0.15)' : 'transparent',
-                    border: `1px solid ${active ? 'rgba(124,108,252,0.4)' : 'var(--accent3)'}`,
-                    borderRadius: '8px', padding: '8px 14px', cursor: 'pointer', textAlign: 'left',
+                    background: active ? 'color-mix(in srgb, var(--rubric) 15%, transparent)' : 'transparent',
+                    border: `1px solid ${active ? 'color-mix(in srgb, var(--rubric) 40%, transparent)' : 'var(--accent3)'}`,
+                    borderRadius: '3px', padding: '8px 14px', cursor: 'pointer', textAlign: 'left',
                   }}>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: active ? 'var(--accent-text)' : 'var(--text-primary)' }}>{opt.label}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{opt.desc}</div>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: active ? 'var(--accent-text)' : 'var(--text-primary)' }}>{opt.label}</div>
+                  <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>{opt.desc}</div>
                 </button>
               )
             })}
@@ -977,16 +929,16 @@ export default function SessionView() {
               }}
               disabled={pipelineRunning || generating}
               className="btn-primary"
-              style={{ marginLeft: 'auto', padding: '8px 20px', fontSize: '13px' }}
+              style={{ marginLeft: 'auto', padding: '8px 20px', fontSize: '16px' }}
             >
               Run
             </button>
           </div>
           {pipelineLog.length > 0 && (
             <div style={{
-              background: '#0d0f18', borderRadius: '8px', padding: '10px 14px',
-              fontFamily: 'monospace', fontSize: '11px', lineHeight: 1.7,
-              maxHeight: '160px', overflowY: 'auto', color: '#94a3b8',
+              background: 'var(--page-sunk)', borderRadius: '3px', padding: '10px 14px',
+              fontFamily: 'monospace', fontSize: '14px', lineHeight: 1.7,
+              maxHeight: '160px', overflowY: 'auto', color: 'var(--ink-soft)',
             }}>
               {pipelineLog.map((line, i) => <div key={i} style={{ whiteSpace: 'pre-wrap' }}>{line || '\u00a0'}</div>)}
             </div>
@@ -1004,16 +956,16 @@ export default function SessionView() {
           onClick={e => { if (e.target === e.currentTarget) setShareModalOpen(false) }}
         >
           <div style={{
-            background: 'var(--bg-elevated)', border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 14, padding: 28, width: 420, maxWidth: '90vw',
+            background: 'var(--bg-elevated)', border: '1px solid color-mix(in srgb, var(--ink) 10%, transparent)',
+            borderRadius: 3, padding: 28, width: 420, maxWidth: '90vw',
           }}>
-            <h3 style={{ margin: '0 0 16px', color: '#e2e8f0', fontSize: 16, fontWeight: 700 }}>
+            <h3 style={{ margin: '0 0 16px', color: 'var(--ink)', fontSize: 18, fontWeight: 700 }}>
               Share Session
             </h3>
 
             {!shareToken ? (
               <>
-                <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 16px' }}>
+                <p style={{ color: 'var(--ink-faint)', fontSize: 16, margin: '0 0 16px' }}>
                   Generate a read-only public link. No login required to view.
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -1022,7 +974,7 @@ export default function SessionView() {
                     ['show_summary', 'Summary', shareShowSummary, setShareShowSummary],
                     ['show_wiki', 'Wiki', shareShowWiki, setShareShowWiki],
                   ] as const).map(([, label, val, set]) => (
-                    <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', color: '#cbd5e1', fontSize: 14 }}>
+                    <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', color: 'var(--ink)', fontSize: 17 }}>
                       <input
                         type="checkbox"
                         checked={val}
@@ -1036,7 +988,7 @@ export default function SessionView() {
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                   <button
                     onClick={() => setShareModalOpen(false)}
-                    style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: 13 }}
+                    style={{ padding: '8px 16px', borderRadius: 3, border: '1px solid color-mix(in srgb, var(--ink) 10%, transparent)', background: 'transparent', color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 16 }}
                   >
                     Cancel
                   </button>
@@ -1057,7 +1009,7 @@ export default function SessionView() {
                         setShareCreating(false)
                       }
                     }}
-                    style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13, opacity: shareCreating ? 0.6 : 1 }}
+                    style={{ padding: '8px 18px', borderRadius: 3, border: 'none', background: 'var(--accent)', color: 'var(--on-rubric)', fontWeight: 600, cursor: 'pointer', fontSize: 16, opacity: shareCreating ? 0.6 : 1 }}
                   >
                     {shareCreating ? 'Creating…' : 'Generate Link'}
                   </button>
@@ -1065,15 +1017,15 @@ export default function SessionView() {
               </>
             ) : (
               <>
-                <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 12px' }}>Share this link — anyone with it can view the session (no login needed):</p>
+                <p style={{ color: 'var(--ink-faint)', fontSize: 16, margin: '0 0 12px' }}>Share this link — anyone with it can view the session (no login needed):</p>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
                   <input
                     readOnly
                     value={`${window.location.origin}/share/${shareToken}`}
                     style={{
-                      flex: 1, padding: '8px 12px', borderRadius: 8,
-                      border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)',
-                      color: '#e2e8f0', fontSize: 13, fontFamily: 'monospace',
+                      flex: 1, padding: '8px 12px', borderRadius: 3,
+                      border: '1px solid color-mix(in srgb, var(--ink) 10%, transparent)', background: 'color-mix(in srgb, var(--ink) 5%, transparent)',
+                      color: 'var(--ink)', fontSize: 16, fontFamily: 'monospace',
                     }}
                     onClick={e => (e.target as HTMLInputElement).select()}
                   />
@@ -1083,15 +1035,15 @@ export default function SessionView() {
                       setShareCopied(true)
                       setTimeout(() => setShareCopied(false), 2000)
                     }}
-                    style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: shareCopied ? '#22c55e' : 'var(--accent)', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 13, transition: 'background 0.2s' }}
+                    style={{ padding: '8px 14px', borderRadius: 3, border: 'none', background: shareCopied ? 'var(--moss)' : 'var(--accent)', color: 'var(--on-rubric)', fontWeight: 600, cursor: 'pointer', fontSize: 16, transition: 'background 0.2s' }}
                   >
-                    {shareCopied ? '✓ Copied' : 'Copy'}
+                    {shareCopied ? 'Copied' : 'Copy'}
                   </button>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button
                     onClick={() => { setShareToken(null) }}
-                    style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: 13 }}
+                    style={{ padding: '8px 16px', borderRadius: 3, border: '1px solid color-mix(in srgb, var(--ink) 10%, transparent)', background: 'transparent', color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 16 }}
                   >
                     ← Create another
                   </button>
@@ -1101,14 +1053,14 @@ export default function SessionView() {
 
             {/* Existing shares list */}
             {!sharesLoading && existingShares.length > 0 && (
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', marginTop: 16, paddingTop: 14 }}>
-                <div style={{ fontSize: 11, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+              <div style={{ borderTop: '1px solid color-mix(in srgb, var(--ink) 7%, transparent)', marginTop: 16, paddingTop: 14 }}>
+                <div style={{ fontSize: 14, color: 'var(--ink-faint)', fontWeight: 700, fontVariant: 'small-caps', letterSpacing: '0.05em', marginBottom: 8 }}>
                   Active Links
                 </div>
                 {existingShares.map(s => (
                   <div key={s.token} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <span style={{
-                      flex: 1, fontSize: 11, fontFamily: 'monospace', color: s.expired ? '#475569' : '#94a3b8',
+                      flex: 1, fontSize: 14, fontFamily: 'monospace', color: s.expired ? 'var(--ink-faint)' : 'var(--ink-soft)',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       textDecoration: s.expired ? 'line-through' : 'none',
                     }}>
@@ -1119,18 +1071,18 @@ export default function SessionView() {
                         onClick={() => {
                           navigator.clipboard.writeText(`${window.location.origin}/share/${s.token}`)
                         }}
-                        style={{ padding: '2px 8px', borderRadius: 5, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#64748b', cursor: 'pointer', fontSize: 11 }}
+                        style={{ padding: '2px 8px', borderRadius: 3, border: '1px solid color-mix(in srgb, var(--ink) 10%, transparent)', background: 'transparent', color: 'var(--ink-faint)', cursor: 'pointer', fontSize: 14 }}
                         title="Copy link"
-                      >📋</button>
+                       aria-label="Copy link"><CopyIcon /></button>
                     )}
                     <button
                       onClick={async () => {
                         await fetch(apiUrl(`/sessions/${name}/shares/${s.token}`), { method: 'DELETE' })
                         setExistingShares(prev => prev.filter(x => x.token !== s.token))
                       }}
-                      style={{ padding: '2px 8px', borderRadius: 5, border: '1px solid rgba(248,113,113,0.25)', background: 'transparent', color: '#f87171', cursor: 'pointer', fontSize: 11 }}
+                      style={{ padding: '2px 8px', borderRadius: 3, border: '1px solid color-mix(in srgb, var(--rubric) 25%, transparent)', background: 'transparent', color: 'var(--rubric)', cursor: 'pointer', fontSize: 14 }}
                       title="Revoke"
-                    >✕</button>
+                    ><CloseIcon /></button>
                   </div>
                 ))}
               </div>
@@ -1143,36 +1095,42 @@ export default function SessionView() {
       <div style={{
         display: 'flex',
         flexDirection: 'column',
-        borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
         flexShrink: 0,
       }}>
-      <div className="session-tabs-row" style={{ display: 'flex', gap: 0, padding: '0 20px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+      <div ref={tabsRowRef} className="session-tabs-row" role="tablist" style={{ display: 'flex', gap: '28px', padding: '0 48px', overflowX: 'auto', scrollbarWidth: 'none', borderBottom: '1px solid var(--rule)' }}>
         {tabs.map(t => (
           <button
             key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
+            className="sc"
             style={{
               background: 'transparent',
               border: 'none',
-              borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-              color: tab === t.id ? 'var(--text-primary)' : 'var(--text-muted)',
-              padding: '11px 16px',
-              fontSize: '13px',
-              letterSpacing: '0.01em',
-              fontWeight: tab === t.id ? 600 : 400,
+              boxShadow: tab === t.id ? 'inset 0 -2px 0 var(--rubric)' : 'none',
+              color: tab === t.id ? 'var(--rubric)' : 'var(--ink-faint)',
+              padding: '10px 0',
+              fontSize: '19px',
+              fontWeight: tab === t.id ? 600 : 500,
               cursor: 'pointer',
-              transition: 'color 0.15s',
               whiteSpace: 'nowrap',
               flexShrink: 0,
             }}
           >
             {t.label}
+            {t.id === 'names' && namesPending > 0 && (
+              <span style={{ marginLeft: 6, fontSize: '15px', color: 'var(--rubric)', fontVariant: 'normal', fontVariantNumeric: 'lining-nums' }}
+                aria-label={`${namesPending} to review`}>
+                {namesPending}
+              </span>
+            )}
           </button>
         ))}
         </div>
 
         {tab === 'transcript' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-surface)' }}>
+          <div className="session-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 48px 8px', flexWrap: 'wrap' }}>
             {/* View mode: search bar */}
             {!editMode && (
               <>
@@ -1180,15 +1138,18 @@ export default function SessionView() {
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Search transcript..."
+                  placeholder="Find a word, name, or phrase"
+                  aria-label="Search this transcript"
+                  className="written-line"
                   style={{
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--accent3)',
-                    borderRadius: '8px',
-                    color: '#e2e8f0',
-                    padding: '6px 12px',
-                    fontSize: '12px',
-                    flex: 1,
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: '1px solid var(--rule-strong)',
+                    borderRadius: 0,
+                    color: 'var(--ink)',
+                    padding: '4px 2px',
+                    fontSize: '18px',
+                    flex: '0 1 360px',
                     minWidth: 0,
                     outline: 'none',
                   }}
@@ -1201,18 +1162,21 @@ export default function SessionView() {
                     })}
                     aria-pressed={showConfidence}
                     title="Underline words Whisper wasn't sure about"
-                    className="btn-ghost"
-                    style={{ fontSize: '12px', padding: '5px 10px', flexShrink: 0, opacity: showConfidence ? 1 : 0.6 }}
+                    style={{
+                      background: 'none', border: 'none', padding: '4px 2px', cursor: 'pointer', flexShrink: 0,
+                      fontSize: '17px', color: showConfidence ? 'var(--ink)' : 'var(--ink-faint)',
+                    }}
                   >
-                    <span className="lowconf-word" data-strong="">abc</span>{' '}Unsure words
+                    <span className={showConfidence ? 'lowconf-word' : undefined} data-strong="" style={showConfidence ? undefined : { textDecoration: 'line-through' }}>Unsure words</span>
+                    <span style={{ color: 'var(--ink-faint)', fontStyle: 'italic', marginLeft: 6 }}>{showConfidence ? 'shown' : 'hidden'}</span>
                   </button>
                 )}
                 {search && transcript && (() => {
                   const q = search.toLowerCase()
                   const count = transcript.split('\n').filter(l => l.toLowerCase().includes(q)).length
                   return (
-                    <span style={{ fontSize: '11px', color: count > 0 ? 'var(--accent2)' : '#475569', whiteSpace: 'nowrap' }}>
-                      {count > 0 ? `${count} match${count !== 1 ? 'es' : ''}` : 'no matches'}
+                    <span style={{ fontSize: '16px', fontStyle: 'italic', color: count > 0 ? 'var(--ink-soft)' : 'var(--rubric)', whiteSpace: 'nowrap' }}>
+                      {count > 0 ? `${count} line${count !== 1 ? 's' : ''}` : 'not found'}
                     </span>
                   )
                 })()}
@@ -1222,17 +1186,16 @@ export default function SessionView() {
             {/* Edit mode: download + import tools */}
             {editMode && transcript && (
               <>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginRight: '4px', flexShrink: 0 }}>Edit tools:</span>
                 <button
                   onClick={handleDownloadTranscript}
                   className="btn-ghost"
-                  style={{ fontSize: '12px', padding: '5px 12px', flexShrink: 0 }}
+                  style={{ fontSize: '15px', padding: '5px 12px', flexShrink: 0 }}
                 >
                   Download
                 </button>
                 <label
                   className="btn-ghost"
-                  style={{ fontSize: '12px', padding: '5px 12px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  style={{ fontSize: '15px', padding: '5px 12px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                 >
                   {importingTranscript ? 'Importing...' : 'Import'}
                   <input
@@ -1268,21 +1231,10 @@ export default function SessionView() {
                   }
                   setEditMode(m => !m)
                 }}
-                style={{
-                  background: editMode ? 'rgba(251,191,36,0.15)' : 'transparent',
-                  border: `1px solid ${editMode ? 'rgba(251,191,36,0.4)' : 'var(--accent3)'}`,
-                  borderRadius: '8px',
-                  color: editMode ? '#fbbf24' : 'var(--text-muted)',
-                  padding: '5px 14px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                  transition: 'all 0.15s',
-                }}
+                className={editMode ? 'btn-primary' : 'btn-ghost'}
+                style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
               >
-                {editMode ? 'Done Editing' : 'Edit'}
+                {editMode ? 'Done editing' : 'Edit transcript'}
               </button>
             )}
           </div>
@@ -1294,31 +1246,22 @@ export default function SessionView() {
         <SpeakersPanel sessionName={name!} onRename={() => { load(); setChangesLoaded(false); setChangesReport(null) }} />
       )}
 
-      {/* Audio player panel */}
+      {/* Audio: a hairline bar in the journal's own hand. The <audio> element
+          stays mounted on every tab so switching tabs doesn't stop playback;
+          the controls only show on the transcript, the tab that uses them. */}
       {audioFiles.length > 0 && (
-        <div ref={audioPanelRef} className="session-audio-panel" style={{
-          borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
-          background: '#0a0d14',
+        <div ref={audioPanelRef} className="session-audio-panel" hidden={tab !== 'transcript'} style={{
+          borderBottom: '1px solid var(--rule)',
           flexShrink: 0,
-          padding: '10px 28px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
+          padding: '4px 48px 12px',
         }}>
-          {/* Audio label */}
-          <div className="session-audio-label" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <span style={{ fontSize: '10px', color: '#475569', fontWeight: 700, letterSpacing: '0.08em' }}>
-              AUDIO
-            </span>
-            <span style={{ fontSize: '11px', color: '#64748b' }}>Session recording (merged)</span>
-          </div>
           {selectedAudio && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
               <audio
                 ref={audioRef}
                 key={selectedAudio}
                 src={apiUrl(`/sessions/${encodeURIComponent(name!)}/merged-audio`)}
-                controls
+                preload="metadata"
                 onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
                 onLoadedMetadata={() => {
                   if (audioRef.current) {
@@ -1333,7 +1276,34 @@ export default function SessionView() {
                 onPlay={() => setAudioPlaying(true)}
                 onPause={() => setAudioPlaying(false)}
                 onEnded={() => setAudioPlaying(false)}
-                style={{ flex: 1, height: '36px', accentColor: 'var(--accent)' }}
+              />
+              <button
+                type="button"
+                className="audio-play"
+                onClick={() => {
+                  const el = audioRef.current
+                  if (!el) return
+                  if (el.paused) el.play().catch(() => {})
+                  else el.pause()
+                }}
+                aria-label={audioPlaying ? 'Pause recording' : 'Play recording'}
+              >
+                {audioPlaying ? <PauseIcon size={13} /> : <PlayIcon size={13} />}
+              </button>
+              <span className="audio-time" aria-live="off">
+                {formatTime(currentTime)}
+                <span style={{ color: 'var(--ink-faint)' }}> / {audioDuration > 0 ? formatTime(audioDuration) : '…'}</span>
+              </span>
+              <input
+                type="range"
+                className="journal-scrubber"
+                min={0}
+                max={audioDuration || 1}
+                step={1}
+                value={Math.min(currentTime, audioDuration || 1)}
+                onChange={e => seekTo(parseFloat(e.target.value))}
+                aria-label="Position in recording"
+                style={{ ['--pct' as string]: `${audioDuration ? (currentTime / audioDuration) * 100 : 0}%` }}
               />
               <select
                 value={playbackRate}
@@ -1342,12 +1312,8 @@ export default function SessionView() {
                   setPlaybackRate(rate)
                   if (audioRef.current) audioRef.current.playbackRate = rate
                 }}
-                style={{
-                  background: 'var(--bg-elevated)', border: '1px solid var(--accent3)',
-                  borderRadius: '6px', color: '#94a3b8',
-                  padding: '4px 6px', fontSize: '11px', fontWeight: 600,
-                  cursor: 'pointer', outline: 'none', flexShrink: 0,
-                }}
+                aria-label="Playback speed"
+                className="audio-speed"
               >
                 {[1, 1.5, 2, 3].map(r => (
                   <option key={r} value={r}>{r}×</option>
@@ -1359,7 +1325,7 @@ export default function SessionView() {
       )}
 
       {/* Content */}
-      <div ref={sessionContentRef} className="session-content" style={{ flex: 1, overflow: 'auto', padding: '24px 28px', paddingBottom: !mainAudioVisible && audioFiles.length > 0 ? '80px' : '24px' }}>
+      <div ref={sessionContentRef} className="session-content" style={{ flex: 1, overflow: 'auto', padding: '18px 48px', paddingBottom: !mainAudioVisible && audioFiles.length > 0 ? '80px' : '40px' }}>
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '820px' }}>
             {[0,1,2,3].map(i => (
@@ -1375,7 +1341,6 @@ export default function SessionView() {
             <TranscriptView
               content={transcript}
               search={search}
-              speakerColors={speakerColors}
               currentTime={audioFiles.length > 0 ? currentTime : undefined}
               onSeek={audioFiles.length > 0 ? seekAndSwitch : undefined}
               targetTimestamp={targetTimestamp}
@@ -1388,9 +1353,8 @@ export default function SessionView() {
             />
           ) : (
             <EmptyTabState
-              icon="🎙️"
               title="No transcript yet"
-              message="Queue a transcription job to get started. Drop audio files onto the session or use the 🎙️ button on the sessions list."
+              message="Queue a transcription job to get started. Drop audio files onto the session, or use the microphone button on the sessions list."
             />
           )
         ) : tab === 'summary' ? (
@@ -1443,7 +1407,7 @@ export default function SessionView() {
               onRuleAdded={() => { load({ silent: true }); setChangesLoaded(false); setChangesReport(null) }}
             />
           ) : (
-            <EmptyTabState icon="🎙️" title="No transcript yet" message="Names are scanned once there's a transcript." />
+            <EmptyTabState title="No transcript yet" message="Names are scanned once there's a transcript." />
           )
         ) : (
           <ChangesView
@@ -1455,17 +1419,17 @@ export default function SessionView() {
         )}
       </div>
 
-      {/* Sticky mini audio player — appears when main player scrolls out of view */}
+      {/* Mini audio player: shown on tabs where the main bar is hidden, so playback stays reachable */}
       {audioFiles.length > 0 && !mainAudioVisible && (
         <div style={{
           position: 'fixed',
           bottom: 0,
           left: 0,   /* overridden to sidebar-width on desktop via CSS */
           right: 0,
-          background: 'color-mix(in srgb, var(--bg-page) 92%, transparent)',
-          backdropFilter: 'blur(8px)',
-          borderTop: '1px solid color-mix(in srgb, var(--accent3) 60%, transparent)',
-          padding: '8px 20px',
+          background: 'var(--page)',
+          borderTop: '1px solid var(--rule)',
+          boxShadow: '0 -8px 20px -14px rgba(0, 0, 0, 0.35)',
+          padding: '8px 24px',
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
@@ -1479,41 +1443,32 @@ export default function SessionView() {
               if (audioPlaying) audioRef.current.pause()
               else audioRef.current.play()
             }}
-            style={{
-              background: 'var(--accent)',
-              border: 'none',
-              borderRadius: '50%',
-              width: 32,
-              height: 32,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              flexShrink: 0,
-              color: 'white',
-              fontSize: 13,
-            }}
+            className="audio-play"
+            aria-label={audioPlaying ? 'Pause recording' : 'Play recording'}
           >
-            {audioPlaying ? '⏸' : '▶'}
+            {audioPlaying ? <PauseIcon size={13} /> : <PlayIcon size={13} />}
           </button>
 
           {/* Time */}
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, minWidth: '72px' }}>
-            {formatTime(currentTime)}{audioDuration > 0 ? ` / ${formatTime(audioDuration)}` : ''}
+          <span className="audio-time">
+            {formatTime(currentTime)}
+            <span style={{ color: 'var(--ink-faint)' }}> / {audioDuration > 0 ? formatTime(audioDuration) : '…'}</span>
           </span>
 
           {/* Progress bar */}
           <input
             type="range"
             min={0}
-            max={audioDuration || 100}
-            value={currentTime}
+            max={audioDuration || 1}
+            value={Math.min(currentTime, audioDuration || 1)}
             step={1}
             onChange={e => {
               const t = parseFloat(e.target.value)
               if (audioRef.current) audioRef.current.currentTime = t
             }}
-            style={{ flex: 1, accentColor: 'var(--accent)', cursor: 'pointer', minWidth: 0 }}
+            className="journal-scrubber"
+            aria-label="Position in recording"
+            style={{ ['--pct' as string]: `${audioDuration ? (currentTime / audioDuration) * 100 : 0}%` }}
           />
 
           {/* Speed */}
@@ -1524,12 +1479,8 @@ export default function SessionView() {
               setPlaybackRate(rate)
               if (audioRef.current) audioRef.current.playbackRate = rate
             }}
-            style={{
-              background: 'var(--bg-elevated)', border: '1px solid var(--accent3)',
-              borderRadius: '6px', color: 'var(--text-muted)',
-              padding: '3px 6px', fontSize: '11px', fontWeight: 600,
-              cursor: 'pointer', outline: 'none', flexShrink: 0,
-            }}
+            aria-label="Playback speed"
+            className="audio-speed"
           >
             {[1, 1.5, 2, 3].map(r => (
               <option key={r} value={r}>{r}×</option>
@@ -1552,7 +1503,6 @@ function formatTime(seconds: number): string {
 function TranscriptView({
   content,
   search,
-  speakerColors,
   currentTime,
   onSeek,
   targetTimestamp,
@@ -1565,7 +1515,6 @@ function TranscriptView({
 }: {
   content: string | null
   search: string
-  speakerColors: Map<string, string>
   currentTime?: number
   onSeek?: (seconds: number, speaker?: string) => void
   targetTimestamp?: string | null
@@ -1591,6 +1540,46 @@ function TranscriptView({
   const [hoveredLineIdx, setHoveredLineIdx] = useState<number | null>(null)
   const [ruleSuggestions, setRuleSuggestions] = useState<SessionRuleSuggestion[]>([])
   const confidenceIdx = useMemo(() => indexConfidence(confidence ?? null), [confidence])
+  // Ribbon bookmark: remember the first visible line while reading, and on the
+  // next visit offer to continue from there.
+  const pageRef = useRef<HTMLDivElement | null>(null)
+  const storageKey = activeCampaign && sessionName ? ribbonKey(activeCampaign.slug, sessionName) : null
+  const [ribbonTs, setRibbonTs] = useState<string | null>(null)
+  useEffect(() => {
+    if (!storageKey) return
+    let saved: string | null = null
+    try { saved = localStorage.getItem(storageKey) } catch { /* no storage */ }
+    // Only worth a ribbon if they'd actually read past the opening minutes.
+    setRibbonTs(saved && parseTimestampToSeconds(saved) > 120 ? saved : null)
+  }, [storageKey])
+  useEffect(() => {
+    if (!storageKey || editMode) return
+    const scroller = pageRef.current?.closest('.session-content') as HTMLElement | null
+    if (!scroller) return
+    let pending = 0
+    const onScroll = () => {
+      if (pending) return
+      pending = window.setTimeout(() => {
+        pending = 0
+        const top = scroller.getBoundingClientRect().top
+        for (const el of Array.from(scroller.querySelectorAll<HTMLElement>('[data-ts]'))) {
+          if (el.getBoundingClientRect().bottom > top + 8) {
+            try { localStorage.setItem(storageKey, el.dataset.ts!) } catch { /* no storage */ }
+            if (scroller.scrollTop > 200) setRibbonTs(null)
+            break
+          }
+        }
+      }, 600)
+    }
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => { scroller.removeEventListener('scroll', onScroll); window.clearTimeout(pending) }
+  }, [storageKey, editMode, content])
+  const continueReading = () => {
+    if (!ribbonTs) return
+    const el = pageRef.current?.querySelector<HTMLElement>(`[data-ts="${ribbonTs}"]`)
+    el?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    setRibbonTs(null)
+  }
   // activeIdx is computed during render; we use a ref to scroll without triggering re-renders
 
 
@@ -1723,7 +1712,7 @@ function TranscriptView({
 
   if (!content) {
     return (
-      <div style={{ color: '#64748b', textAlign: 'center', paddingTop: '60px' }}>
+      <div style={{ color: 'var(--ink-faint)', textAlign: 'center', paddingTop: '60px' }}>
         No transcript yet. Run the pipeline to generate one.
       </div>
     )
@@ -1736,13 +1725,13 @@ function TranscriptView({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0', maxWidth: '820px' }}>
         {/* Warning banner */}
         <div style={{
-          background: 'rgba(251,191,36,0.1)',
-          border: '1px solid rgba(251,191,36,0.3)',
-          borderRadius: '8px',
+          background: 'color-mix(in srgb, var(--ochre) 10%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--ochre) 30%, transparent)',
+          borderRadius: '3px',
           padding: '10px 14px',
           marginBottom: '12px',
-          fontSize: '12px',
-          color: '#fbbf24',
+          fontSize: '15px',
+          color: 'var(--ochre)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -1757,12 +1746,12 @@ function TranscriptView({
             onClick={saveAll}
             disabled={savingAll}
             style={{
-              background: savingAll ? 'var(--accent3)' : 'rgba(251,191,36,0.2)',
-              border: '1px solid rgba(251,191,36,0.4)',
-              borderRadius: '6px',
-              color: savingAll ? '#64748b' : '#fbbf24',
+              background: savingAll ? 'var(--accent3)' : 'color-mix(in srgb, var(--ochre) 20%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--ochre) 40%, transparent)',
+              borderRadius: '3px',
+              color: savingAll ? 'var(--ink-faint)' : 'var(--ochre)',
               padding: '5px 14px',
-              fontSize: '12px',
+              fontSize: '15px',
               fontWeight: 700,
               cursor: savingAll ? 'not-allowed' : 'pointer',
               whiteSpace: 'nowrap',
@@ -1799,16 +1788,16 @@ function TranscriptView({
                 gap: '8px',
                 padding: '3px 6px',
                 alignItems: 'flex-start',
-                borderRadius: '6px',
-                background: isEditing ? 'rgba(251,191,36,0.08)' : isPending ? 'rgba(251,191,36,0.05)' : 'transparent',
+                borderRadius: '3px',
+                background: isEditing ? 'color-mix(in srgb, var(--ochre) 8%, transparent)' : isPending ? 'color-mix(in srgb, var(--ochre) 5%, transparent)' : 'transparent',
                 position: 'relative',
               }}
             >
               {/* Line number */}
               <span style={{
-                fontSize: '10px',
-                color: 'var(--accent3)',
-                fontFamily: 'monospace',
+                fontSize: '13px',
+                color: 'var(--rule-strong)',
+                fontVariantNumeric: 'lining-nums tabular-nums',
                 flexShrink: 0,
                 width: '36px',
                 textAlign: 'right',
@@ -1832,11 +1821,11 @@ function TranscriptView({
                   style={{
                     flex: 1,
                     background: 'var(--bg-surface)',
-                    border: '1px solid rgba(251,191,36,0.4)',
+                    border: '1px solid color-mix(in srgb, var(--ochre) 40%, transparent)',
                     borderRadius: '4px',
-                    color: '#e2e8f0',
+                    color: 'var(--ink)',
                     padding: '2px 8px',
-                    fontSize: '12px',
+                    fontSize: '15px',
                     fontFamily: 'monospace',
                     outline: 'none',
                   }}
@@ -1854,21 +1843,21 @@ function TranscriptView({
                     borderRadius: '4px',
                     padding: '2px 4px',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'color-mix(in srgb, var(--ink) 3%, transparent)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
-                  <span style={{ fontSize: '11px', color: '#475569', fontFamily: 'monospace', paddingTop: '2px', flexShrink: 0, width: '48px', textAlign: 'right' }}>
+                  <span className="transcript-ts" style={{ flexShrink: 0, width: '64px', cursor: 'text' }}>
                     {m[1]}
                   </span>
-                  <span style={{ background: `${getSpeakerColor(m[2].trim(), speakerColors)}20`, color: getSpeakerColor(m[2].trim(), speakerColors), borderRadius: '4px', padding: '1px 8px', fontSize: '11px', fontWeight: 700, flexShrink: 0 }}>
-                    {m[2].trim()}
+                  <span style={{ fontSize: '18px', color: 'var(--ink)', lineHeight: 1.55 }}>
+                    <span className="speaker-name" style={{ marginRight: '0.45em' }}>{m[2].trim()}</span>
+                    {m[3]}
                   </span>
-                  <span style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: 1.6 }}>{m[3]}</span>
                 </div>
               ) : rawLine.startsWith('#') ? (
                 <div
                   onClick={() => { setEditingLineIdx(lineIdx); setEditingValue(rawLine) }}
-                  style={{ flex: 1, cursor: 'text', fontSize: '14px', fontWeight: 700, color: '#e2e8f0', paddingTop: '2px' }}
+                  style={{ flex: 1, cursor: 'text', fontSize: '17px', fontWeight: 700, color: 'var(--ink)', paddingTop: '2px' }}
                 >
                   {rawLine.replace(/^#+\s*/, '')}
                 </div>
@@ -1877,7 +1866,7 @@ function TranscriptView({
               ) : (
                 <div
                   onClick={() => { setEditingLineIdx(lineIdx); setEditingValue(rawLine) }}
-                  style={{ flex: 1, cursor: 'text', fontSize: '12px', color: '#64748b', paddingTop: '2px' }}
+                  style={{ flex: 1, cursor: 'text', fontSize: '15px', color: 'var(--ink-faint)', paddingTop: '2px' }}
                 >
                   {rawLine || '\u00a0'}
                 </div>
@@ -1885,12 +1874,10 @@ function TranscriptView({
               {isPending && (
                 <span style={{
                   flexShrink: 0, alignSelf: 'center',
-                  fontSize: '10px', fontWeight: 600,
-                  color: '#fbbf24', background: 'rgba(251,191,36,0.12)',
-                  border: '1px solid rgba(251,191,36,0.3)',
-                  borderRadius: '4px', padding: '1px 7px', whiteSpace: 'nowrap',
+                  fontSize: '15px', fontStyle: 'italic',
+                  color: 'var(--ochre)', whiteSpace: 'nowrap',
                 }}>
-                  Submitted for review
+                  sent to the DM for review
                 </span>
               )}
               {/* Add line button — shows on hover */}
@@ -1901,10 +1888,10 @@ function TranscriptView({
                   flexShrink: 0,
                   alignSelf: 'center',
                   background: 'transparent',
-                  border: '1px solid rgba(99,102,241,0.4)',
+                  border: '1px solid color-mix(in srgb, var(--gilt) 40%, transparent)',
                   borderRadius: '4px',
-                  color: '#6366f1',
-                  fontSize: '13px',
+                  color: 'var(--gilt-ink)',
+                  fontSize: '16px',
                   lineHeight: 1,
                   width: '20px',
                   height: '20px',
@@ -1943,103 +1930,95 @@ function TranscriptView({
     return renderMarked(text, marks)
   }
 
+  // Silences: the gap between two lines' start times, minus how long the
+  // first one plausibly took to say (~2.7 words/s). Only real pauses open a
+  // "time passes" break; a long speech doesn't.
+  const silenceBefore = (i: number): boolean => {
+    if (search) return false
+    const cur = visible[i]
+    let j = i - 1
+    while (j >= 0 && visible[j].type !== 'speech') j--
+    if (j < 0 || cur.type !== 'speech' || !cur.timestamp || !visible[j].timestamp) return false
+    const prev = visible[j]
+    const spoken = (prev.text ?? '').split(/\s+/).filter(Boolean).length / 2.7
+    const gap = parseTimestampToSeconds(cur.timestamp) - parseTimestampToSeconds(prev.timestamp!) - spoken
+    return gap >= SILENCE_BREAK_SECONDS
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '820px' }}>
+    <div ref={pageRef} style={{ position: 'relative', maxWidth: '900px' }}>
+      {ribbonTs && !search && (
+        <div className="journal-ribbon" style={{ right: '-72px' }}>
+          <button type="button" onClick={continueReading} title="Jump back to where you stopped reading">
+            Continue from {ribbonTs}
+          </button>
+          <button type="button" className="dismiss" onClick={() => setRibbonTs(null)} aria-label="Dismiss bookmark">
+            <CloseIcon size={13} />
+          </button>
+        </div>
+      )}
       {visible.map((line, i) => {
         const isActive = i === activeIdx
         const isTarget = line.type === 'speech' && line.timestamp === targetTimestamp
         const isFlash = line.type === 'speech' && line.timestamp === flashTimestamp
 
         if (line.type === 'heading') {
+          // The "# Session Transcript" title just repeats the entry heading above.
+          if (/^#\s*session transcript\s*$/i.test(line.raw.trim())) return null
           return (
-            <h2 key={i} data-line-idx={line.lineIdx ?? i} style={{ fontSize: '15px', fontWeight: 700, color: '#e2e8f0', margin: '16px 0 8px' }}>
+            <h2 key={i} data-line-idx={line.lineIdx ?? i} className="sc" style={{ fontSize: '20px', color: 'var(--rubric)', margin: '24px 0 8px 96px' }}>
               {line.raw.replace(/^#+\s*/, '')}
             </h2>
           )
         }
         if (line.type === 'speech') {
-          const color = line.speaker ? getSpeakerColor(line.speaker, speakerColors) : '#64748b'
           const tsSeconds = line.timestamp ? parseTimestampToSeconds(line.timestamp) : null
+          const who = splitSpeaker(line.speaker)
           return (
-            <div
-              key={i}
-              data-line-idx={line.lineIdx ?? i}
-              ref={el => {
-                if (isActive) activeLineRef.current = el
-                if (isTarget) targetLineRef.current = el
-              }}
-              style={{
-                display: 'flex',
-                gap: '12px',
-                padding: '5px 6px',
-                alignItems: 'flex-start',
-                borderRadius: '6px',
-                background: isFlash
-                  ? 'rgba(251,191,36,0.15)'
-                  : isActive
-                  ? 'rgba(124,108,252,0.1)'
-                  : 'transparent',
-                outline: isFlash ? '1px solid rgba(251,191,36,0.4)' : 'none',
-                transition: 'background 0.4s, outline 0.4s',
-              }}
-            >
-              {/* Timestamp — clickable if audio available */}
-              {onSeek && tsSeconds !== null ? (
-                <button
-                  onClick={() => onSeek(tsSeconds, line.speaker)}
-                  title={`Seek to ${line.timestamp}`}
-                  style={{
-                    fontSize: '11px',
-                    color: isActive ? '#a78bfa' : '#475569',
-                    fontFamily: 'monospace',
-                    paddingTop: '2px',
-                    flexShrink: 0,
-                    width: '48px',
-                    textAlign: 'right',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '0',
-                    textDecoration: 'underline',
-                    textDecorationColor: 'rgba(124,108,252,0.4)',
-                  }}
-                >
-                  {line.timestamp}
-                </button>
-              ) : (
-                <span style={{
-                  fontSize: '11px',
-                  color: '#475569',
-                  fontFamily: 'monospace',
-                  paddingTop: '2px',
-                  flexShrink: 0,
-                  width: '48px',
-                  textAlign: 'right',
-                }}>
-                  {line.timestamp}
-                </span>
+            <React.Fragment key={i}>
+              {silenceBefore(i) && (
+                <div className="time-passes" style={{ marginLeft: 'calc(var(--ts-col, 78px) + var(--ts-gap, 18px))' }} aria-hidden>a few moments pass</div>
               )}
-              {/* Speaker chip — only shown when speaker is known */}
-              {line.speaker && (
-                <span style={{
-                  background: `${color}20`,
-                  color,
-                  borderRadius: '4px',
-                  padding: '1px 8px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  flexShrink: 0,
-                  alignSelf: 'flex-start',
-                  marginTop: '1px',
-                }}>
-                  {line.speaker}
-                </span>
-              )}
-              {/* Text */}
-              <span style={{ fontSize: '13px', color: isActive ? '#e2e8f0' : '#cbd5e1', lineHeight: 1.6 }}>
-                {highlight(line)}
-              </span>
-            </div>
+              <div
+                data-line-idx={line.lineIdx ?? i}
+                data-ts={line.timestamp}
+                ref={el => {
+                  if (isActive) activeLineRef.current = el
+                  if (isTarget) targetLineRef.current = el
+                }}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'var(--ts-col, 78px) minmax(0, 1fr)',
+                  columnGap: 'var(--ts-gap, 18px)',
+                  padding: '4px 0',
+                  background: isFlash
+                    ? 'var(--highlighter)'
+                    : isActive
+                    ? 'linear-gradient(90deg, color-mix(in srgb, var(--gilt) 16%, transparent), transparent 70%)'
+                    : 'transparent',
+                  boxShadow: isActive ? 'inset 2px 0 0 var(--gilt)' : 'none',
+                  transition: 'background 0.4s',
+                }}
+              >
+                {onSeek && tsSeconds !== null ? (
+                  <button
+                    onClick={() => onSeek(tsSeconds, line.speaker)}
+                    title={`Play from ${line.timestamp}`}
+                    className="transcript-ts"
+                    style={{ color: isActive ? 'var(--gilt-ink)' : undefined }}
+                  >
+                    {line.timestamp}
+                  </button>
+                ) : (
+                  <span className="transcript-ts">{line.timestamp}</span>
+                )}
+                <p style={{ margin: 0, fontSize: '19px', lineHeight: 1.55, color: 'var(--ink)', maxWidth: '70ch' }}>
+                  {who.name && <span className="speaker-name" style={{ marginRight: '0.4em' }}>{who.name}</span>}
+                  {who.player && <span className="speaker-player" style={{ marginRight: '0.5em' }}>{who.player}</span>}
+                  {highlight(line)}
+                </p>
+              </div>
+            </React.Fragment>
           )
         }
         return null
@@ -2051,23 +2030,23 @@ function TranscriptView({
 function MarkdownView({ content, emptyMsg }: { content: string | null; emptyMsg: string }) {
   if (!content) {
     return (
-      <div style={{ color: '#64748b', textAlign: 'center', paddingTop: '60px' }}>
+      <div style={{ color: 'var(--ink-faint)', textAlign: 'center', paddingTop: '60px' }}>
         {emptyMsg}
       </div>
     )
   }
   return (
-    <div style={{ maxWidth: '820px', color: '#cbd5e1', fontSize: '14px', lineHeight: 1.7 }}>
+    <div style={{ maxWidth: '820px', color: 'var(--ink)', fontSize: '17px', lineHeight: 1.7 }}>
       <ReactMarkdown
         components={{
-          h1: ({ children }) => <h1 style={{ color: '#e2e8f0', fontSize: '20px', marginBottom: '12px' }}>{children}</h1>,
-          h2: ({ children }) => <h2 style={{ color: '#e2e8f0', fontSize: '16px', marginTop: '24px', marginBottom: '8px' }}>{children}</h2>,
-          h3: ({ children }) => <h3 style={{ color: '#e2e8f0', fontSize: '14px', marginTop: '16px', marginBottom: '6px' }}>{children}</h3>,
+          h1: ({ children }) => <h1 style={{ color: 'var(--ink)', fontSize: '22px', marginBottom: '12px' }}>{children}</h1>,
+          h2: ({ children }) => <h2 style={{ color: 'var(--ink)', fontSize: '18px', marginTop: '24px', marginBottom: '8px' }}>{children}</h2>,
+          h3: ({ children }) => <h3 style={{ color: 'var(--ink)', fontSize: '17px', marginTop: '16px', marginBottom: '6px' }}>{children}</h3>,
           p: ({ children }) => <p style={{ marginBottom: '12px' }}>{children}</p>,
           li: ({ children }) => <li style={{ marginBottom: '4px' }}>{children}</li>,
-          strong: ({ children }) => <strong style={{ color: '#e2e8f0' }}>{children}</strong>,
+          strong: ({ children }) => <strong style={{ color: 'var(--ink)' }}>{children}</strong>,
           code: ({ children }) => (
-            <code style={{ background: 'var(--bg-elevated)', borderRadius: '4px', padding: '2px 5px', fontSize: '12px' }}>
+            <code style={{ background: 'var(--bg-elevated)', borderRadius: '4px', padding: '2px 5px', fontSize: '15px' }}>
               {children}
             </code>
           ),
@@ -2135,7 +2114,7 @@ function MarkdownEditView({
 
   if (!content && !editMode) {
     return (
-      <div style={{ color: '#64748b', textAlign: 'center', paddingTop: '60px' }}>
+      <div style={{ color: 'var(--ink-faint)', textAlign: 'center', paddingTop: '60px' }}>
         {emptyMsg}
       </div>
     )
@@ -2147,9 +2126,9 @@ function MarkdownEditView({
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
         {pendingApproval && (
           <span style={{
-            fontSize: '11px', fontWeight: 600, color: '#fbbf24',
-            background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)',
-            borderRadius: '6px', padding: '3px 10px',
+            fontSize: '14px', fontWeight: 600, color: 'var(--ochre)',
+            background: 'color-mix(in srgb, var(--ochre) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--ochre) 30%, transparent)',
+            borderRadius: '3px', padding: '3px 10px',
           }}>
             Submitted for DM review
           </span>
@@ -2159,22 +2138,22 @@ function MarkdownEditView({
           <button
             onClick={enterEdit}
             style={{
-              background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '8px',
-              color: '#64748b', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+              background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '3px',
+              color: 'var(--ink-faint)', padding: '6px 12px', fontSize: '15px', fontWeight: 600, cursor: 'pointer',
             }}
           >
             Edit {endpoint === 'summary' ? 'Summary' : 'Wiki'}
           </button>
         ) : (
           <div style={{ display: 'flex', gap: '8px' }}>
-            <span style={{ fontSize: '11px', color: requiresApproval ? '#fbbf24' : '#64748b', alignSelf: 'center' }}>
+            <span style={{ fontSize: '14px', color: requiresApproval ? 'var(--ochre)' : 'var(--ink-faint)', alignSelf: 'center' }}>
               {requiresApproval ? 'Changes will be submitted for DM review' : 'Changes save directly'}
             </span>
             <button
               onClick={() => setEditMode(false)}
               style={{
-                background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '6px',
-                color: '#64748b', padding: '5px 12px', fontSize: '12px', cursor: 'pointer',
+                background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '3px',
+                color: 'var(--ink-faint)', padding: '5px 12px', fontSize: '15px', cursor: 'pointer',
               }}
             >
               Cancel
@@ -2183,11 +2162,11 @@ function MarkdownEditView({
               onClick={save}
               disabled={saving}
               style={{
-                background: requiresApproval ? 'rgba(251,191,36,0.15)' : 'rgba(52,211,153,0.15)',
-                border: `1px solid ${requiresApproval ? 'rgba(251,191,36,0.4)' : 'rgba(52,211,153,0.4)'}`,
-                borderRadius: '6px',
-                color: requiresApproval ? '#fbbf24' : '#34d399',
-                padding: '5px 14px', fontSize: '12px', fontWeight: 700,
+                background: requiresApproval ? 'color-mix(in srgb, var(--ochre) 15%, transparent)' : 'color-mix(in srgb, var(--moss) 15%, transparent)',
+                border: `1px solid ${requiresApproval ? 'color-mix(in srgb, var(--ochre) 40%, transparent)' : 'color-mix(in srgb, var(--moss) 40%, transparent)'}`,
+                borderRadius: '3px',
+                color: requiresApproval ? 'var(--ochre)' : 'var(--moss)',
+                padding: '5px 14px', fontSize: '15px', fontWeight: 700,
                 cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
               }}
             >
@@ -2203,8 +2182,8 @@ function MarkdownEditView({
           onChange={e => setEditValue(e.target.value)}
           style={{
             width: '100%', minHeight: '500px', background: 'var(--bg-surface)',
-            border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px',
-            color: '#e2e8f0', padding: '16px', fontSize: '13px',
+            border: '1px solid color-mix(in srgb, var(--ochre) 30%, transparent)', borderRadius: '3px',
+            color: 'var(--ink)', padding: '16px', fontSize: '16px',
             fontFamily: 'monospace', lineHeight: 1.6, resize: 'vertical',
             outline: 'none', boxSizing: 'border-box',
           }}
@@ -2375,13 +2354,13 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
     overflowY: 'auto',
     overflowX: 'auto',
     fontFamily: 'monospace',
-    fontSize: '12px',
+    fontSize: '15px',
     lineHeight: '1.6',
   }
 
   const renderWords = (parts: WordDiffPart[], side: 'raw' | 'corr') => {
-    const highlightBg = side === 'raw' ? 'rgba(239,68,68,0.25)' : 'rgba(34,197,94,0.25)'
-    const highlightColor = side === 'raw' ? '#fca5a5' : '#86efac'
+    const highlightBg = side === 'raw' ? 'color-mix(in srgb, var(--rubric) 25%, transparent)' : 'color-mix(in srgb, var(--moss) 25%, transparent)'
+    const highlightColor = side === 'raw' ? 'var(--rubric)' : 'var(--moss)'
     return parts.map((p, i) =>
       p.changed ? (
         <mark key={i} style={{ background: highlightBg, color: highlightColor, borderRadius: '2px', padding: '0 1px' }}>
@@ -2400,12 +2379,12 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
         <button
           onClick={handleToggle}
           style={{
-            background: showDiff ? 'rgba(124,108,252,0.2)' : 'rgba(30,33,48,0.8)',
-            border: `1px solid ${showDiff ? 'rgba(124,108,252,0.5)' : 'var(--accent3)'}`,
-            borderRadius: '8px',
-            color: showDiff ? 'var(--accent-text)' : '#64748b',
+            background: showDiff ? 'color-mix(in srgb, var(--rubric) 20%, transparent)' : 'color-mix(in srgb, var(--page-sunk) 80%, transparent)',
+            border: `1px solid ${showDiff ? 'color-mix(in srgb, var(--rubric) 50%, transparent)' : 'var(--accent3)'}`,
+            borderRadius: '3px',
+            color: showDiff ? 'var(--accent-text)' : 'var(--ink-faint)',
             padding: '6px 14px',
-            fontSize: '12px',
+            fontSize: '15px',
             fontWeight: 600,
             cursor: 'pointer',
           }}
@@ -2415,12 +2394,12 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
 
         {showDiff && rawContent != null && (
           <>
-            <span style={{ fontSize: '12px', color: '#475569' }}>
-              <span style={{ color: changedCount > 0 ? 'var(--accent-text)' : '#475569', fontWeight: 700 }}>{changedCount}</span>
+            <span style={{ fontSize: '15px', color: 'var(--ink-faint)' }}>
+              <span style={{ color: changedCount > 0 ? 'var(--accent-text)' : 'var(--ink-faint)', fontWeight: 700 }}>{changedCount}</span>
               {' '}line{changedCount !== 1 ? 's' : ''} changed out of{' '}
-              <span style={{ fontWeight: 700, color: '#94a3b8' }}>{totalLines}</span> total
+              <span style={{ fontWeight: 700, color: 'var(--ink-soft)' }}>{totalLines}</span> total
             </span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#94a3b8', cursor: 'pointer' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '15px', color: 'var(--ink-soft)', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={changedLinesOnly}
@@ -2437,18 +2416,18 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
       {showDiff && (
         <div style={{
           border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
-          borderRadius: '10px',
+          borderRadius: '3px',
           overflow: 'hidden',
           height: '400px',
           display: 'flex',
           flexDirection: 'column',
         }}>
           {diffLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: '#64748b', gap: '8px' }}>
-              <span style={{ fontSize: '16px' }}>⟳</span> Loading diff...
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--ink-faint)', gap: '8px' }}>
+              <SpinnerIcon size={16} /> Loading diff…
             </div>
           ) : rawContent == null ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: '#64748b' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--ink-faint)' }}>
               No transcript data available.
             </div>
           ) : (
@@ -2457,26 +2436,26 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
               <div style={panelStyle}>
                 <div style={{
                   padding: '6px 10px',
-                  background: 'rgba(239,68,68,0.08)',
-                  borderBottom: '1px solid rgba(239,68,68,0.2)',
+                  background: 'color-mix(in srgb, var(--rubric) 8%, transparent)',
+                  borderBottom: '1px solid color-mix(in srgb, var(--rubric) 20%, transparent)',
                   borderRight: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
-                  fontSize: '11px',
+                  fontSize: '14px',
                   fontWeight: 700,
-                  color: '#fca5a5',
-                  letterSpacing: '0.06em',
+                  color: 'var(--rubric)',
+                  letterSpacing: '0.04em', fontVariant: 'small-caps',
                   flexShrink: 0,
                 }}>
-                  RAW (WHISPER OUTPUT)
+                  Raw Whisper output
                 </div>
                 <div
                   ref={leftRef}
                   onScroll={() => syncScroll('left')}
-                  style={{ ...scrollAreaStyle, borderRight: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', background: 'rgba(239,68,68,0.02)' }}
+                  style={{ ...scrollAreaStyle, borderRight: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', background: 'color-mix(in srgb, var(--rubric) 2%, transparent)' }}
                 >
                   {displayItems.map((item, idx) =>
                     item.type === 'separator' ? (
-                      <div key={idx} style={{ padding: '2px 8px', color: '#475569', fontSize: '11px', background: '#0d1017', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
-                        ···  {item.skipped} line{item.skipped !== 1 ? 's' : ''} hidden
+                      <div key={idx} style={{ padding: '2px 8px', color: 'var(--ink-faint)', fontSize: '14px', background: 'var(--page-sunk)', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
+                        …  {item.skipped} line{item.skipped !== 1 ? 's' : ''} hidden
                       </div>
                     ) : (
                       <div
@@ -2485,16 +2464,16 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
                           display: 'flex',
                           gap: '0',
                           padding: '0 8px',
-                          background: item.hasChanges ? 'rgba(239,68,68,0.07)' : 'transparent',
+                          background: item.hasChanges ? 'color-mix(in srgb, var(--rubric) 7%, transparent)' : 'transparent',
                           opacity: item.hasChanges ? 1 : 0.45,
                           whiteSpace: 'pre-wrap',
                           wordBreak: 'break-all',
                         }}
                       >
-                        <span style={{ color: '#374151', minWidth: '36px', userSelect: 'none', paddingRight: '8px', textAlign: 'right', flexShrink: 0 }}>
+                        <span style={{ color: 'var(--rule-strong)', minWidth: '36px', userSelect: 'none', paddingRight: '8px', textAlign: 'right', flexShrink: 0 }}>
                           {item.lineNum}
                         </span>
-                        <span style={{ color: '#e2e8f0' }}>
+                        <span style={{ color: 'var(--ink)' }}>
                           {renderWords(item.rawParts, 'raw')}
                         </span>
                       </div>
@@ -2507,25 +2486,25 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
               <div style={panelStyle}>
                 <div style={{
                   padding: '6px 10px',
-                  background: 'rgba(34,197,94,0.08)',
-                  borderBottom: '1px solid rgba(34,197,94,0.2)',
-                  fontSize: '11px',
+                  background: 'color-mix(in srgb, var(--moss) 8%, transparent)',
+                  borderBottom: '1px solid color-mix(in srgb, var(--moss) 20%, transparent)',
+                  fontSize: '14px',
                   fontWeight: 700,
-                  color: '#86efac',
-                  letterSpacing: '0.06em',
+                  color: 'var(--moss)',
+                  letterSpacing: '0.04em', fontVariant: 'small-caps',
                   flexShrink: 0,
                 }}>
-                  CORRECTED
+                  Corrected
                 </div>
                 <div
                   ref={rightRef}
                   onScroll={() => syncScroll('right')}
-                  style={{ ...scrollAreaStyle, background: 'rgba(34,197,94,0.02)' }}
+                  style={{ ...scrollAreaStyle, background: 'color-mix(in srgb, var(--moss) 2%, transparent)' }}
                 >
                   {displayItems.map((item, idx) =>
                     item.type === 'separator' ? (
-                      <div key={idx} style={{ padding: '2px 8px', color: '#475569', fontSize: '11px', background: '#0d1017', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
-                        ···  {item.skipped} line{item.skipped !== 1 ? 's' : ''} hidden
+                      <div key={idx} style={{ padding: '2px 8px', color: 'var(--ink-faint)', fontSize: '14px', background: 'var(--page-sunk)', borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)' }}>
+                        …  {item.skipped} line{item.skipped !== 1 ? 's' : ''} hidden
                       </div>
                     ) : (
                       <div
@@ -2534,16 +2513,16 @@ function DiffViewer({ sessionName }: { sessionName: string }) {
                           display: 'flex',
                           gap: '0',
                           padding: '0 8px',
-                          background: item.hasChanges ? 'rgba(34,197,94,0.07)' : 'transparent',
+                          background: item.hasChanges ? 'color-mix(in srgb, var(--moss) 7%, transparent)' : 'transparent',
                           opacity: item.hasChanges ? 1 : 0.45,
                           whiteSpace: 'pre-wrap',
                           wordBreak: 'break-all',
                         }}
                       >
-                        <span style={{ color: '#374151', minWidth: '36px', userSelect: 'none', paddingRight: '8px', textAlign: 'right', flexShrink: 0 }}>
+                        <span style={{ color: 'var(--rule-strong)', minWidth: '36px', userSelect: 'none', paddingRight: '8px', textAlign: 'right', flexShrink: 0 }}>
                           {item.lineNum}
                         </span>
-                        <span style={{ color: '#e2e8f0' }}>
+                        <span style={{ color: 'var(--ink)' }}>
                           {renderWords(item.corrParts, 'corr')}
                         </span>
                       </div>
@@ -2566,7 +2545,7 @@ function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: str
 
   if (items.length === 0) {
     return (
-      <div style={{ color: '#475569', fontSize: '13px', fontStyle: 'italic' }}>
+      <div style={{ color: 'var(--ink-faint)', fontSize: '16px', fontStyle: 'italic' }}>
         No {label.toLowerCase()} configured.
       </div>
     )
@@ -2589,10 +2568,8 @@ function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: str
         const dimmed = item.hit_count === 0
         return (
           <div key={key} style={{
-            borderRadius: '8px',
-            border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
-            overflow: 'hidden',
-            opacity: dimmed ? 0.45 : 1,
+            borderBottom: '1px solid var(--rule)',
+            opacity: dimmed ? 0.5 : 1,
           }}>
             <button
               onClick={() => toggle(key)}
@@ -2609,31 +2586,19 @@ function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: str
               }}
             >
               {/* Arrow */}
-              <span style={{ color: '#475569', fontSize: '10px', flexShrink: 0, width: '10px' }}>
-                {item.examples.length > 0 ? (isOpen ? '▼' : '▶') : ' '}
+              <svg aria-hidden width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                style={{ color: 'var(--ink-faint)', flexShrink: 0, visibility: item.examples.length > 0 ? 'visible' : 'hidden', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }}>
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+              <span style={{ fontSize: '18px', flexShrink: 0 }}>
+                <span style={{ color: 'var(--ink-faint)', textDecoration: 'line-through' }}>{item.original}</span>
+                <span style={{ color: 'var(--ink-faint)', margin: '0 6px' }}>→</span>
+                <span style={{ color: 'var(--ink)' }}>{item.replacement}</span>
               </span>
-              {/* Pill */}
               <span style={{
-                background: 'rgba(52,211,153,0.12)',
-                border: '1px solid rgba(52,211,153,0.25)',
-                color: '#34d399',
-                borderRadius: '999px',
-                padding: '2px 10px',
-                fontSize: '12px',
-                fontFamily: 'monospace',
-                fontWeight: 600,
-                flexShrink: 0,
-              }}>
-                {item.original} → {item.replacement}
-              </span>
-              {/* Hit count badge */}
-              <span style={{
-                background: item.hit_count > 0 ? 'rgba(52,211,153,0.15)' : 'var(--bg-elevated)',
-                color: item.hit_count > 0 ? '#34d399' : '#475569',
-                borderRadius: '999px',
-                padding: '1px 8px',
-                fontSize: '11px',
-                fontWeight: 700,
+                color: item.hit_count > 0 ? 'var(--moss)' : 'var(--ink-faint)',
+                fontSize: '16px',
+                fontStyle: 'italic',
                 flexShrink: 0,
               }}>
                 {item.hit_count} {item.hit_count === 1 ? 'hit' : 'hits'}
@@ -2653,12 +2618,12 @@ function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: str
                   const before = arrow >= 0 ? ex.slice(0, arrow) : ex
                   const after = arrow >= 0 ? ex.slice(arrow + 3) : ''
                   return (
-                    <div key={ei} style={{ fontSize: '11px', fontFamily: 'monospace', color: '#94a3b8', lineHeight: 1.5 }}>
-                      <ExampleLine text={before} word={item.original} color="#f87171" />
+                    <div key={ei} style={{ fontSize: '14px', fontFamily: 'monospace', color: 'var(--ink-soft)', lineHeight: 1.5 }}>
+                      <ExampleLine text={before} word={item.original} color="var(--rubric)" />
                       {after && (
                         <>
-                          <span style={{ color: '#475569' }}> → </span>
-                          <ExampleLine text={after} word={item.replacement} color="#34d399" />
+                          <span style={{ color: 'var(--ink-faint)' }}> → </span>
+                          <ExampleLine text={after} word={item.replacement} color="var(--moss)" />
                         </>
                       )}
                     </div>
@@ -2735,50 +2700,46 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
   }
 
   return (
-    <div style={{ borderBottom: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', background: '#080a10', flexShrink: 0 }}>
+    <div style={{ flexShrink: 0 }}>
       <button
         onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          padding: '8px 28px',
+          padding: '0 48px 6px',
           background: 'transparent',
           border: 'none',
           cursor: 'pointer',
           width: '100%',
           textAlign: 'left',
+          fontSize: '16px',
+          color: 'var(--ink-soft)',
         }}
       >
-        <span style={{ fontSize: '10px', color: '#475569', fontWeight: 700, letterSpacing: '0.08em' }}>SPEAKERS</span>
-        <span style={{ fontSize: '10px', color: '#475569' }}>{open ? '▼' : '▶'}</span>
-        {speakers.length > 0 && (
-          <span style={{ fontSize: '11px', color: '#64748b' }}>
-            {speakers.length} speaker{speakers.length !== 1 ? 's' : ''}
-          </span>
-        )}
-        {renameResult && <span style={{ fontSize: '11px', color: '#34d399', marginLeft: '8px' }}>{renameResult}</span>}
+        <svg aria-hidden width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+          style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .2s', color: 'var(--ink-faint)' }}>
+          <path d="m9 6 6 6-6 6" />
+        </svg>
+        <span>
+          {speakers.length > 0 ? `${speakers.length} speaker${speakers.length !== 1 ? 's' : ''}` : 'Speakers'}
+        </span>
+        <span style={{ color: 'var(--ink-faint)', fontStyle: 'italic' }}>rename who's who</span>
+        {renameResult && <span style={{ fontSize: '14px', color: 'var(--moss)', marginLeft: '8px' }}>{renameResult}</span>}
       </button>
 
       {open && (
-        <div style={{ padding: '0 28px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <div style={{
-            fontSize: '11px',
-            color: '#fbbf24',
-            background: 'rgba(251,191,36,0.08)',
-            border: '1px solid rgba(251,191,36,0.2)',
-            borderRadius: '6px',
-            padding: '6px 10px',
-            marginBottom: '4px',
-          }}>
-            This edits transcript.md directly — re-merging will overwrite speaker names.
-          </div>
+        <div style={{ padding: '0 48px 12px 68px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <p style={{ margin: '0 0 4px', fontSize: '15px', fontStyle: 'italic', color: 'var(--ochre)' }}>
+            Renaming edits this transcript directly. Re-merging from the original audio would bring the old names back.
+          </p>
           {speakers.map(s => (
             <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '12px', color: getSpeakerColor(s.name, new Map()), fontWeight: 600, minWidth: '160px' }}>
+              <span className="speaker-name" style={{ fontSize: '17px', minWidth: '200px' }}>
                 {s.name}
               </span>
-              <span style={{ fontSize: '11px', color: '#475569' }}>{s.line_count} line{s.line_count !== 1 ? 's' : ''}</span>
+              <span style={{ fontSize: '14px', color: 'var(--ink-faint)' }}>{s.line_count} line{s.line_count !== 1 ? 's' : ''}</span>
               {editingSpeaker === s.name ? (
                 <>
                   <input
@@ -2793,10 +2754,10 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
                     style={{
                       background: 'var(--bg-surface)',
                       border: '1px solid var(--accent3)',
-                      borderRadius: '6px',
-                      color: '#e2e8f0',
+                      borderRadius: '3px',
+                      color: 'var(--ink)',
                       padding: '4px 8px',
-                      fontSize: '12px',
+                      fontSize: '15px',
                       outline: 'none',
                       width: '160px',
                     }}
@@ -2804,21 +2765,21 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
                   <button
                     onClick={() => doRename(s.name)}
                     disabled={renaming}
-                    style={{ background: 'rgba(124,108,252,0.2)', border: '1px solid rgba(124,108,252,0.3)', borderRadius: '6px', color: 'var(--accent-text)', padding: '4px 10px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                    style={{ background: 'color-mix(in srgb, var(--rubric) 20%, transparent)', border: '1px solid color-mix(in srgb, var(--rubric) 30%, transparent)', borderRadius: '3px', color: 'var(--accent-text)', padding: '4px 10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
                   >
                     {renaming ? '...' : 'Save'}
                   </button>
                   <button
                     onClick={() => { setEditingSpeaker(null); setNewName('') }}
-                    style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '13px' }}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontSize: '16px', textDecoration: 'underline', textUnderlineOffset: 3 }}
                   >
-                    ✕
+                    Cancel
                   </button>
                 </>
               ) : (
                 <button
                   onClick={() => { setEditingSpeaker(s.name); setNewName(s.name); setRenameResult(null) }}
-                  style={{ background: 'transparent', border: 'none', color: '#475569', cursor: 'pointer', fontSize: '13px', opacity: 0.7 }}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontSize: '16px', opacity: 0.7 }}
                   title="Rename speaker"
                 >
                   Rename
@@ -2977,9 +2938,9 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
       {wikiPending && (
         <span style={{
-          fontSize: '11px', fontWeight: 600, color: '#fbbf24',
-          background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)',
-          borderRadius: '6px', padding: '3px 10px',
+          fontSize: '14px', fontWeight: 600, color: 'var(--ochre)',
+          background: 'color-mix(in srgb, var(--ochre) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--ochre) 30%, transparent)',
+          borderRadius: '3px', padding: '3px 10px',
         }}>
           Submitted for DM review
         </span>
@@ -2989,26 +2950,26 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
         <button
           onClick={() => { setWikiEditValue(wikiMarkdown ?? ''); setWikiPending(false); setWikiEditMode(true) }}
           style={{
-            background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '8px',
-            color: '#64748b', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+            background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '3px',
+            color: 'var(--ink-faint)', padding: '6px 12px', fontSize: '15px', fontWeight: 600, cursor: 'pointer',
           }}
         >
           Edit Wiki
         </button>
       ) : (
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span style={{ fontSize: '11px', color: requiresApproval ? '#fbbf24' : '#64748b' }}>
+          <span style={{ fontSize: '14px', color: requiresApproval ? 'var(--ochre)' : 'var(--ink-faint)' }}>
             {requiresApproval ? 'Will submit for DM review' : 'Saves directly'}
           </span>
-          <button onClick={() => setWikiEditMode(false)} style={{ background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '6px', color: '#64748b', padding: '5px 12px', fontSize: '12px', cursor: 'pointer' }}>Cancel</button>
+          <button onClick={() => setWikiEditMode(false)} style={{ background: 'transparent', border: '1px solid var(--accent3)', borderRadius: '3px', color: 'var(--ink-faint)', padding: '5px 12px', fontSize: '15px', cursor: 'pointer' }}>Cancel</button>
           <button
             onClick={saveWikiEdit}
             disabled={wikiSaving}
             style={{
-              background: requiresApproval ? 'rgba(251,191,36,0.15)' : 'rgba(52,211,153,0.15)',
-              border: `1px solid ${requiresApproval ? 'rgba(251,191,36,0.4)' : 'rgba(52,211,153,0.4)'}`,
-              borderRadius: '6px', color: requiresApproval ? '#fbbf24' : '#34d399',
-              padding: '5px 14px', fontSize: '12px', fontWeight: 700,
+              background: requiresApproval ? 'color-mix(in srgb, var(--ochre) 15%, transparent)' : 'color-mix(in srgb, var(--moss) 15%, transparent)',
+              border: `1px solid ${requiresApproval ? 'color-mix(in srgb, var(--ochre) 40%, transparent)' : 'color-mix(in srgb, var(--moss) 40%, transparent)'}`,
+              borderRadius: '3px', color: requiresApproval ? 'var(--ochre)' : 'var(--moss)',
+              padding: '5px 14px', fontSize: '15px', fontWeight: 700,
               cursor: wikiSaving ? 'not-allowed' : 'pointer', opacity: wikiSaving ? 0.6 : 1,
             }}
           >
@@ -3020,7 +2981,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
   )
 
   if (loading) {
-    return <div style={{ color: '#64748b', paddingTop: '60px', textAlign: 'center' }}>Loading wiki suggestions...</div>
+    return <div style={{ color: 'var(--ink-faint)', paddingTop: '60px', textAlign: 'center' }}>Loading wiki suggestions...</div>
   }
 
   if (!suggestions || suggestions.length === 0) {
@@ -3046,8 +3007,8 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
             onChange={e => setWikiEditValue(e.target.value)}
             style={{
               width: '100%', minHeight: '500px', background: 'var(--bg-surface)',
-              border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px',
-              color: '#e2e8f0', padding: '16px', fontSize: '13px',
+              border: '1px solid color-mix(in srgb, var(--ochre) 30%, transparent)', borderRadius: '3px',
+              color: 'var(--ink)', padding: '16px', fontSize: '16px',
               fontFamily: 'monospace', lineHeight: 1.6, resize: 'vertical',
               outline: 'none', boxSizing: 'border-box',
             }}
@@ -3072,8 +3033,8 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           onChange={e => setWikiEditValue(e.target.value)}
           style={{
             width: '100%', minHeight: '500px', background: 'var(--bg-surface)',
-            border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px',
-            color: '#e2e8f0', padding: '16px', fontSize: '13px',
+            border: '1px solid color-mix(in srgb, var(--ochre) 30%, transparent)', borderRadius: '3px',
+            color: 'var(--ink)', padding: '16px', fontSize: '16px',
             fontFamily: 'monospace', lineHeight: 1.6, resize: 'vertical',
             outline: 'none', boxSizing: 'border-box',
           }}
@@ -3089,45 +3050,30 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
         <button
           onClick={() => callApplyWiki('all', [])}
           disabled={applying}
-          style={{
-            background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)',
-            borderRadius: '7px', color: '#34d399', padding: '5px 12px',
-            fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: applying ? 0.5 : 1,
-          }}
+          className="btn-primary"
         >
-          Apply All
+          Apply all to vault
         </button>
         {skippedIds.size > 0 && (
           <button
             onClick={() => callApplyWiki('skip', [...skippedIds])}
             disabled={applying}
-            style={{
-              background: 'rgba(124,108,252,0.15)', border: '1px solid rgba(124,108,252,0.3)',
-              borderRadius: '7px', color: 'var(--accent-text)', padding: '5px 12px',
-              fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: applying ? 0.5 : 1,
-            }}
+            className="btn-secondary"
           >
-            Apply Selected ({unappliedCount}/{suggestions.length})
+            Apply selected ({unappliedCount}/{suggestions.length})
           </button>
         )}
-        {applying && <span style={{ fontSize: '11px', color: '#64748b' }}>Applying…</span>}
+        {applying && <span style={{ fontSize: '14px', color: 'var(--ink-faint)' }}>Applying…</span>}
 
-        {/* Separator */}
-        <div style={{ width: '1px', height: '18px', background: 'color-mix(in srgb, var(--accent3) 50%, transparent)', flexShrink: 0 }} />
 
         {/* Generate button */}
         <button
           onClick={onGenerate}
           disabled={generating}
-          style={{
-            background: generating ? 'rgba(100,116,139,0.15)' : 'rgba(124,108,252,0.15)',
-            border: `1px solid ${generating ? 'rgba(100,116,139,0.3)' : 'rgba(124,108,252,0.3)'}`,
-            borderRadius: '7px', color: generating ? '#64748b' : 'var(--accent-text)',
-            padding: '5px 12px', fontSize: '12px', fontWeight: 700,
-            cursor: generating ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
-          }}
+          className="btn-ghost"
+          style={{ whiteSpace: 'nowrap' }}
         >
-          {generating ? '⟳ Generating…' : generateDone ? '↺ Re-generate' : '✨ Generate'}
+          {generating ? 'Generating…' : generateDone ? 'Generate again' : 'Generate suggestions'}
         </button>
 
         {/* Import corrections button — inline */}
@@ -3135,20 +3081,15 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           <button
             onClick={doImportCorrections}
             disabled={importing}
-            style={{
-              background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
-              borderRadius: '7px', color: '#93c5fd', padding: '5px 12px',
-              fontSize: '12px', fontWeight: 700, cursor: importing ? 'not-allowed' : 'pointer',
-              opacity: importing ? 0.5 : 1,
-            }}
+            className="btn-ghost"
           >
-            {importing ? 'Importing…' : 'Import Corrections'}
+            {importing ? 'Importing…' : 'Import name corrections'}
           </button>
         )}
         {importResult && (
-          <span style={{ fontSize: '11px', color: '#64748b' }}>
-            {importResult.imported.length > 0 && <span style={{ color: '#4ade80' }}>+{importResult.imported.length} imported</span>}
-            {importResult.imported.length > 0 && importResult.skipped.length > 0 && <span> · </span>}
+          <span style={{ fontSize: '14px', color: 'var(--ink-faint)' }}>
+            {importResult.imported.length > 0 && <span style={{ color: 'var(--moss)' }}>+{importResult.imported.length} imported</span>}
+            {importResult.imported.length > 0 && importResult.skipped.length > 0 && <span>, </span>}
             {importResult.skipped.length > 0 && <span>{importResult.skipped.length} skipped</span>}
             {importResult.imported.length === 0 && importResult.skipped.length === 0 && <span>none found</span>}
           </span>
@@ -3157,9 +3098,9 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           <button
             onClick={onRemerge}
             style={{
-              background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.2)',
-              borderRadius: '7px', color: '#34d399', padding: '5px 10px',
-              fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+              background: 'color-mix(in srgb, var(--moss) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--moss) 20%, transparent)',
+              borderRadius: '3px', color: 'var(--moss)', padding: '5px 10px',
+              fontSize: '14px', fontWeight: 600, cursor: 'pointer',
             }}
           >
             Re-merge
@@ -3167,10 +3108,10 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
         )}
 
         {/* Counts pushed to right */}
-        <span style={{ fontSize: '11px', color: '#334155', marginLeft: 'auto' }}>
+        <span style={{ fontSize: '14px', color: 'var(--rule-strong)', marginLeft: 'auto' }}>
           {suggestions.length} suggestions
-          {appliedIds.size > 0 && <span style={{ color: '#34d399' }}> · {appliedIds.size} applied</span>}
-          {skippedIds.size > 0 && <span style={{ color: '#475569' }}> · {skippedIds.size} skipped</span>}
+          {appliedIds.size > 0 && <span style={{ color: 'var(--moss)' }}>, {appliedIds.size} applied</span>}
+          {skippedIds.size > 0 && <span style={{ color: 'var(--ink-faint)' }}>, {skippedIds.size} skipped</span>}
         </span>
       </div>
 
@@ -3206,19 +3147,16 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
         }
         if (corrections.length === 0) return null
         return (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', padding: '2px 0' }}>
+          <p style={{ margin: 0, fontSize: '17px', lineHeight: 1.7 }}>
+            <span style={{ fontStyle: 'italic', color: 'var(--ink-faint)', marginRight: 8 }}>Suggested name fixes:</span>
             {corrections.map((c, i) => (
-              <span key={i} style={{
-                background: 'var(--bg-surface)', border: '1px solid var(--accent3)',
-                borderRadius: '5px', padding: '2px 7px', fontSize: '11px',
-                fontFamily: 'monospace', color: '#94a3b8',
-              }}>
-                <span style={{ color: '#f87171' }}>{c.wrong}</span>
-                <span style={{ color: '#475569', margin: '0 3px' }}>→</span>
-                <span style={{ color: '#4ade80' }}>{c.right}</span>
+              <span key={i} style={{ whiteSpace: 'nowrap', marginRight: 14 }}>
+                <span style={{ color: 'var(--ink-faint)', textDecoration: 'line-through' }}>{c.wrong}</span>
+                <span style={{ color: 'var(--ink-faint)', margin: '0 5px' }}>→</span>
+                <span style={{ color: 'var(--ink)' }}>{c.right}</span>
               </span>
             ))}
-          </div>
+          </p>
         )
       })()}
 
@@ -3227,12 +3165,12 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
       {/* Apply output */}
       {applyOutput !== null && (
         <pre style={{
-          background: '#0a0d14',
+          background: 'var(--page-sunk)',
           border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
-          borderRadius: '8px',
+          borderRadius: '3px',
           padding: '12px 16px',
-          fontSize: '11px',
-          color: '#94a3b8',
+          fontSize: '14px',
+          color: 'var(--ink-soft)',
           fontFamily: 'monospace',
           whiteSpace: 'pre-wrap',
           overflowX: 'auto',
@@ -3251,112 +3189,60 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
           <div
             key={s.id}
             style={{
-              border: `1px solid ${isApplied ? 'rgba(52,211,153,0.3)' : 'color-mix(in srgb, var(--accent3) 50%, transparent)'}`,
-              borderRadius: '10px',
-              background: isApplied ? 'rgba(52,211,153,0.05)' : '#0d1017',
-              overflow: 'hidden',
-              opacity: isSkipped ? 0.45 : 1,
-              transition: 'opacity 0.2s, border-color 0.2s',
+              borderBottom: '1px solid var(--rule)',
+              padding: '16px 0 14px',
+              opacity: isSkipped ? 0.5 : 1,
+              transition: 'opacity 0.2s',
             }}
           >
-            {/* Card header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
               <span style={{
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--accent3)',
-                borderRadius: '6px',
-                padding: '2px 8px',
-                fontSize: '11px',
-                fontWeight: 700,
-                color: '#475569',
-                flexShrink: 0,
-              }}>
-                #{s.id}
-              </span>
-              <span style={{
-                fontSize: '14px',
-                fontWeight: 600,
-                color: isSkipped ? '#475569' : '#e2e8f0',
-                flex: 1,
+                fontSize: '21px',
+                color: isSkipped ? 'var(--ink-faint)' : 'var(--ink)',
+                flex: '1 1 260px',
                 textDecoration: isSkipped ? 'line-through' : 'none',
               }}>
                 {s.title}
               </span>
-              <span style={{
-                background: 'rgba(124,108,252,0.12)',
-                border: '1px solid rgba(124,108,252,0.25)',
-                color: '#a78bfa',
-                borderRadius: '999px',
-                padding: '2px 10px',
-                fontSize: '11px',
-                flexShrink: 0,
-              }}>
-                {s.section}
+              <span style={{ fontSize: '16px', fontStyle: 'italic', color: 'var(--rubric)', flexShrink: 0 }}>
+                {s.new_page ? `new page, ${s.section}` : s.section}
               </span>
             </div>
 
-            {/* Page path */}
             {s.page && (
-              <div style={{ padding: '0 16px 8px', fontSize: '11px', color: '#475569', fontFamily: 'monospace' }}>
+              <div style={{ fontSize: '15px', fontStyle: 'italic', color: 'var(--ink-faint)', marginTop: '2px' }}>
                 {s.page}
               </div>
             )}
 
-            {/* Bullets */}
-            <div style={{ padding: '0 16px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <ul style={{ margin: '8px 0 10px', padding: '0 0 0 1.1em', display: 'flex', flexDirection: 'column', gap: '3px' }}>
               {s.bullets.map((b, i) => (
-                <div key={i} style={{ fontSize: '13px', color: '#94a3b8', lineHeight: 1.6, display: 'flex', gap: '6px' }}>
-                  <span style={{ color: '#475569', flexShrink: 0 }}>–</span>
-                  <span>{b.replace(/^-\s*/, '')}</span>
-                </div>
+                <li key={i} style={{ fontSize: '17px', color: 'var(--ink-soft)', lineHeight: 1.55, paddingLeft: '4px' }}>
+                  {b.replace(/^-\s*/, '')}
+                </li>
               ))}
-            </div>
+            </ul>
 
-            {/* Card actions */}
-            <div style={{
-              display: 'flex',
-              gap: '8px',
-              padding: '8px 16px',
-              borderTop: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
-              background: 'rgba(0,0,0,0.2)',
-              alignItems: 'center',
-            }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               {isApplied ? (
-                <span style={{ color: '#34d399', fontSize: '12px', fontWeight: 700 }}>✓ Applied</span>
+                <span style={{ color: 'var(--moss)', fontSize: '16px', fontStyle: 'italic' }}>Applied to the vault</span>
               ) : (
                 <>
                   <button
+                    className="btn-secondary"
                     onClick={() => callApplyWiki('apply', [s.id])}
                     disabled={applying || isSkipped}
-                    style={{
-                      background: 'rgba(52,211,153,0.12)',
-                      border: '1px solid rgba(52,211,153,0.25)',
-                      borderRadius: '6px',
-                      color: '#34d399',
-                      padding: '4px 12px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: applying || isSkipped ? 'not-allowed' : 'pointer',
-                      opacity: applying || isSkipped ? 0.5 : 1,
-                    }}
+                    style={{ fontSize: '15px', padding: '3px 12px' }}
                   >
                     Apply
                   </button>
                   <button
+                    className="btn-ghost"
                     onClick={() => toggleSkip(s.id)}
                     disabled={applying}
-                    style={{
-                      background: isSkipped ? 'rgba(100,116,139,0.15)' : 'transparent',
-                      border: `1px solid ${isSkipped ? '#475569' : 'var(--accent3)'}`,
-                      borderRadius: '6px',
-                      color: isSkipped ? '#94a3b8' : '#475569',
-                      padding: '4px 12px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: applying ? 'not-allowed' : 'pointer',
-                    }}
+                    style={{ fontSize: '15px', padding: '3px 12px' }}
                   >
-                    {isSkipped ? 'Undo Skip' : 'Skip'}
+                    {isSkipped ? 'Undo skip' : 'Skip'}
                   </button>
                 </>
               )}
@@ -3391,18 +3277,18 @@ function SpecialInstructionsRow({ notes, onNotesChange, onNotesBlur, notesSaving
         style={{
           background: 'transparent', border: 'none', cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: '5px',
-          color: hasNotes ? '#64748b' : '#334155', fontSize: '11px', fontWeight: 600,
+          color: hasNotes ? 'var(--ink-faint)' : 'var(--rule-strong)', fontSize: '14px', fontWeight: 600,
           padding: '2px 0',
         }}
       >
-        <span style={{ fontSize: '9px' }}>{open ? '▼' : '▶'}</span>
-        <span>Special Instructions</span>
+        <Chevron open={open} />
+        <span>Special instructions</span>
         {hasNotes && !open && (
-          <span style={{ color: '#475569', fontWeight: 400, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '320px' }}>
+          <span style={{ color: 'var(--ink-faint)', fontWeight: 400, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '320px' }}>
             — {notes.trim().slice(0, 60)}{notes.trim().length > 60 ? '…' : ''}
           </span>
         )}
-        {notesSaving && <span style={{ color: '#334155', fontWeight: 400 }}>saving…</span>}
+        {notesSaving && <span style={{ color: 'var(--rule-strong)', fontWeight: 400 }}>saving…</span>}
       </button>
       {open && (
         <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -3414,15 +3300,15 @@ function SpecialInstructionsRow({ notes, onNotesChange, onNotesBlur, notesSaving
             rows={3}
             style={{
               width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--accent3)',
-              borderRadius: '7px', color: '#e2e8f0', padding: '8px 10px',
-              fontSize: '12px', lineHeight: 1.5, resize: 'vertical',
+              borderRadius: '3px', color: 'var(--ink)', padding: '8px 10px',
+              fontSize: '15px', lineHeight: 1.5, resize: 'vertical',
               outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
             }}
           />
           {generating && generateLog && generateLog.length > 0 && (
             <pre style={{
-              background: '#0a0d14', border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', borderRadius: '7px',
-              padding: '8px 12px', fontSize: '11px', color: '#94a3b8',
+              background: 'var(--page-sunk)', border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', borderRadius: '3px',
+              padding: '8px 12px', fontSize: '14px', color: 'var(--ink-soft)',
               fontFamily: 'monospace', whiteSpace: 'pre-wrap',
               maxHeight: '140px', overflowY: 'auto', margin: 0,
             }}>
@@ -3464,10 +3350,8 @@ function GenerateWikiPanel({
 }) {
   return (
     <div style={{
-      background: '#0d1017',
-      border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
-      borderRadius: '10px',
-      padding: compact ? '10px 14px' : '14px 16px',
+      borderBottom: '1px solid var(--rule)',
+      padding: compact ? '4px 0 12px' : '4px 0 16px',
       display: 'flex',
       flexDirection: 'column',
       gap: '10px',
@@ -3476,67 +3360,48 @@ function GenerateWikiPanel({
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         {!compact && (
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '2px' }}>
-              Generate Summary & Wiki
+            <div className="sc" style={{ fontSize: '19px', fontWeight: 600, color: 'var(--rubric)', marginBottom: '2px' }}>
+              Summary and wiki suggestions
             </div>
-            <div style={{ fontSize: '12px', color: '#64748b' }}>
+            <div style={{ fontSize: '16px', color: 'var(--ink-soft)' }}>
               Analyze the transcript with Claude via the worker. Add any notes below to guide the analysis.
             </div>
           </div>
         )}
         {compact && (
-          <span style={{ fontSize: '12px', color: '#64748b', flex: 1 }}>Re-analyze transcript (worker runs Claude locally)</span>
+          <span style={{ fontSize: '17px', fontStyle: 'italic', color: 'var(--ink-soft)', flex: 1 }}>Re-read the transcript and rewrite the summary (the worker runs the analysis)</span>
         )}
         {analysisPending && !generating && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-            <span style={{
-              fontSize: '11px',
-              fontWeight: 700,
-              color: '#f59e0b',
-              background: 'rgba(245,158,11,0.12)',
-              border: '1px solid rgba(245,158,11,0.3)',
-              borderRadius: '6px',
-              padding: '4px 10px',
-              animation: 'pulse 2s infinite',
-            }}>
-              ⏳ Worker analyzing…
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '16px', fontStyle: 'italic', color: 'var(--ochre)' }}>
+              <SpinnerIcon size={14} /> The worker is analyzing…
             </span>
             <button
               onClick={onCancelAnalysis}
               title="Cancel analysis job"
               style={{
-                background: 'rgba(239,68,68,0.12)',
-                border: '1px solid rgba(239,68,68,0.3)',
-                borderRadius: '6px',
-                color: '#f87171',
+                background: 'color-mix(in srgb, var(--rubric) 12%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--rubric) 30%, transparent)',
+                borderRadius: '3px',
+                color: 'var(--rubric)',
                 padding: '4px 10px',
-                fontSize: '11px',
+                fontSize: '14px',
                 fontWeight: 700,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
               }}
             >
-              ✕ Cancel
+              Cancel
             </button>
           </div>
         )}
         <button
           onClick={onGenerate}
           disabled={generating || analysisPending}
-          style={{
-            background: (generating || analysisPending) ? 'rgba(100,116,139,0.15)' : 'rgba(124,108,252,0.15)',
-            border: `1px solid ${(generating || analysisPending) ? 'rgba(100,116,139,0.3)' : 'rgba(124,108,252,0.3)'}`,
-            borderRadius: '8px',
-            color: (generating || analysisPending) ? '#64748b' : 'var(--accent-text)',
-            padding: '7px 16px',
-            fontSize: '12px',
-            fontWeight: 700,
-            cursor: (generating || analysisPending) ? 'not-allowed' : 'pointer',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}
+          className={compact ? 'btn-ghost' : 'btn-primary'}
+          style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
         >
-          {generating ? '⟳ Generating...' : generateDone ? '↺ Re-generate' : '✨ Generate'}
+          {generating ? 'Generating…' : generateDone ? 'Generate again' : 'Generate'}
         </button>
       </div>
 
@@ -3545,10 +3410,10 @@ function GenerateWikiPanel({
         <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label style={{ fontSize: '11px', fontWeight: 600, color: '#475569', letterSpacing: '0.04em' }}>
-                SPECIAL INSTRUCTIONS
+              <label className="sc" style={{ fontSize: '17px', color: 'var(--ink-soft)' }}>
+                Special instructions
               </label>
-              {notesSaving && <span style={{ fontSize: '10px', color: '#475569' }}>saving…</span>}
+              {notesSaving && <span style={{ fontSize: '13px', color: 'var(--ink-faint)' }}>saving…</span>}
             </div>
             <textarea
               value={notes}
@@ -3558,16 +3423,16 @@ function GenerateWikiPanel({
               rows={3}
               style={{
                 width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--accent3)',
-                borderRadius: '7px', color: '#e2e8f0', padding: '8px 10px',
-                fontSize: '12px', lineHeight: 1.5, resize: 'vertical',
+                borderRadius: '3px', color: 'var(--ink)', padding: '8px 10px',
+                fontSize: '15px', lineHeight: 1.5, resize: 'vertical',
                 outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
               }}
             />
           </div>
           {generating && generateLog.length > 0 && (
             <pre style={{
-              background: '#0a0d14', border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', borderRadius: '8px',
-              padding: '10px 14px', fontSize: '11px', color: '#94a3b8',
+              background: 'var(--page-sunk)', border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)', borderRadius: '3px',
+              padding: '10px 14px', fontSize: '14px', color: 'var(--ink-soft)',
               fontFamily: 'monospace', whiteSpace: 'pre-wrap',
               maxHeight: '180px', overflowY: 'auto', margin: 0,
             }}>
@@ -3603,14 +3468,14 @@ function ChangesView({
       <DiffViewer sessionName={sessionName} />
 
       {loading && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#64748b', paddingTop: '20px', justifyContent: 'center' }}>
-          <span style={{ fontSize: '18px', animation: 'spin 1s linear infinite' }}>⟳</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--ink-faint)', paddingTop: '20px', justifyContent: 'center' }}>
+          <SpinnerIcon size={18} />
           Analyzing corrections...
         </div>
       )}
 
       {!loading && !report && (
-        <div style={{ color: '#64748b', textAlign: 'center', paddingTop: '20px' }}>
+        <div style={{ color: 'var(--ink-faint)', textAlign: 'center', paddingTop: '20px' }}>
           No transcript yet. Run the pipeline to generate one.
         </div>
       )}
@@ -3618,58 +3483,38 @@ function ChangesView({
       {!loading && report && (
       <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
 
-      {/* Stats bar */}
-      <div style={{
-        display: 'flex',
-        gap: '6px',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        background: '#0d1017',
-        border: '1px solid color-mix(in srgb, var(--accent3) 50%, transparent)',
-        borderRadius: '10px',
-        padding: '12px 16px',
-        fontSize: '13px',
-        color: '#94a3b8',
-      }}>
-        <span style={{ color: '#34d399', fontWeight: 700 }}>
-          {stats.total_corrections} correction{stats.total_corrections !== 1 ? 's' : ''} configured
-        </span>
-        <span style={{ color: '#475569' }}>·</span>
-        <span>
-          <span style={{ color: '#34d399', fontWeight: 700 }}>{stats.total_hits}</span> total hits
-        </span>
-        <span style={{ color: '#475569' }}>·</span>
-        <span>
-          <span style={{ color: stats.hallucination_count > 0 ? '#fbbf24' : '#64748b', fontWeight: 700 }}>
-            {stats.hallucination_count}
-          </span>{' '}
-          potential hallucination{stats.hallucination_count !== 1 ? 's' : ''}
-        </span>
-      </div>
+      {/* Stats: one ruled sentence */}
+      <p style={{ margin: 0, paddingBottom: '12px', borderBottom: '1px solid var(--rule)', fontSize: '18px', fontStyle: 'italic', color: 'var(--ink-soft)' }}>
+        {stats.total_corrections} correction rule{stats.total_corrections !== 1 ? 's' : ''} fixed{' '}
+        <span style={{ color: 'var(--moss)' }}>{stats.total_hits} word{stats.total_hits !== 1 ? 's' : ''}</span> in this session
+        {stats.hallucination_count > 0
+          ? <>, and <span style={{ color: 'var(--ochre)' }}>{stats.hallucination_count} line{stats.hallucination_count !== 1 ? 's' : ''}</span> look like Whisper hallucinations.</>
+          : '. No lines look like Whisper hallucinations.'}
+      </p>
 
       {/* Corrections Applied */}
       <section>
-        <h3 style={{ margin: '0 0 10px', fontSize: '12px', fontWeight: 700, color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Corrections Applied
+        <h3 className="sc" style={{ margin: '0 0 6px', fontSize: '19px', fontWeight: 600, color: 'var(--rubric)' }}>
+          Corrections applied
         </h3>
         <CorrectionList items={corrections_applied} label="Corrections" />
       </section>
 
       {/* Patterns Applied */}
       <section>
-        <h3 style={{ margin: '0 0 10px', fontSize: '12px', fontWeight: 700, color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Patterns Applied
+        <h3 className="sc" style={{ margin: '0 0 6px', fontSize: '19px', fontWeight: 600, color: 'var(--rubric)' }}>
+          Patterns applied
         </h3>
         <CorrectionList items={patterns_applied} label="Patterns" />
       </section>
 
       {/* Possible Hallucinations */}
       <section>
-        <h3 style={{ margin: '0 0 10px', fontSize: '12px', fontWeight: 700, color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Possible Hallucinations
+        <h3 className="sc" style={{ margin: '0 0 6px', fontSize: '19px', fontWeight: 600, color: 'var(--rubric)' }}>
+          Possible hallucinations
         </h3>
         {hallucinations.length === 0 ? (
-          <div style={{ color: '#475569', fontSize: '13px', fontStyle: 'italic' }}>
+          <div style={{ color: 'var(--ink-faint)', fontSize: '16px', fontStyle: 'italic' }}>
             No suspicious lines detected.
           </div>
         ) : (
@@ -3683,33 +3528,33 @@ function ChangesView({
                   display: 'flex',
                   gap: '10px',
                   alignItems: 'baseline',
-                  background: 'rgba(251,191,36,0.05)',
-                  border: '1px solid rgba(251,191,36,0.15)',
-                  borderRadius: '8px',
+                  background: 'color-mix(in srgb, var(--ochre) 5%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--ochre) 15%, transparent)',
+                  borderRadius: '3px',
                   padding: '8px 12px',
                   cursor: 'pointer',
                   textAlign: 'left',
                   width: '100%',
                   transition: 'background 0.15s',
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(251,191,36,0.1)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(251,191,36,0.05)')}
+                onMouseEnter={e => (e.currentTarget.style.background = 'color-mix(in srgb, var(--ochre) 10%, transparent)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'color-mix(in srgb, var(--ochre) 5%, transparent)')}
               >
-                <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#fbbf24', flexShrink: 0 }}>
+                <span style={{ fontVariantNumeric: 'lining-nums tabular-nums', fontSize: '15px', color: 'var(--ochre)', flexShrink: 0 }}>
                   {h.timestamp}
                 </span>
-                <span style={{ fontSize: '11px', color: '#94a3b8', flexShrink: 0 }}>
+                <span style={{ fontSize: '14px', color: 'var(--ink-soft)', flexShrink: 0 }}>
                   {h.speaker}
                 </span>
-                <span style={{ fontSize: '13px', color: '#e2e8f0', flex: 1 }}>
+                <span style={{ fontSize: '16px', color: 'var(--ink)', flex: 1 }}>
                   "{h.text}"
                 </span>
                 <span style={{
-                  background: 'rgba(251,191,36,0.15)',
-                  color: '#fbbf24',
+                  background: 'color-mix(in srgb, var(--ochre) 15%, transparent)',
+                  color: 'var(--ochre)',
                   borderRadius: '999px',
                   padding: '1px 8px',
-                  fontSize: '10px',
+                  fontSize: '13px',
                   fontWeight: 600,
                   flexShrink: 0,
                   whiteSpace: 'nowrap',
@@ -3835,25 +3680,26 @@ function UnknownWordsPanel({
   const ignoredSection = ignored.length > 0 && (
     <section style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <button onClick={() => setShowIgnored(v => !v)} aria-expanded={showIgnored} style={{
+        display: 'flex', alignItems: 'center', gap: 2,
         background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
-        fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)',
+        fontSize: '16px', fontWeight: 600, color: 'var(--text-muted)',
       }}>
-        {showIgnored ? '▾' : '▸'} Ignored in this campaign ({ignored.length})
+        <Chevron open={showIgnored} style={{ marginRight: 6 }} />Ignored in this campaign ({ignored.length})
       </button>
       {showIgnored && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
           {ignored.map(word => (
             <span key={word} style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
-              fontSize: '12px', color: 'var(--text-secondary)',
-              border: '1px solid var(--border-default)', borderRadius: '12px', padding: '2px 4px 2px 10px',
+              fontSize: '15px', color: 'var(--text-secondary)',
+              border: '1px solid var(--border-default)', borderRadius: '3px', padding: '2px 4px 2px 10px',
             }}>
               {word}
               {canEdit && (
                 <button onClick={() => unignore(word)} disabled={busy === word}
                   aria-label={`Un-ignore ${word}`} title="Un-ignore"
-                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0 4px', fontSize: '13px' }}>
-                  ×
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0 4px', display: 'flex' }}>
+                  <CloseIcon size={12} />
                 </button>
               )}
             </span>
@@ -3863,7 +3709,7 @@ function UnknownWordsPanel({
     </section>
   )
 
-  if (error) return <EmptyTabState icon="⚠️" title="Scan failed" message={error} />
+  if (error) return <EmptyTabState title="Scan failed" message={error} />
   if (!words) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '820px' }}>
@@ -3877,7 +3723,7 @@ function UnknownWordsPanel({
   if (words.length === 0) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '820px' }}>
-        <EmptyTabState icon="✓" title="Nothing unrecognized" message="Every word is either ordinary English, a known campaign term, or ignored." />
+        <EmptyTabState title="Nothing unrecognized" message="Every word is either ordinary English, a known campaign term, or ignored." />
         {ignoredSection}
       </div>
     )
@@ -3885,13 +3731,12 @@ function UnknownWordsPanel({
 
   const row = (w: UnknownWord) => (
     <div key={w.word} style={{
-      display: 'flex', flexDirection: 'column', gap: '6px',
-      padding: '10px 12px', borderRadius: '8px',
-      background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+      display: 'flex', flexDirection: 'column', gap: '4px',
+      padding: '12px 0', borderBottom: '1px solid var(--rule)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>{w.word}</span>
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>×{w.count}</span>
+        <span style={{ fontSize: '20px', color: 'var(--ink)' }}>{w.word}</span>
+        <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>×{w.count}</span>
         {w.low_conf_count > 0 && (
           <span className="lowconf-badge" title="Whisper flagged this word as low-confidence">
             unsure ×{w.low_conf_count}
@@ -3900,7 +3745,7 @@ function UnknownWordsPanel({
         <span style={{ flex: 1 }} />
         {canEdit && (
           <>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>→</span>
+            <span style={{ fontSize: '15px', color: 'var(--text-muted)' }}>→</span>
             <input
               value={targets[w.word] ?? ''}
               onChange={e => setTargets(prev => ({ ...prev, [w.word]: e.target.value }))}
@@ -3908,15 +3753,15 @@ function UnknownWordsPanel({
               placeholder="Correct spelling"
               aria-label={`Correct spelling for ${w.word}`}
               style={{
-                background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '6px',
-                color: 'var(--text-primary)', padding: '4px 8px', fontSize: '12px', width: '140px', outline: 'none',
+                background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '3px',
+                color: 'var(--text-primary)', padding: '4px 8px', fontSize: '15px', width: '140px', outline: 'none',
               }}
             />
-            <button className="btn-ghost" style={{ fontSize: '12px', padding: '3px 10px' }}
+            <button className="btn-ghost" style={{ fontSize: '15px', padding: '3px 10px' }}
               disabled={busy === w.word || !(targets[w.word] ?? '').trim()} onClick={() => addRule(w)}>
               Add rule
             </button>
-            <button className="btn-ghost" style={{ fontSize: '12px', padding: '3px 10px' }}
+            <button className="btn-ghost" style={{ fontSize: '15px', padding: '3px 10px' }}
               disabled={busy === w.word} onClick={() => ignore(w)}
               title="It's spelled right: stop flagging it (and its plural/possessive) in every session of this campaign">
               Ignore
@@ -3927,7 +3772,7 @@ function UnknownWordsPanel({
       {w.examples.map(ex => (
         <button key={ex.line} onClick={() => onJump(ex.ts)} className="unknown-word-example"
           title="Show in transcript">
-          <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)', flexShrink: 0 }}>{ex.ts}</span>
+          <span style={{ fontVariantNumeric: 'lining-nums tabular-nums', color: 'var(--text-muted)', flexShrink: 0 }}>{ex.ts}</span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {renderMarked(ex.text, (() => {
               const i = ex.text.toLowerCase().indexOf(w.word.toLowerCase())
@@ -3941,13 +3786,13 @@ function UnknownWordsPanel({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '820px' }}>
-      <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+      <p style={{ margin: 0, fontSize: '15px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
         Words in this transcript that aren't English and aren't in the campaign's vocabulary (vault index,
         correction targets, player names). Adding a rule fixes this session now and every future transcript.
       </p>
       {nearMisses.length > 0 && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <h3 style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
+          <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--text-secondary)' }}>
             Close to a known name ({nearMisses.length})
           </h3>
           {nearMisses.map(row)}
@@ -3956,10 +3801,11 @@ function UnknownWordsPanel({
       {other.length > 0 && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <button onClick={() => setShowOther(v => !v)} aria-expanded={showOther} style={{
+            display: 'flex', alignItems: 'center', gap: 2,
             background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
-            fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)',
+            fontSize: '16px', fontWeight: 600, color: 'var(--text-secondary)',
           }}>
-            {showOther ? '▾' : '▸'} Other unrecognized words ({other.length})
+            <Chevron open={showOther} style={{ marginRight: 6 }} />Other unrecognized words ({other.length})
           </button>
           {showOther && other.map(row)}
         </section>
@@ -3969,12 +3815,11 @@ function UnknownWordsPanel({
   )
 }
 
-function EmptyTabState({ icon, title, message }: { icon: string; title: string; message: string }) {
+function EmptyTabState({ title, message }: { icon?: string; title: string; message: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, textAlign: 'center', padding: '32px' }}>
-      <div style={{ fontSize: 40, marginBottom: 16, opacity: 0.5 }}>{icon}</div>
-      <div style={{ fontSize: 15, fontWeight: 600, color: '#94a3b8', marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: 13, color: '#475569', maxWidth: 360, lineHeight: 1.6 }}>{message}</div>
+      <div style={{ fontSize: 24, color: 'var(--ink)', marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 17, fontStyle: 'italic', color: 'var(--ink-soft)', maxWidth: 400, lineHeight: 1.55 }}>{message}</div>
     </div>
   )
 }

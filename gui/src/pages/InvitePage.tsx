@@ -63,46 +63,46 @@ export default function InvitePage() {
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px',
         textAlign: 'center',
       }}>
-        {loading && <div style={{ color: '#64748b' }}>Loading invite...</div>}
+        {loading && <div style={{ color: 'var(--ink-faint)' }}>Loading invite...</div>}
 
         {!loading && error && (
           <>
-            <div style={{ fontSize: '32px' }}>❌</div>
-            <div style={{ fontSize: '16px', fontWeight: 600, color: '#f87171' }}>Invalid Invite</div>
-            <div style={{ fontSize: '13px', color: '#64748b' }}>{error}</div>
+            <div style={{ fontSize: '38px' }}>❌</div>
+            <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--rubric)' }}>Invalid Invite</div>
+            <div style={{ fontSize: '16px', color: 'var(--ink-faint)' }}>{error}</div>
           </>
         )}
 
         {!loading && invite && !error && (
           <>
-            <div style={{ fontSize: '40px' }}>🎲</div>
-            <div style={{ fontSize: '18px', fontWeight: 700, color: '#e2e8f0' }}>
+            <div style={{ fontSize: '46px' }}>🎲</div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--ink)' }}>
               {invite.campaign_name}
             </div>
 
             {joined ? (
               <>
-                <div style={{ fontSize: '32px' }}>✅</div>
-                <div style={{ fontSize: '14px', color: '#4ade80' }}>
+                <div style={{ fontSize: '38px' }}>✅</div>
+                <div style={{ fontSize: '17px', color: 'var(--moss)' }}>
                   You've joined as <strong>{invite.role}</strong>! Redirecting...
                 </div>
               </>
             ) : !invite.valid ? (
               <>
-                <div style={{ fontSize: '14px', color: '#f87171' }}>
+                <div style={{ fontSize: '17px', color: 'var(--rubric)' }}>
                   {invite.expired ? 'This invite has expired.' : 'This invite has reached its maximum uses.'}
                 </div>
               </>
             ) : (
               <>
-                <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+                <div style={{ fontSize: '16px', color: 'var(--ink-soft)' }}>
                   You've been invited to join as a{' '}
                   <strong style={{ color: 'var(--accent-text)' }}>{invite.role}</strong>.
                 </div>
 
                 {authEnabled && !isLoggedIn ? (
                   <>
-                    <div style={{ fontSize: '12px', color: '#64748b' }}>
+                    <div style={{ fontSize: '15px', color: 'var(--ink-faint)' }}>
                       You need to log in to accept this invite.
                     </div>
                     <button
@@ -112,9 +112,9 @@ export default function InvitePage() {
                       }}
                       style={{
                         display: 'flex', alignItems: 'center', gap: '8px',
-                        background: '#5865f2', color: '#fff', borderRadius: '10px',
+                        background: '#5865f2', color: '#fff', borderRadius: '3px',
                         padding: '10px 20px', border: 'none', cursor: 'pointer',
-                        fontWeight: 600, fontSize: '13px',
+                        fontWeight: 600, fontSize: '16px',
                       }}
                     >
                       Login with Discord to Join
@@ -122,13 +122,13 @@ export default function InvitePage() {
                   </>
                 ) : (
                   <>
-                    {error && <div style={{ fontSize: '12px', color: '#f87171' }}>{error}</div>}
+                    {error && <div style={{ fontSize: '15px', color: 'var(--rubric)' }}>{error}</div>}
                     <button
                       onClick={joinCampaign}
                       disabled={joining}
                       style={{
-                        background: 'var(--accent)', border: 'none', borderRadius: '10px', color: '#fff',
-                        padding: '12px 28px', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                        background: 'var(--accent)', border: 'none', borderRadius: '3px', color: 'var(--on-rubric)',
+                        padding: '12px 28px', fontSize: '17px', fontWeight: 600, cursor: 'pointer',
                         opacity: joining ? 0.6 : 1,
                       }}
                     >

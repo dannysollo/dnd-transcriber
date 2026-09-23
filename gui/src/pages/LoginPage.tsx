@@ -16,10 +16,10 @@ export default function LoginPage() {
       height: '100vh', background: 'var(--bg-base)', gap: '24px',
     }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: '28px', fontWeight: 700, color: '#e2e8f0', marginBottom: '8px' }}>
+        <div style={{ fontSize: '34px', fontWeight: 700, color: 'var(--ink)', marginBottom: '8px' }}>
           DnD Transcriber
         </div>
-        <div style={{ fontSize: '14px', color: '#64748b' }}>
+        <div style={{ fontSize: '17px', color: 'var(--ink-faint)' }}>
           Sign in to access your campaigns
         </div>
       </div>
@@ -29,17 +29,17 @@ export default function LoginPage() {
         padding: '40px 48px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px',
         minWidth: '320px',
       }}>
-        <div style={{ fontSize: '40px' }}>🎲</div>
-        <div style={{ fontSize: '16px', fontWeight: 600, color: '#e2e8f0' }}>Welcome back</div>
-        <div style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', maxWidth: '240px' }}>
+        <div style={{ fontSize: '46px' }}>🎲</div>
+        <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)' }}>Welcome back</div>
+        <div style={{ fontSize: '16px', color: 'var(--ink-faint)', textAlign: 'center', maxWidth: '240px' }}>
           Connect your Discord account to access your DnD session transcriptions.
         </div>
         <a
           href="/auth/discord"
           style={{
             display: 'flex', alignItems: 'center', gap: '10px',
-            background: '#5865f2', color: '#fff', borderRadius: '10px',
-            padding: '12px 24px', textDecoration: 'none', fontWeight: 600, fontSize: '14px',
+            background: '#5865f2', color: '#fff', borderRadius: '3px',
+            padding: '12px 24px', textDecoration: 'none', fontWeight: 600, fontSize: '17px',
             transition: 'opacity 0.15s',
           }}
           onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
