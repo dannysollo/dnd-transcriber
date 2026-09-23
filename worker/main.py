@@ -118,6 +118,14 @@ def poll_loop(config: dict, stop_event: threading.Event):
                     continue
                 print(f"[worker]   Claimed job.")
 
+                # Craig link attached on the site — fetch the tracks ourselves
+                # unless audio is already sitting in the session dir (a re-run).
+                craig_url = claimed.get("craig_url")
+                if craig_url and not find_audio_files(session_dir):
+                    from craig import download_recording
+                    print(f"[worker]   Fetching audio from Craig...")
+                    download_recording(craig_url, session_dir)
+
                 if not session_dir.exists():
                     client.report_error(session_name, f"Session directory not found: {session_dir}")
                     print(f"[worker]   [ERROR] Session dir not found: {session_dir}")
@@ -151,10 +159,10 @@ def poll_loop(config: dict, stop_event: threading.Event):
                         whisper_model = load_whisper_model(model_name)
                     whisper_model._model_name = model_name
 
-                transcript = transcribe_session(session_dir, whisper_model, job_config)
+                transcript, confidence = transcribe_session(session_dir, whisper_model, job_config)
 
                 print(f"[worker]   Pushing transcript...")
-                client.push_transcript(session_name, transcript)
+                client.push_transcript(session_name, transcript, confidence)
 
                 with tempfile.NamedTemporaryFile(suffix="_merged.mp3", delete=False) as tmp:
                     merged_path = tmp.name

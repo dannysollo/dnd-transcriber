@@ -67,6 +67,10 @@ The GUI wraps the full pipeline in a browser interface:
 - Inline edit mode — click any line to correct it
 - Speaker rename panel — reassign display names without editing files
 - Side-by-side diff vs raw Whisper output
+- **Unsure words** toggle: wavy-underlines words Whisper decoded with low confidence (per-word probability recorded by the worker), so review can jump straight to likely mistakes
+- **Names** tab: words that aren't English and aren't in the campaign vocab (vault index, correction targets, player names), with a suggested spelling when they're close to a known name. One click adds a correction rule (applied to this session now, all future ones on merge) or ignores the word for the campaign
+- Hand-fixing a word in edit mode (or approving a player's fix in the Edit Queue) offers to save it as a correction rule
+- Paste a Craig download link when creating a session: the worker fetches the audio itself (see `worker/README.md`)
 
 ### Wiki suggestions
 - Structured suggestion cards (page, section, bullets)

@@ -32,11 +32,11 @@ class WorkerClient:
         r.raise_for_status()
         return r.json()
 
-    def push_transcript(self, session_name: str, transcript_text: str) -> None:
+    def push_transcript(self, session_name: str, transcript_text: str, confidence: dict | None = None) -> None:
         r = requests.post(
             self._url(f"/worker/sessions/{session_name}/transcript"),
             headers=self.headers,
-            json={"transcript": transcript_text},
+            json={"transcript": transcript_text, "confidence": confidence},
             timeout=60,
         )
         r.raise_for_status()

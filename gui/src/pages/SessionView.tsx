@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
 import { useToast } from '../Toast'
+import { RuleSuggestionBar, type SessionRuleSuggestion, addCorrectionRule } from '../RuleSuggestions'
 import ReactMarkdown from 'react-markdown'
 
 // Speaker color palette
@@ -95,6 +96,87 @@ function parseTimestampToSeconds(ts: string): number {
   return 0
 }
 
+// ─── Low-confidence words ─────────────────────────────────────────────────────
+// The worker records words Whisper decoded with low probability, keyed by the
+// transcript line's timestamp + speaker (line numbers shift with edits).
+
+interface LowConfWord { word: string; prob: number }
+interface ConfidenceMap { version: number; lines: { ts: string; speaker: string; words: LowConfWord[] }[] }
+type ConfidenceIndex = Map<string, { speaker: string; words: LowConfWord[] }[]>
+
+function indexConfidence(map: ConfidenceMap | null): ConfidenceIndex {
+  const idx: ConfidenceIndex = new Map()
+  for (const line of map?.lines ?? []) {
+    const bucket = idx.get(line.ts) ?? []
+    bucket.push({ speaker: line.speaker, words: line.words })
+    idx.set(line.ts, bucket)
+  }
+  return idx
+}
+
+function lowConfWordsFor(idx: ConfidenceIndex, ts?: string, speaker?: string): LowConfWord[] {
+  if (!ts) return []
+  const entries = idx.get(ts)
+  if (!entries) return []
+  // Prefer the exact speaker; fall back to anything at this timestamp so a
+  // speaker rename doesn't silently drop the highlights.
+  const same = entries.filter(e => e.speaker === speaker)
+  return (same.length ? same : entries).flatMap(e => e.words)
+}
+
+type Mark = { start: number; end: number; prob?: number; search?: boolean }
+
+/** Locate each low-confidence word in order, so a shaky "the" doesn't flag every "the". */
+function lowConfRanges(text: string, words: LowConfWord[]): Mark[] {
+  const lower = text.toLowerCase()
+  const out: Mark[] = []
+  let cursor = 0
+  for (const w of words) {
+    const needle = w.word.toLowerCase()
+    if (!needle) continue
+    let at = lower.indexOf(needle, cursor)
+    while (at >= 0) {
+      const before = at === 0 ? '' : lower[at - 1]
+      const after = lower[at + needle.length] ?? ''
+      if (!/[a-z0-9']/.test(before) && !/[a-z0-9']/.test(after)) break
+      at = lower.indexOf(needle, at + 1)
+    }
+    // A word that was corrected or hand-edited since won't be found — fine,
+    // it no longer needs flagging.
+    if (at < 0) continue
+    out.push({ start: at, end: at + needle.length, prob: w.prob })
+    cursor = at + needle.length
+  }
+  return out
+}
+
+function renderMarked(text: string, marks: Mark[]) {
+  if (marks.length === 0) return text
+  const cuts = new Set<number>([0, text.length])
+  for (const m of marks) { cuts.add(m.start); cuts.add(m.end) }
+  const points = [...cuts].sort((a, b) => a - b)
+  const parts: React.ReactNode[] = []
+  for (let i = 0; i < points.length - 1; i++) {
+    const [a, b] = [points[i], points[i + 1]]
+    const piece = text.slice(a, b)
+    const low = marks.find(m => m.prob !== undefined && m.start <= a && m.end >= b)
+    const hit = marks.some(m => m.search && m.start <= a && m.end >= b)
+    if (!low && !hit) { parts.push(piece); continue }
+    parts.push(
+      <span
+        key={a}
+        className={low ? 'lowconf-word' : undefined}
+        data-strong={low && low.prob! < 0.35 ? '' : undefined}
+        title={low ? `Whisper was ${Math.round(low.prob! * 100)}% sure of this word` : undefined}
+        style={hit ? { background: 'rgba(251,191,36,0.3)', color: '#fbbf24', borderRadius: '2px' } : undefined}
+      >
+        {piece}
+      </span>
+    )
+  }
+  return <>{parts}</>
+}
+
 // ─── Types for Changes tab ────────────────────────────────────────────────────
 
 interface CorrectionEntry {
@@ -135,13 +217,15 @@ interface WikiSuggestion {
   description: string | null
 }
 
-type Tab = 'transcript' | 'summary' | 'wiki' | 'changes'
+type Tab = 'transcript' | 'summary' | 'wiki' | 'changes' | 'names'
 
 export default function SessionView() {
   const { name } = useParams<{ name: string }>()
   const navigate = useNavigate()
   const apiUrl = useApiUrl()
   const { toast } = useToast()
+  const { authEnabled } = useAuth()
+  const { activeCampaign } = useCampaign()
   const [tab, setTab] = useState<Tab>('transcript')
   const [transcript, setTranscript] = useState<string | null>(null)
   const [summary, setSummary] = useState<string | null>(null)
@@ -150,6 +234,11 @@ export default function SessionView() {
   const [editingDescription, setEditingDescription] = useState(false)
   const [descriptionDraft, setDescriptionDraft] = useState('')
   const [search, setSearch] = useState('')
+  const [confidence, setConfidence] = useState<ConfidenceMap | null>(null)
+  const [showConfidence, setShowConfidence] = useState(() => {
+    try { return localStorage.getItem('dnd-show-lowconf') !== 'false' } catch { return true }
+  })
+  const [namesKey, setNamesKey] = useState(0)
   const [loading, setLoading] = useState(true)
   const [merging, setMerging] = useState(false)
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
@@ -250,6 +339,12 @@ export default function SessionView() {
       fetch(apiUrl(`/sessions/${name}/description`)).then(r => r.ok ? r.json() : null),
       fetch(apiUrl(`/sessions/${name}/analysis-pending`)).then(r => r.ok ? r.json() : null),
     ])
+    if (activeCampaign) {
+      fetch(apiUrl(`/sessions/${name}/confidence`))
+        .then(r => (r.ok ? r.json() : null))
+        .then(setConfidence)
+        .catch(() => setConfidence(null))
+    }
     setTranscript(t.status === 'fulfilled' && t.value ? t.value.content : null)
     setSummary(s.status === 'fulfilled' && s.value ? s.value.content : null)
     setWiki(w.status === 'fulfilled' && w.value ? w.value.content : null)
@@ -605,6 +700,7 @@ export default function SessionView() {
     { id: 'summary', label: 'Summary' },
     { id: 'wiki', label: 'Wiki' },
     { id: 'changes', label: 'Changes' },
+    ...(activeCampaign ? [{ id: 'names' as Tab, label: 'Names' }] : []),
   ]
 
   return (
@@ -1095,6 +1191,20 @@ export default function SessionView() {
                     outline: 'none',
                   }}
                 />
+                {(confidence?.lines.length ?? 0) > 0 && (
+                  <button
+                    onClick={() => setShowConfidence(v => {
+                      try { localStorage.setItem('dnd-show-lowconf', String(!v)) } catch { /* private mode */ }
+                      return !v
+                    })}
+                    aria-pressed={showConfidence}
+                    title="Underline words Whisper wasn't sure about"
+                    className="btn-ghost"
+                    style={{ fontSize: '12px', padding: '5px 10px', flexShrink: 0, opacity: showConfidence ? 1 : 0.6 }}
+                  >
+                    <span className="lowconf-word" data-strong="">abc</span>{' '}Unsure words
+                  </button>
+                )}
                 {search && transcript && (() => {
                   const q = search.toLowerCase()
                   const count = transcript.split('\n').filter(l => l.toLowerCase().includes(q)).length
@@ -1270,7 +1380,9 @@ export default function SessionView() {
               onTargetReached={() => setTargetTimestamp(null)}
               sessionName={name!}
               editMode={editMode}
-              onTranscriptChange={() => { load(); setChangesLoaded(false); setChangesReport(null) }}
+              onTranscriptChange={() => { load(); setChangesLoaded(false); setChangesReport(null); setNamesKey(k => k + 1) }}
+              confidence={confidence}
+              showConfidence={showConfidence && !editMode}
             />
           ) : (
             <EmptyTabState
@@ -1319,6 +1431,18 @@ export default function SessionView() {
             analysisPending={analysisPending}
             onCancelAnalysis={cancelAnalysis}
           />
+        ) : tab === 'names' ? (
+          transcript ? (
+            <UnknownWordsPanel
+              key={namesKey}
+              sessionName={name!}
+              canEdit={!authEnabled || activeCampaign?.role === 'dm'}
+              onJump={goToHallucination}
+              onRuleAdded={() => { load(); setChangesLoaded(false); setChangesReport(null) }}
+            />
+          ) : (
+            <EmptyTabState icon="🎙️" title="No transcript yet" message="Names are scanned once there's a transcript." />
+          )
         ) : (
           <ChangesView
             report={changesReport}
@@ -1434,6 +1558,8 @@ function TranscriptView({
   sessionName,
   editMode,
   onTranscriptChange,
+  confidence,
+  showConfidence,
 }: {
   content: string | null
   search: string
@@ -1445,6 +1571,8 @@ function TranscriptView({
   sessionName?: string
   editMode?: boolean
   onTranscriptChange?: () => void
+  confidence?: ConfidenceMap | null
+  showConfidence?: boolean
 }) {
   const apiUrl = useApiUrl()
   const activeLineRef = useRef<HTMLDivElement | null>(null)
@@ -1459,6 +1587,8 @@ function TranscriptView({
   const [savingLine, setSavingLine] = useState(false)
   const [pendingLines, setPendingLines] = useState<Set<number>>(new Set())
   const [hoveredLineIdx, setHoveredLineIdx] = useState<number | null>(null)
+  const [ruleSuggestions, setRuleSuggestions] = useState<SessionRuleSuggestion[]>([])
+  const confidenceIdx = useMemo(() => indexConfidence(confidence ?? null), [confidence])
   // activeIdx is computed during render; we use a ref to scroll without triggering re-renders
 
 
@@ -1533,6 +1663,15 @@ function TranscriptView({
         setPendingLines(prev => new Set([...prev, lineIdx]))
       } else {
         setEditedLines(prev => { const next = [...prev]; next[lineIdx] = value; return next })
+        const data = await r.json().catch(() => null)
+        const fresh: SessionRuleSuggestion[] = (data?.rule_suggestions ?? []).map(
+          (s: Omit<SessionRuleSuggestion, 'session'>) => ({ ...s, session: sessionName }))
+        if (fresh.length) {
+          setRuleSuggestions(prev => [
+            ...prev.filter(p => !fresh.some(f => f.wrong.toLowerCase() === p.wrong.toLowerCase())),
+            ...fresh,
+          ])
+        }
       }
     } catch (_) {
       // Network/server error — don't lose the edit, just close the input
@@ -1631,6 +1770,16 @@ function TranscriptView({
             {savingAll ? 'Saving...' : 'Save All'}
           </button>
         </div>
+
+        {activeCampaign && (
+          <RuleSuggestionBar
+            campaignSlug={activeCampaign.slug}
+            suggestions={ruleSuggestions}
+            onDismiss={s => setRuleSuggestions(prev => prev.filter(p => p !== s))}
+            onApplied={() => { try { onTranscriptChange?.() } catch (_) {} }}
+            floating
+          />
+        )}
 
         {displayLines.map((rawLine, lineIdx) => {
           const m = rawLine.match(/^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$/)
@@ -1780,19 +1929,16 @@ function TranscriptView({
   // (parsedLines, visibleLines, activeIdx are computed via useMemo above)
   const visible = visibleLines
 
-  const highlight = (text: string) => {
-    if (!search) return text
-    const idx = text.toLowerCase().indexOf(searchLower)
-    if (idx < 0) return text
-    return (
-      <>
-        {text.slice(0, idx)}
-        <mark style={{ background: 'rgba(251,191,36,0.3)', color: '#fbbf24', borderRadius: '2px' }}>
-          {text.slice(idx, idx + search.length)}
-        </mark>
-        {text.slice(idx + search.length)}
-      </>
-    )
+  const highlight = (line: ParsedLine) => {
+    const text = line.text || ''
+    const marks: Mark[] = showConfidence
+      ? lowConfRanges(text, lowConfWordsFor(confidenceIdx, line.timestamp, line.speaker))
+      : []
+    if (search) {
+      const idx = text.toLowerCase().indexOf(searchLower)
+      if (idx >= 0) marks.push({ start: idx, end: idx + search.length, search: true })
+    }
+    return renderMarked(text, marks)
   }
 
   return (
@@ -1889,7 +2035,7 @@ function TranscriptView({
               )}
               {/* Text */}
               <span style={{ fontSize: '13px', color: isActive ? '#e2e8f0' : '#cbd5e1', lineHeight: 1.6 }}>
-                {highlight(line.text || '')}
+                {highlight(line)}
               </span>
             </div>
           )
@@ -3575,6 +3721,183 @@ function ChangesView({
       </section>
 
       </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Names tab: unknown / likely-misheard words ───────────────────────────────
+
+interface UnknownWord {
+  word: string
+  count: number
+  low_conf_count: number
+  suggestion: string | null
+  examples: { line: number; ts: string; speaker: string | null; text: string }[]
+}
+
+function UnknownWordsPanel({
+  sessionName,
+  canEdit,
+  onJump,
+  onRuleAdded,
+}: {
+  sessionName: string
+  canEdit: boolean
+  onJump: (timestamp: string) => void
+  onRuleAdded: () => void
+}) {
+  const apiUrl = useApiUrl()
+  const { activeCampaign } = useCampaign()
+  const { toast } = useToast()
+  const [words, setWords] = useState<UnknownWord[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [targets, setTargets] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState<string | null>(null)
+  const [showOther, setShowOther] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setWords(null)
+    setError(null)
+    fetch(apiUrl(`/sessions/${sessionName}/unknown-words`))
+      .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then(data => {
+        if (cancelled) return
+        setWords(data.words)
+        setTargets(Object.fromEntries(data.words.map((w: UnknownWord) => [w.word, w.suggestion ?? ''])))
+      })
+      .catch(() => { if (!cancelled) setError('Could not scan this transcript.') })
+    return () => { cancelled = true }
+  }, [sessionName, apiUrl])
+
+  const drop = (word: string) => setWords(prev => prev?.filter(w => w.word !== word) ?? null)
+
+  const addRule = async (w: UnknownWord) => {
+    const right = (targets[w.word] ?? '').trim()
+    if (!right || !activeCampaign) return
+    setBusy(w.word)
+    try {
+      const replaced = await addCorrectionRule(activeCampaign.slug, w.word, right, sessionName)
+      if (replaced === null) { toast('Failed to add rule', 'error'); return }
+      toast(`Rule added: ${w.word} → ${right} (${replaced} fixed in this session)`, 'success')
+      drop(w.word)
+      onRuleAdded()
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const ignore = async (w: UnknownWord) => {
+    setBusy(w.word)
+    try {
+      const r = await fetch(apiUrl('/config/ignored-words'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word: w.word }),
+      })
+      if (!r.ok) { toast('Failed to ignore word', 'error'); return }
+      drop(w.word)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  if (error) return <EmptyTabState icon="⚠️" title="Scan failed" message={error} />
+  if (!words) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '820px' }}>
+        {[0, 1, 2].map(i => <div key={i} className="skeleton" style={{ height: 48 }} />)}
+      </div>
+    )
+  }
+
+  const nearMisses = words.filter(w => w.suggestion)
+  const other = words.filter(w => !w.suggestion)
+  if (words.length === 0) {
+    return <EmptyTabState icon="✓" title="Nothing unrecognized" message="Every word is either ordinary English or a known campaign term." />
+  }
+
+  const row = (w: UnknownWord) => (
+    <div key={w.word} style={{
+      display: 'flex', flexDirection: 'column', gap: '6px',
+      padding: '10px 12px', borderRadius: '8px',
+      background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>{w.word}</span>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>×{w.count}</span>
+        {w.low_conf_count > 0 && (
+          <span className="lowconf-badge" title="Whisper flagged this word as low-confidence">
+            unsure ×{w.low_conf_count}
+          </span>
+        )}
+        <span style={{ flex: 1 }} />
+        {canEdit && (
+          <>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>→</span>
+            <input
+              value={targets[w.word] ?? ''}
+              onChange={e => setTargets(prev => ({ ...prev, [w.word]: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') addRule(w) }}
+              placeholder="Correct spelling"
+              aria-label={`Correct spelling for ${w.word}`}
+              style={{
+                background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '6px',
+                color: 'var(--text-primary)', padding: '4px 8px', fontSize: '12px', width: '140px', outline: 'none',
+              }}
+            />
+            <button className="btn-ghost" style={{ fontSize: '12px', padding: '3px 10px' }}
+              disabled={busy === w.word || !(targets[w.word] ?? '').trim()} onClick={() => addRule(w)}>
+              Add rule
+            </button>
+            <button className="btn-ghost" style={{ fontSize: '12px', padding: '3px 10px' }}
+              disabled={busy === w.word} onClick={() => ignore(w)}
+              title="It's spelled right — stop flagging it in this campaign">
+              Ignore
+            </button>
+          </>
+        )}
+      </div>
+      {w.examples.map(ex => (
+        <button key={ex.line} onClick={() => onJump(ex.ts)} className="unknown-word-example"
+          title="Show in transcript">
+          <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)', flexShrink: 0 }}>{ex.ts}</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {renderMarked(ex.text, (() => {
+              const i = ex.text.toLowerCase().indexOf(w.word.toLowerCase())
+              return i >= 0 ? [{ start: i, end: i + w.word.length, search: true }] : []
+            })())}
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '820px' }}>
+      <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+        Words in this transcript that aren't English and aren't in the campaign's vocabulary (vault index,
+        correction targets, player names). Adding a rule fixes this session now and every future transcript.
+      </p>
+      {nearMisses.length > 0 && (
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <h3 style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
+            Close to a known name ({nearMisses.length})
+          </h3>
+          {nearMisses.map(row)}
+        </section>
+      )}
+      {other.length > 0 && (
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <button onClick={() => setShowOther(v => !v)} aria-expanded={showOther} style={{
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
+            fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)',
+          }}>
+            {showOther ? '▾' : '▸'} Other unrecognized words ({other.length})
+          </button>
+          {showOther && other.map(row)}
+        </section>
       )}
     </div>
   )

@@ -220,6 +220,7 @@ def _transcribe_via_vad_chunks(wav_path: str, model, **whisper_kwargs) -> dict:
                     "start": chunk_start + seg["start"],
                     "end": chunk_start + seg["end"],
                     "text": seg["text"],
+                    "low_conf": seg.get("low_conf", []),
                 })
         finally:
             Path(tmp.name).unlink(missing_ok=True)
@@ -235,10 +236,11 @@ def _transcribe_via_vad_chunks(wav_path: str, model, **whisper_kwargs) -> dict:
 
 # ─── Per-speaker transcription ────────────────────────────────────────────────
 
-def transcribe_session(session_dir: Path, model, config: dict) -> str:
+def transcribe_session(session_dir: Path, model, config: dict) -> tuple[str, dict]:
     """
     Transcribe all speaker audio files in session_dir.
-    Returns merged markdown transcript string with speaker labels.
+    Returns (merged markdown transcript with speaker labels, confidence map) —
+    see merge_speaker_jsons for the confidence map's shape.
 
     Expected layout:
         session_dir/*.flac   (Craig per-speaker files, flat — no raw/ subfolder needed)
@@ -318,7 +320,8 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
                             json.dump(
                                 {"speaker": sub_label, "filename": audio_file.name,
                                  "segments": [{"start": s["start"], "end": s["end"],
-                                               "text": s["text"]} for s in segs]},
+                                               "text": s["text"],
+                                               "low_conf": s.get("low_conf", [])} for s in segs]},
                                 f, indent=2, ensure_ascii=False,
                             )
                     print(f"    → {len(diarized_segments)} diarized segments across {len(sub_speakers)} speaker(s)")
@@ -385,10 +388,16 @@ def transcribe_session(session_dir: Path, model, config: dict) -> str:
 
 # ─── Merge per-speaker JSONs into markdown ────────────────────────────────────
 
-def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 4.0) -> str:
+def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 4.0) -> tuple[str, dict]:
     """
     Merge all speaker JSON files into a single timestamped markdown transcript,
     sorted by time. Format: **[MM:SS] Speaker:** text
+
+    Also returns a confidence map for the GUI's low-confidence highlighting:
+        {"version": 1, "lines": [{"ts": "MM:SS", "speaker": ..., "words": [{word, prob}]}]}
+    one entry per transcript line that has any low-confidence words. Keyed by
+    the line's timestamp + speaker rather than line number, since line numbers
+    shift as soon as anyone edits the transcript.
 
     A new line is started when the speaker changes OR when the same speaker has
     been silent for longer than min_gap seconds (measured per-speaker, so other
@@ -413,24 +422,29 @@ def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 4.0) -> str:
                 "start": seg["start"],
                 "end": seg["end"],
                 "text": text,
+                "low_conf": seg.get("low_conf", []),
             })
 
     if not all_segments:
-        return "# Session Transcript\n\n*No speech detected.*\n"
+        return "# Session Transcript\n\n*No speech detected.*\n", {"version": 1, "lines": []}
 
     all_segments.sort(key=lambda s: s["start"])
 
     lines = ["# Session Transcript\n"]
     current_speaker = None
     current_chunks: list[str] = []
+    current_low_conf: list[dict] = []
     current_start = 0.0
     last_end_per_speaker: dict[str, float] = {}  # track gap per speaker independently
+    confidence_lines: list[dict] = []
 
     def flush():
         if current_chunks:
             ts = format_time(current_start)
             text = " ".join(current_chunks)
             lines.append(f"**[{ts}] {current_speaker}:** {text}\n")
+            if current_low_conf:
+                confidence_lines.append({"ts": ts, "speaker": current_speaker, "words": list(current_low_conf)})
 
     for seg in all_segments:
         speaker = seg["speaker"]
@@ -441,16 +455,19 @@ def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 4.0) -> str:
         if speaker_changed or (long_gap and current_chunks and current_speaker == speaker):
             flush()
             current_chunks = [seg["text"]]
+            current_low_conf = list(seg["low_conf"])
             current_start = seg["start"]
             current_speaker = speaker
         elif not current_chunks:
             current_chunks = [seg["text"]]
+            current_low_conf = list(seg["low_conf"])
             current_start = seg["start"]
             current_speaker = speaker
         else:
             current_chunks.append(seg["text"])
+            current_low_conf.extend(seg["low_conf"])
 
         last_end_per_speaker[speaker] = seg["end"]
 
     flush()
-    return "\n".join(lines)
+    return "\n".join(lines), {"version": 1, "lines": confidence_lines}

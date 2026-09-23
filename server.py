@@ -185,6 +185,7 @@ def list_sessions():
 
 class CreateSessionBody(BaseModel):
     name: str
+    craig_url: Optional[str] = None  # campaign routes only: fetch audio from Craig + queue transcription
 
 
 @app.post("/sessions")
@@ -1695,6 +1696,7 @@ def campaign_list_sessions(
                 "modified_at": datetime.utcfromtimestamp(stat.st_mtime).isoformat(),
                 "description": desc_path.read_text(encoding="utf-8").strip() if desc_path.exists() else None,
                 "review_status": get_session_review_status(d),
+                "has_craig_link": (d / CRAIG_SOURCE_FILE).exists(),
             })
     return sessions
 
@@ -1756,14 +1758,25 @@ def campaign_create_session(
     slug: str,
     body: CreateSessionBody,
     _member=Depends(require_campaign_member("dm")),
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     sessions_dir = get_sessions_dir(slug)
     session_dir = sessions_dir / body.name
     if session_dir.exists():
         raise HTTPException(400, f"Session '{body.name}' already exists")
+    craig_url = (body.craig_url or "").strip()
+    if craig_url:
+        _parse_craig_url(craig_url)  # reject a bad link before creating anything
     (session_dir / "raw").mkdir(parents=True)
     (session_dir / "created_at.txt").write_text(datetime.utcnow().isoformat(), encoding="utf-8")
-    return {"name": body.name, "status": "empty"}
+    job = None
+    if craig_url:
+        _save_craig_link(session_dir, craig_url)
+        campaign = crud.get_campaign_by_slug(db, slug)
+        if campaign:
+            job = _job_dict(_queue_transcription(db, campaign, body.name, current_user))
+    return {"name": body.name, "status": "empty", "job": job}
 
 
 @app.post("/campaigns/{slug}/sessions/{name}/upload")
@@ -1934,7 +1947,10 @@ def campaign_put_transcript_line(
 
     lines[line_number - 1] = body.content
     path.write_text("\n".join(lines), encoding="utf-8")
-    return {"status": "applied", "line_number": line_number, "content": body.content}
+    # Rules are DM-managed, so only DMs get offered them.
+    suggestions = _rule_suggestions(slug, original, body.content) if is_dm else []
+    return {"status": "applied", "line_number": line_number, "content": body.content,
+            "rule_suggestions": suggestions}
 
 
 @app.get("/campaigns/{slug}/sessions/{name}/summary")
@@ -2851,6 +2867,7 @@ def campaign_approve_edit(
         raise HTTPException(404, "Edit not found")
     if edit.status != "pending":
         raise HTTPException(400, f"Edit is already {edit.status}")
+    rule_suggestions: list[dict] = []
 
     # Apply the edit — dispatch on line_number sentinel
     session_dir = get_sessions_dir(slug) / edit.session_name
@@ -2904,10 +2921,11 @@ def campaign_approve_edit(
         if 1 <= n <= len(lines):
             lines[n - 1] = edit.proposed_text
             path.write_text("\n".join(lines), encoding="utf-8")
+        rule_suggestions = _rule_suggestions(slug, edit.original_text, edit.proposed_text)
 
     reviewer_id = current_user.id if current_user else 0
     edit = crud.approve_edit(db, edit, reviewer_id)
-    return {"id": edit.id, "status": edit.status}
+    return {"id": edit.id, "status": edit.status, "rule_suggestions": rule_suggestions}
 
 
 @app.post("/campaigns/{slug}/edits/{edit_id}/reject")
@@ -2930,6 +2948,218 @@ def campaign_reject_edit(
     reviewer_id = current_user.id if current_user else 0
     edit = crud.reject_edit(db, edit, reviewer_id, body.note)
     return {"id": edit.id, "status": edit.status}
+
+
+# ─── Transcript review helpers ────────────────────────────────────────────────
+# Low-confidence highlighting, the unknown-word detector, and turning hand
+# edits into correction rules. All deterministic — these read the transcript
+# and feed the static corrections list; nothing here rewrites transcript text
+# except by applying a correction rule the user explicitly added.
+
+CONFIDENCE_FILE = "confidence.json"
+CRAIG_SOURCE_FILE = "craig_source.json"
+
+
+def _campaign_vault_dir(config: dict, slug: str) -> Optional[Path]:
+    """Local vault checkout, if one exists — no git sync (that's the slow path)."""
+    for candidate in (BASE_DIR / "vaults" / slug, config.get("vault_path")):
+        if candidate and Path(candidate).is_dir():
+            return Path(candidate)
+    return None
+
+
+def _is_campaign_dm(member) -> bool:
+    return (not AUTH_ENABLED) or (member is not None and member.role == "dm")
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/confidence")
+def campaign_get_confidence(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    path = get_sessions_dir(slug) / name / CONFIDENCE_FILE
+    if not path.exists():
+        return {"version": 1, "lines": []}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/unknown-words")
+def campaign_unknown_words(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    from unknown_words import find_unknown_words, known_terms
+
+    session_dir = get_sessions_dir(slug) / name
+    transcript_path = session_dir / "transcript.md"
+    if not transcript_path.exists():
+        raise HTTPException(404, "Transcript not found")
+    config = load_config(slug)
+    confidence_path = session_dir / CONFIDENCE_FILE
+    confidence = json.loads(confidence_path.read_text(encoding="utf-8")) if confidence_path.exists() else None
+    words = find_unknown_words(
+        transcript_path.read_text(encoding="utf-8"),
+        known_terms(config, _campaign_vault_dir(config, slug)),
+        ignored=config.get("ignored_words") or [],
+        confidence=confidence,
+    )
+    return {"words": words}
+
+
+class IgnoreWordBody(BaseModel):
+    word: str
+
+
+@app.post("/campaigns/{slug}/config/ignored-words")
+def campaign_ignore_word(
+    slug: str,
+    body: IgnoreWordBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    word = body.word.strip().lower()
+    if not word:
+        raise HTTPException(400, "Empty word")
+    config = load_config(slug)
+    ignored = list(config.get("ignored_words") or [])
+    if word not in ignored:
+        ignored.append(word)
+        config["ignored_words"] = sorted(ignored)
+        save_config(config, slug)
+    return {"ignored_words": config.get("ignored_words", [])}
+
+
+class AddCorrectionBody(BaseModel):
+    wrong: str
+    right: str
+    # When set, also apply just this rule to that session's transcript now
+    # (other sessions pick it up on their next re-merge).
+    apply_to_session: Optional[str] = None
+
+
+@app.post("/campaigns/{slug}/config/corrections/add")
+def campaign_add_correction(
+    slug: str,
+    body: AddCorrectionBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    from merge import apply_corrections
+
+    wrong, right = body.wrong.strip(), body.right.strip()
+    if not wrong or not right or wrong.lower() == right.lower():
+        raise HTTPException(400, "Need a non-empty 'wrong' and a different 'right'")
+    config = load_config(slug)
+    corrections = dict(config.get("corrections") or {})
+    previous = corrections.get(wrong)
+    corrections[wrong] = right
+    config["corrections"] = corrections
+    save_config(config, slug)
+
+    replaced = 0
+    if body.apply_to_session:
+        path = get_sessions_dir(slug) / body.apply_to_session / "transcript.md"
+        if path.exists():
+            before = path.read_text(encoding="utf-8")
+            replaced = len(re.findall(r"\b" + re.escape(wrong) + r"\b", before, flags=re.IGNORECASE))
+            if replaced:
+                path.write_text(apply_corrections(before, {wrong: right}), encoding="utf-8")
+    return {"ok": True, "replaced": replaced, "previous": previous}
+
+
+def _rule_suggestions(slug: str, old_line: str, new_line: str) -> list[dict]:
+    """Candidate correction rules from a hand edit, minus ones already configured."""
+    from unknown_words import suggest_rules_from_edit
+
+    existing = {k.lower(): v for k, v in (load_config(slug).get("corrections") or {}).items()}
+    return [
+        r for r in suggest_rules_from_edit(old_line, new_line)
+        if existing.get(r["wrong"].lower()) != r["right"]
+    ]
+
+
+# ── Craig links ───────────────────────────────────────────────────────────────
+
+def _parse_craig_url(url: str) -> tuple[str, str]:
+    """Validate a Craig share link; returns (recording_id, normalized_url)."""
+    from urllib.parse import parse_qs, urlparse
+
+    parsed = urlparse(url.strip())
+    parts = [p for p in parsed.path.split("/") if p]
+    key = parse_qs(parsed.query).get("key", [""])[0]
+    if parsed.scheme not in ("http", "https") or len(parts) != 2 or parts[0] != "rec" \
+            or not re.fullmatch(r"[A-Za-z0-9]{10,12}", parts[1]) or not key:
+        raise HTTPException(400, "That doesn't look like a Craig link — expected https://craig.horse/rec/<id>?key=<key>")
+    return parts[1], f"{parsed.scheme}://{parsed.netloc}/rec/{parts[1]}?key={key}"
+
+
+def _read_craig_source(session_dir: Path) -> Optional[dict]:
+    path = session_dir / CRAIG_SOURCE_FILE
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _save_craig_link(session_dir: Path, url: str) -> dict:
+    rec_id, normalized = _parse_craig_url(url)
+    data = {"url": normalized, "recording_id": rec_id, "added_at": datetime.utcnow().isoformat()}
+    (session_dir / CRAIG_SOURCE_FILE).write_text(json.dumps(data), encoding="utf-8")
+    return data
+
+
+def _queue_transcription(db: Session, campaign, name: str, current_user: Optional[User]) -> TranscriptionJob:
+    job = crud.get_job(db, campaign.id, name)
+    if job:
+        if job.status in ("done", "error", "claimed"):
+            return crud.reset_job(db, job)
+        return job
+    return crud.create_transcription_job(db, campaign.id, name, current_user.id if current_user else 0)
+
+
+class CraigLinkBody(BaseModel):
+    url: str
+    queue: bool = True
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/craig-link")
+def campaign_get_craig_link(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    craig = _read_craig_source(get_sessions_dir(slug) / name)
+    # Recording id only — the key in the URL grants download access.
+    return {"recording_id": craig["recording_id"] if craig else None}
+
+
+@app.put("/campaigns/{slug}/sessions/{name}/craig-link")
+def campaign_put_craig_link(
+    slug: str,
+    name: str,
+    body: CraigLinkBody,
+    _member=Depends(require_campaign_member("dm")),
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    craig = _save_craig_link(session_dir, body.url)
+    job = None
+    if body.queue:
+        campaign = crud.get_campaign_by_slug(db, slug)
+        if campaign:
+            job = _job_dict(_queue_transcription(db, campaign, name, current_user))
+    return {"recording_id": craig["recording_id"], "job": job}
+
+
+@app.delete("/campaigns/{slug}/sessions/{name}/craig-link", status_code=204)
+def campaign_delete_craig_link(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("dm")),
+):
+    (get_sessions_dir(slug) / name / CRAIG_SOURCE_FILE).unlink(missing_ok=True)
 
 
 # ─── Worker / Transcription Jobs ──────────────────────────────────────────────
@@ -3082,11 +3312,17 @@ def worker_claim_job(slug: str, session_name: str, db: Session = Depends(get_db)
     if job.status != "pending":
         raise HTTPException(409, f"Job is {job.status}, not pending")
     job = crud.claim_job(db, job)
-    return _job_dict(job)
+    # The Craig link carries the recording's access key, so it's only handed
+    # to the worker, never included in the member-facing job dicts.
+    craig = _read_craig_source(get_sessions_dir(slug) / session_name)
+    return {**_job_dict(job), "craig_url": craig["url"] if craig else None}
 
 
 class TranscriptUploadBody(BaseModel):
     transcript: str
+    # Low-confidence word map from the worker (see worker/transcribe.py
+    # merge_speaker_jsons). Optional so older workers keep working.
+    confidence: Optional[dict] = None
 
 
 @app.post("/campaigns/{slug}/worker/sessions/{session_name}/transcript")
@@ -3100,6 +3336,12 @@ def worker_push_transcript(
     (session_dir / "transcript.md").write_text(body.transcript, encoding="utf-8")
     # Always keep a raw copy (pre-corrections) for the diff viewer
     (session_dir / "raw_transcript.md").write_text(body.transcript, encoding="utf-8")
+    confidence_path = session_dir / CONFIDENCE_FILE
+    if body.confidence is not None:
+        confidence_path.write_text(json.dumps(body.confidence), encoding="utf-8")
+    else:
+        # Don't leave a previous run's map pointing at words that no longer exist
+        confidence_path.unlink(missing_ok=True)
     job = crud.get_job(db, campaign.id, session_name)
     if job:
         crud.complete_job(db, job)

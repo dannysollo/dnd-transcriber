@@ -217,6 +217,7 @@ def transcribe_with_diarization(
                     "start": seg["start"] + whisper_seg["start"],
                     "end": seg["start"] + whisper_seg["end"],
                     "text": text,
+                    "low_conf": whisper_seg.get("low_conf", []),
                 })
         finally:
             Path(seg_wav).unlink(missing_ok=True)

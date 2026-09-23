@@ -18,6 +18,7 @@ interface Session {
   created_at: string | null
   modified_at: string | null
   description: string | null
+  has_craig_link?: boolean
 }
 
 interface TranscriptionJob {
@@ -51,6 +52,12 @@ const MicIcon = () => (
 const BookIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+  </svg>
+)
+const LinkIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
   </svg>
 )
 const FolderIcon = () => (
@@ -93,6 +100,9 @@ export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
   const [newName, setNewName] = useState('')
+  const [newCraigUrl, setNewCraigUrl] = useState('')
+  const [craigFor, setCraigFor] = useState<string | null>(null)
+  const [craigValue, setCraigValue] = useState('')
   const [creating, setCreating] = useState(false)
   const [renamingSession, setRenamingSession] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -223,12 +233,20 @@ export default function SessionsPage() {
       const r = await fetch(apiUrl('/sessions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim() }),
+        body: JSON.stringify({ name: newName.trim(), craig_url: newCraigUrl.trim() || null }),
       })
       if (r.ok) {
+        const data = await r.json()
+        const sessionName = newName.trim()
         setNewName('')
+        setNewCraigUrl('')
         load()
-        toast('Session created', 'success')
+        if (data.job) {
+          setJobMap(prev => ({ ...prev, [sessionName]: data.job }))
+          toast('Session created — the worker will download it from Craig', 'success')
+        } else {
+          toast('Session created', 'success')
+        }
       } else {
         const err = await r.json()
         toast(err.detail || 'Error creating session', 'error')
@@ -236,6 +254,26 @@ export default function SessionsPage() {
     } finally {
       setCreating(false)
     }
+  }
+
+  const attachCraigLink = async (sessionName: string) => {
+    const url = craigValue.trim()
+    if (!url) { setCraigFor(null); return }
+    const r = await fetch(apiUrl(`/sessions/${sessionName}/craig-link`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, queue: true }),
+    })
+    const data = await r.json().catch(() => null)
+    if (!r.ok) {
+      toast(data?.detail ?? 'Could not attach Craig link', 'error')
+      return
+    }
+    setCraigFor(null)
+    setCraigValue('')
+    if (data?.job) setJobMap(prev => ({ ...prev, [sessionName]: data.job }))
+    load()
+    toast('Craig link attached — transcription queued', 'success')
   }
 
   const renameSession = async (oldName: string, newNameVal: string) => {
@@ -450,6 +488,21 @@ export default function SessionsPage() {
                   color: 'var(--text-primary)', padding: '8px 12px', fontSize: '13px', flex: 1, outline: 'none',
                 }}
               />
+              {(!authEnabled || activeCampaign?.role === 'dm') && activeCampaign && (
+                <input
+                  type="url"
+                  value={newCraigUrl}
+                  onChange={e => setNewCraigUrl(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && createSession()}
+                  placeholder="Craig link (optional)"
+                  title="Paste the Craig download link — the worker fetches the audio and transcribes it"
+                  aria-label="Craig download link (optional)"
+                  style={{
+                    background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '8px',
+                    color: 'var(--text-primary)', padding: '8px 12px', fontSize: '13px', flex: 1, minWidth: 0, outline: 'none',
+                  }}
+                />
+              )}
               <button
                 onClick={createSession}
                 disabled={creating || !newName.trim()}
@@ -597,6 +650,11 @@ export default function SessionsPage() {
                         {s.has_wiki && (
                           <ContentBadge label="W" title="Wiki" color="#22c55e" />
                         )}
+                        {s.has_craig_link && !s.has_transcript && (
+                          <span title="Audio comes from a Craig link" style={{ color: 'var(--text-muted)', display: 'flex' }}>
+                            <LinkIcon />
+                          </span>
+                        )}
                         {s.review_status !== 'unreviewed' && (!authEnabled || isLoggedIn) && (
                           <ReviewStatusBadge
                             status={s.review_status}
@@ -666,6 +724,14 @@ export default function SessionsPage() {
                             <BookIcon />
                           </ActionBtn>
                         )}
+                        {activeCampaign && (!authEnabled || activeCampaign.role === 'dm') && (
+                          <ActionBtn
+                            title={s.has_craig_link ? 'Replace Craig link' : 'Attach Craig link'}
+                            onClick={() => { setCraigFor(craigFor === s.name ? null : s.name); setCraigValue('') }}
+                          >
+                            <LinkIcon />
+                          </ActionBtn>
+                        )}
                         <ActionBtn
                           title="Upload audio files"
                           onClick={() => { setUploadingFor(s.name); fileInputRef.current?.click() }}
@@ -684,6 +750,34 @@ export default function SessionsPage() {
                         </ActionBtn>
                       </div>
                     </div>
+
+                    {craigFor === s.name && (
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                        <input
+                          autoFocus
+                          type="url"
+                          value={craigValue}
+                          onChange={e => setCraigValue(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') attachCraigLink(s.name)
+                            if (e.key === 'Escape') setCraigFor(null)
+                          }}
+                          placeholder="https://craig.horse/rec/…?key=…"
+                          aria-label={`Craig link for ${s.name}`}
+                          style={{
+                            background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: '6px',
+                            color: 'var(--text-primary)', padding: '6px 10px', fontSize: '13px', flex: 1, minWidth: 0, outline: 'none',
+                          }}
+                        />
+                        <button className="btn-primary" style={{ fontSize: '12px', padding: '5px 12px', whiteSpace: 'nowrap' }}
+                          disabled={!craigValue.trim()} onClick={() => attachCraigLink(s.name)}>
+                          Fetch &amp; transcribe
+                        </button>
+                        <button className="btn-ghost" style={{ fontSize: '12px', padding: '5px 10px' }} onClick={() => setCraigFor(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>

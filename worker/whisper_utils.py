@@ -160,6 +160,24 @@ _HALLUCINATION_PHRASES = {
 # quiet speech (pauses, soft-spoken players, thinking mid-sentence).
 _NO_SPEECH_THRESHOLD = 0.85
 
+# Words faster-whisper decoded with probability below this are recorded on
+# each segment as "low_conf" so the GUI can flag them for review. Kept a bit
+# generous — the GUI applies its own (stricter) display threshold, so this
+# just bounds how much gets stored.
+LOW_CONF_RECORD_THRESHOLD = 0.6
+
+
+def _low_conf_words(words) -> list[dict]:
+    """[{word, prob}] for words below LOW_CONF_RECORD_THRESHOLD, in order."""
+    out = []
+    for w in words:
+        prob = getattr(w, "probability", None)
+        text = w.word.strip().strip(".,!?;:\"()\u2026-")
+        if prob is None or not text or prob >= LOW_CONF_RECORD_THRESHOLD:
+            continue
+        out.append({"word": text, "prob": round(float(prob), 3)})
+    return out
+
 
 def _split_at_sentences(seg) -> list[dict]:
     """
@@ -194,6 +212,7 @@ def _split_at_sentences(seg) -> list[dict]:
                     "start": current_words[0].start,
                     "end": word.end,
                     "text": text,
+                    "low_conf": _low_conf_words(current_words),
                 })
             current_words = []
 
@@ -205,6 +224,7 @@ def _split_at_sentences(seg) -> list[dict]:
                 "start": current_words[0].start,
                 "end": current_words[-1].end,
                 "text": text,
+                "low_conf": _low_conf_words(current_words),
             })
 
     return sentences if sentences else [{"start": seg.start, "end": seg.end, "text": seg.text}]

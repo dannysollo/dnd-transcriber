@@ -62,6 +62,12 @@ audio_dir/
 
 Craig names files like `{recording-id}-{discord-username}.flac`. Just drop the whole zip extract into the session subfolder.
 
+### Or: paste the Craig link instead
+
+Instead of downloading and unzipping by hand, a DM can paste the Craig download link (`https://craig.horse/rec/<id>?key=<key>`) when creating a session on the site, or attach it later with the 🔗 button on the session card. That queues transcription right away. When the worker claims the job, it asks Craig to build a per-speaker FLAC zip (the same thing the download page's FLAC button gives you), downloads it, and unpacks the tracks into `audio_dir/<session name>/`. If audio is already in that folder (a re-run), the link is ignored.
+
+The recording has to be finished (stop Craig first). Craig deletes recordings after a while, so this only works while the link is still live.
+
 ---
 
 ## Running

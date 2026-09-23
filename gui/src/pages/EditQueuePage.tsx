@@ -2,6 +2,7 @@ import { useToast } from '../Toast'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCampaign } from '../CampaignContext'
+import { RuleSuggestionBar, type RuleSuggestion, type SessionRuleSuggestion } from '../RuleSuggestions'
 
 interface PendingEdit {
   id: number
@@ -182,6 +183,19 @@ export default function EditQueuePage() {
   const [loading, setLoading] = useState(true)
   const [rejectNotes, setRejectNotes] = useState<Record<number, string>>({})
   const [processing, setProcessing] = useState<Record<number, boolean>>({})
+  const [ruleSuggestions, setRuleSuggestions] = useState<SessionRuleSuggestion[]>([])
+
+  /** Queue rule suggestions from an approve response, de-duplicated per session+word. */
+  const collectSuggestions = async (r: Response, session: string) => {
+    if (!r.ok) return
+    const data = await r.json().catch(() => null)
+    const fresh: SessionRuleSuggestion[] = (data?.rule_suggestions ?? []).map((x: RuleSuggestion) => ({ ...x, session }))
+    if (!fresh.length) return
+    setRuleSuggestions(prev => [
+      ...prev.filter(p => !fresh.some(f => f.session === p.session && f.wrong.toLowerCase() === p.wrong.toLowerCase())),
+      ...fresh,
+    ])
+  }
 
   const slug = activeCampaign?.slug
 
@@ -207,9 +221,11 @@ export default function EditQueuePage() {
     const ids = edits.map(e => e.id)
     setProcessing(Object.fromEntries(ids.map(id => [id, true])))
     try {
-      await Promise.all(ids.map(id =>
-        fetch(`/campaigns/${slug}/edits/${id}/approve`, { method: 'POST' })
-      ))
+      const sessionOf = Object.fromEntries(edits.map(e => [e.id, e.session_name]))
+      await Promise.all(ids.map(async id => {
+        const r = await fetch(`/campaigns/${slug}/edits/${id}/approve`, { method: 'POST' })
+        await collectSuggestions(r, sessionOf[id])
+      }))
       setEdits([])
       toast(`Approved ${ids.length} edit${ids.length !== 1 ? 's' : ''}`, 'success')
     } catch {
@@ -224,6 +240,8 @@ export default function EditQueuePage() {
     setProcessing(prev => ({ ...prev, [editId]: true }))
     try {
       const r = await fetch(`/campaigns/${slug}/edits/${editId}/approve`, { method: 'POST' })
+      const session = edits.find(e => e.id === editId)?.session_name
+      if (session) await collectSuggestions(r, session)
       if (r.ok) setEdits(prev => prev.filter(e => e.id !== editId))
       else toast('Failed to approve edit', 'error')
     } finally {
@@ -301,6 +319,14 @@ export default function EditQueuePage() {
           )}
         </div>
       </div>
+
+      {slug && (
+        <RuleSuggestionBar
+          campaignSlug={slug}
+          suggestions={ruleSuggestions}
+          onDismiss={s => setRuleSuggestions(prev => prev.filter(p => p !== s))}
+        />
+      )}
 
       {loading ? (
         <div style={{ color: '#64748b', fontSize: '14px' }}>Loading...</div>
