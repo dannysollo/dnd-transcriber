@@ -1,0 +1,153 @@
+# desktop/build/desktop.spec — PyInstaller spec for the desktop launcher shell.
+#
+# Builds `onedir` (not `onefile`) — see the desktop launcher plan for why:
+# faster startup (no self-extract-to-temp on every launch) and the app needs
+# stable on-disk paths relative to its own install location (bundled
+# ffmpeg.exe, worker source tree, per-user venv) which onefile's per-run temp
+# dir makes fragile. Inno Setup wraps this onedir output into a single
+# installer anyway.
+#
+# Build from the repo root with:
+#   pyinstaller desktop/build/desktop.spec --distpath desktop/build/dist --workpath desktop/build/work
+#
+# NOT YET VALIDATED on a real Windows build — this is Milestone 4 in the
+# desktop launcher plan. An earlier version of this spec manually bundled
+# pywebview's WebView2 interop DLLs and pythonnet's CLR bootstrap files,
+# reasoning (correctly, per pywebview's own source) that PyInstaller's
+# static analysis can't trace runtime-constructed DLL paths on its own.
+# Turned out unnecessary AND actively broken: a real build showed pywebview
+# 6.2.1 and pythonnet both ship their own first-party PyInstaller hooks
+# (webview/__pyinstaller/hook-webview.py, pythonnet/_pyinstaller/hook-clr.py)
+# that already handle this correctly and get auto-discovered — and the
+# manual version crashed COLLECT() besides, because it appended raw 2-tuples
+# onto a.binaries/a.datas *after* Analysis() had already normalized them to
+# 3-tuples internally. Removed in favor of just trusting the real hooks,
+# which the successful build up through EXE construction confirmed work.
+
+import sys
+from pathlib import Path
+
+block_cipher = None
+
+REPO_ROOT = Path(SPECPATH).resolve().parent.parent
+DESKTOP_DIR = REPO_ROOT / "desktop"
+
+# Worker source is bundled as data (not frozen code) — it's run by a
+# separate venv's python.exe, not by this frozen interpreter. See
+# paths.worker_src_dir() and the "don't freeze CUDA torch" decision.
+#
+# Deliberately NOT `(str(REPO_ROOT / "worker"), "worker")` (the whole
+# directory) — worker/ also contains worker/venv/ (Danny's real, multi-GB,
+# machine-specific CUDA venv) and worker/worker.yaml (his real API key and
+# other secrets, in plaintext). Bundling those into a shareable exe would be
+# both a multi-GB bloat and a real credential leak. Only top-level source
+# files are picked up; venv/, worker.yaml, worker.log, __pycache__/, and
+# .claude/ are all subdirectories or specific files a flat glob never
+# touches, so nothing needs to explicitly exclude them.
+_worker_datas = []
+for pattern in ("*.py", "*.txt", "*.bat", "*.sh", "*.example"):
+    for f in (REPO_ROOT / "worker").glob(pattern):
+        _worker_datas.append((str(f), "worker"))
+
+a = Analysis(
+    [str(DESKTOP_DIR / "app.py")],
+    pathex=[str(DESKTOP_DIR)],
+    binaries=[],
+    datas=[
+        (str(DESKTOP_DIR / "onboarding_ui.html"), "."),
+        # worker/main.py looks for this at Path(__file__).parent.parent —
+        # one level *above* worker/, i.e. the app's install root (".") for a
+        # frozen build — but it lives at the repo root, not inside worker/,
+        # so _worker_datas' worker/*.py glob below never picks it up.
+        # Confirmed missing on a real install: session-summary generation
+        # failed with "ANALYZE_SESSION.md not found".
+        (str(REPO_ROOT / "ANALYZE_SESSION.md"), "."),
+        # assets/ only currently holds a .gitkeep placeholder (no real
+        # icon.ico yet) — PyInstaller errors on a missing/nonexistent
+        # source path, so guard rather than assume it's there.
+        *([(str(DESKTOP_DIR / "assets"), "assets")] if (DESKTOP_DIR / "assets").exists() else []),
+        *_worker_datas,
+    ],
+    hiddenimports=[
+        # pywebview picks its backend at runtime based on the `gui=` kwarg
+        # passed to webview.start() (we pass "edgechromium" explicitly) —
+        # PyInstaller's static analysis can miss that dynamic import.
+        "webview.platforms.edgechromium",
+        "webview.platforms.winforms",
+        # pywebview's edgechromium backend needs this for `import clr` to
+        # work at all — not a declared pywebview dependency (it's installed
+        # conditionally on Windows only, invisible to static analysis here).
+        "clr",
+        # pystray likewise resolves its backend implementation dynamically.
+        "pystray._win32",
+        "PIL._tkinter_finder",
+    ],
+    hookspath=[],
+    runtime_hooks=[],
+    excludes=[
+        # Explicitly exclude the worker's own heavy deps in case anything
+        # under worker/ gets picked up by static analysis just from being
+        # bundled as a data dir — they must NOT be frozen in (see plan).
+        "torch", "torchaudio", "faster_whisper", "ctranslate2", "nemo",
+        "nemo_toolkit", "silero_vad", "pyannote",
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="dnd-transcriber-worker",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    # Was True (shows a console with stdout/stderr) through the first builds,
+    # since a windowless exe failing on startup would otherwise just silently
+    # vanish with no way to see why — a real risk while WebView2 DLL
+    # placement/pythonnet freezing were unverified. Everything's since been
+    # confirmed working end-to-end (this exact build, through the installer),
+    # so off by default now — see app.py's _redirect_stdio_for_windowed_build
+    # for where output goes instead (paths.launcher_log_path()) so a future
+    # startup failure is still debuggable without needing to flip this back.
+    console=False,
+    icon=str(DESKTOP_DIR / "assets" / "icon.ico") if (DESKTOP_DIR / "assets" / "icon.ico").exists() else None,
+    # PyInstaller >=6.0 defaults onedir builds to nesting everything
+    # (bundled data files included) into a _internal/ subfolder next to the
+    # exe. desktop/paths.py resolves bundled files (onboarding_ui.html,
+    # worker/ source, assets/) relative to the exe's own directory — it
+    # predates this change and assumes the pre-6.0 flat layout. Confirmed by
+    # a real build: onboarding_ui.html landed in _internal/ while pywebview's
+    # local HTTP server root (and paths.py) pointed at the dist root,
+    # producing a 404 for a file that was actually right there, one level
+    # off. contents_directory="." restores the flat layout instead of
+    # reworking paths.py's resolution logic, since worker_src_dir()/
+    # bundled_ffmpeg()/icon_path() would all have hit the exact same bug.
+    #
+    # IMPORTANT: this belongs on EXE, not COLLECT. First attempt put it on
+    # COLLECT() below and it silently did nothing — COLLECT doesn't apply
+    # its own contents_directory override, it just reads the value back off
+    # the exe object it's given (PyInstaller/building/api.py's COLLECT class:
+    # `self.contents_directory = arg.contents_directory`), so setting it only
+    # on COLLECT() is a no-op. Confirmed via a real build: the exe still
+    # reported `_internal` in its own runtime logging even with the (wrong)
+    # COLLECT-level setting in place.
+    contents_directory=".",
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    name="dnd-transcriber-worker",
+)

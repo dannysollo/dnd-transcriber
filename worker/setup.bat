@@ -50,12 +50,57 @@ if errorlevel 1 (
     echo   No NVIDIA GPU detected -- installing CPU torch (transcription will be slow^)...
     pip install torch torchaudio --quiet
 ) else (
-    echo   NVIDIA GPU detected -- installing CUDA-enabled torch...
-    pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121 --quiet
+    REM PyTorch's CUDA wheel index gets a new cuNNN name periodically as CUDA
+    REM majors advance, and old ones don't get new Python-version wheels
+    REM added retroactively -- a hardcoded index here (this used to say
+    REM cu121 unconditionally) can go stale silently: the pip install below
+    REM just fails to find a match, and with no errorlevel check afterward,
+    REM execution fell straight through to `pip install -r requirements.txt`,
+    REM whose unpinned `torch` line then quietly installed a CPU-only build
+    REM from plain PyPI with no visible error at all. Ask pick_torch_index.py
+    REM to find a real match instead of trusting a number written down once.
+    echo   NVIDIA GPU detected -- looking up the right CUDA wheel index...
+    set CUDA_INDEX=
+    for /f "delims=" %%i in ('python pick_torch_index.py 2^>nul') do set CUDA_INDEX=%%i
+    if "!CUDA_INDEX!"=="" (
+        echo   WARNING: Could not find a matching CUDA wheel index for this Python version.
+        echo   Installing CPU-only torch instead -- transcription will be much slower.
+        echo   ^(run "python pick_torch_index.py" for the specific error^)
+        pip install torch torchaudio --quiet
+    ) else (
+        echo   Using CUDA wheel index: !CUDA_INDEX!
+        REM --no-deps: confirmed via a real failure that installing torch's
+        REM full dependency tree FROM this index breaks. It mirrors common
+        REM transitive deps (typing_extensions, jinja2, etc.) to be
+        REM self-contained, but its metadata has package-name casing that
+        REM newer pip versions reject as a hard mismatch for some of them --
+        REM the wheel gets discarded, pip falls back to building from
+        REM source, which needs flit_core as a build dependency, and
+        REM flit_core isn't on this index at all (a build tool, not
+        REM anything torch depends on at runtime). "No matching
+        REM distribution for flit_core" was the actual resulting error.
+        pip install torch torchaudio --index-url !CUDA_INDEX! --no-deps --quiet
+        if errorlevel 1 (
+            echo   ERROR: CUDA torch install failed even with a matching index found.
+            echo   Falling back to CPU-only torch -- transcription will be much slower.
+            pip install torch torchaudio --quiet
+        ) else (
+            REM Torch's actual runtime deps, deliberately from plain PyPI
+            REM (not the CUDA index --no-deps skipped above) -- generic,
+            REM non-CUDA-specific packages, no reason to route them through
+            REM PyTorch's index at all.
+            pip install filelock typing_extensions sympy networkx jinja2 fsspec setuptools --quiet
+        )
+    )
 )
 
 pip install -r requirements.txt --quiet
 echo [OK] Dependencies installed
+
+REM Confirm what actually got installed -- this is the check that would
+REM have caught the silent-CPU-fallback bug immediately instead of it only
+REM surfacing later, mid-transcription, as "why is this so slow".
+python -c "import torch; print('  Torch ' + torch.__version__ + ' -- CUDA available: ' + str(torch.cuda.is_available()))" 2>nul
 
 REM Config setup
 if exist worker.yaml (

@@ -1,0 +1,339 @@
+"""
+desktop/onboarding.py — First-run setup: validate the API key, create the
+worker's venv, install its dependencies, and write worker.yaml.
+
+Deliberately mirrors worker/setup.bat's own logic (GPU detection via
+nvidia-smi -> cu121 torch or CPU torch, then `pip install -r requirements.txt`)
+rather than inventing a new install strategy — that script is the
+already-proven install path; this just drives the same steps from Python
+with streamed progress instead of console prompts, for the onboarding UI.
+
+Nothing here talks to pywebview directly — app.py's JS-API bridge calls into
+this module and pushes progress into the page itself. Keeping this UI-toolkit
+agnostic makes it easy to unit-test without a display, which is important
+since the assistant developing this doesn't have a Windows display to test on.
+"""
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Callable, Optional
+
+import requests
+import yaml
+
+import paths
+
+ProgressFn = Callable[[str], None]
+
+REQUIRED_FIELDS = ("server_url", "api_key", "audio_dir")
+
+
+def _noop(_line: str) -> None:
+    pass
+
+
+def needs_onboarding() -> bool:
+    """True if there's no usable worker.yaml yet — checked on every launch."""
+    p = paths.worker_yaml_path()
+    if not p.exists():
+        return True
+    try:
+        cfg = yaml.safe_load(p.read_text()) or {}
+    except Exception:
+        return True
+    return not all(cfg.get(f) for f in REQUIRED_FIELDS)
+
+
+def validate_api_key(server_url: str, api_key: str) -> dict:
+    """
+    Hits the same /worker/whoami endpoint worker/config.py's
+    resolve_campaign_slug() already uses in production — reusing it here
+    (rather than inventing a separate validation call) means onboarding's
+    "is this key good?" check and the worker's own runtime auto-discovery
+    can never silently drift apart.
+
+    Returns {"ok": True, "campaign_slug": ..., "campaign_name": ...} or
+    {"ok": False, "error": "..."} — never raises, since this is called
+    directly from the onboarding UI's "Validate" button.
+    """
+    server_url = server_url.rstrip("/")
+    try:
+        r = requests.get(
+            f"{server_url}/worker/whoami",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=15,
+        )
+    except requests.ConnectionError:
+        return {"ok": False, "error": f"Could not connect to {server_url}"}
+    except requests.Timeout:
+        return {"ok": False, "error": "Server took too long to respond."}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    if r.status_code == 403:
+        return {"ok": False, "error": "Server rejected this API key."}
+    if not r.ok:
+        return {"ok": False, "error": f"Server returned HTTP {r.status_code}."}
+
+    try:
+        data = r.json()
+    except Exception:
+        return {"ok": False, "error": "Server returned an unexpected response."}
+
+    return {
+        "ok": True,
+        "campaign_slug": data.get("campaign_slug"),
+        "campaign_name": data.get("campaign_name", data.get("campaign_slug")),
+    }
+
+
+def has_nvidia_gpu() -> bool:
+    return shutil.which("nvidia-smi") is not None and _run_ok(["nvidia-smi"])
+
+
+_MIN_PYTHON = (3, 10)
+
+
+def _python_version_ok(python_exe: str) -> bool:
+    try:
+        result = subprocess.run(
+            [python_exe, "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            return False
+        major, minor = (int(x) for x in result.stdout.split())
+        return (major, minor) >= _MIN_PYTHON
+    except Exception:
+        return False
+
+
+def find_system_python() -> Optional[str]:
+    """Find a Python interpreter to base a new venv on.
+
+    Deliberately NOT venv.EnvBuilder().create() (what run_worker_setup used
+    to call directly) — that bases the new venv on sys._base_executable,
+    and inside this frozen PyInstaller exe that IS the exe itself, not a
+    real Python interpreter. Confirmed by reading venv.EnvBuilder's own
+    source (ensure_directories() in cpython's Lib/venv/__init__.py) rather
+    than assuming: it would have pointed venv creation at a bootloader
+    binary that can't function as a base interpreter, going wrong in some
+    fashion nothing here ever actually exercised — every onboarding test
+    this session used a pre-existing venv (the mklink /J shortcut used
+    specifically to avoid re-downloading torch during development), so this
+    path never ran even once until this fix.
+
+    Checks a bundled Python first (paths.bundled_python() — a
+    python-build-standalone CPython distribution the installer can ship,
+    not the stripped python.org "embeddable" package, which notoriously
+    doesn't support venv properly), so a friend with nothing preinstalled
+    still works. Falls back to the same "python on PATH" convention
+    worker/setup.bat already assumes, then the Windows Python Launcher
+    (py.exe) — the official python.org installer always registers py.exe
+    regardless of whether the user checked "Add python.exe to PATH" for the
+    plain `python` command, so it's a meaningfully more reliable signal on
+    Windows specifically — for a build that didn't bundle one, or a dev
+    machine that shouldn't need to use the bundled copy anyway.
+    """
+    bundled = paths.bundled_python()
+    if bundled and _python_version_ok(str(bundled)):
+        return str(bundled)
+
+    for candidate in ("python", "python3"):
+        found = shutil.which(candidate)
+        if found and _python_version_ok(found):
+            return found
+
+    py_launcher = shutil.which("py")
+    if py_launcher:
+        try:
+            result = subprocess.run(
+                [py_launcher, "-3", "-c", "import sys; print(sys.executable)"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                candidate = result.stdout.strip()
+                if _python_version_ok(candidate):
+                    return candidate
+        except Exception:
+            pass
+
+    return None
+
+
+def _run_ok(cmd: list) -> bool:
+    try:
+        return subprocess.run(cmd, capture_output=True, timeout=15).returncode == 0
+    except Exception:
+        return False
+
+
+def _stream_subprocess(cmd: list, progress: ProgressFn, cwd: Optional[Path] = None) -> int:
+    """Run a subprocess, feeding each output line to `progress` as it
+    arrives (not buffered to the end) so the onboarding UI's progress log
+    updates live instead of jumping at the very end of a multi-minute
+    `pip install torch`."""
+    progress(f"$ {' '.join(str(c) for c in cmd)}")
+    proc = subprocess.Popen(
+        cmd, cwd=str(cwd) if cwd else None,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, bufsize=1,
+    )
+    for line in proc.stdout:
+        progress(line.rstrip("\n"))
+    return proc.wait()
+
+
+def run_worker_setup(progress: ProgressFn = _noop, include_canary: bool = False) -> None:
+    """
+    Create the worker's venv (if missing) and install dependencies into it.
+    Raises RuntimeError with a human-readable message on failure — the caller
+    (app.py's JS-API bridge) is expected to surface that directly in the
+    onboarding UI.
+
+    include_canary: whether to also install nemo_toolkit[asr] (NVIDIA Canary
+    support). Off by default — per the desktop-launcher plan, Canary/NeMo is
+    optional/best-effort for v1 (unverified on native Windows, ~2GB extra,
+    and not on the app's critical path since production actually runs
+    large-v3+hotwords via faster-whisper, not Canary).
+    """
+    vpy = paths.venv_python()
+    src = paths.worker_src_dir()
+    requirements = src / "requirements.txt"
+    if not requirements.exists():
+        raise RuntimeError(f"requirements.txt not found at {requirements} — bundled worker source is incomplete.")
+
+    if not vpy.exists():
+        system_python = find_system_python()
+        if not system_python:
+            raise RuntimeError(
+                "No Python 3.10+ installation found on this machine. Install it from "
+                "https://python.org/downloads (check \"Add python.exe to PATH\" during "
+                "install), then try again."
+            )
+        progress(f"Creating virtual environment (using {system_python})...")
+        rc = _stream_subprocess([system_python, "-m", "venv", str(paths.venv_dir())], progress)
+        if rc != 0:
+            raise RuntimeError(f"Virtual environment creation failed (exit code {rc}). See the log above for details.")
+        if not vpy.exists():
+            raise RuntimeError("Virtual environment creation appeared to succeed but python.exe is missing.")
+    else:
+        progress("Virtual environment already exists — reusing it.")
+
+    gpu = has_nvidia_gpu()
+    progress(f"NVIDIA GPU detected: {gpu}")
+
+    progress("Installing PyTorch (this is the largest download, several GB)...")
+    torch_cmd = [str(vpy), "-m", "pip", "install", "torch", "torchaudio"]
+    install_torch_deps_from_pypi = False
+    if gpu:
+        # PyTorch's CUDA wheel index gets a new cuNNN name periodically as
+        # CUDA majors advance, and old ones don't get new Python-version
+        # wheels added retroactively — a hardcoded index (this used to say
+        # cu121) silently goes stale and falls back to a CPU-only install
+        # with no error (pip just resolves torch from plain PyPI instead).
+        # Ask pick_torch_index.py, run under THIS venv's own interpreter so
+        # the Python-version tag it checks against matches what's actually
+        # being installed into (not the desktop shell's own interpreter,
+        # which may differ).
+        cuda_index = subprocess.run(
+            [str(vpy), str(paths.worker_src_dir() / "pick_torch_index.py")],
+            capture_output=True, text=True, timeout=30,
+        )
+        if cuda_index.returncode == 0 and cuda_index.stdout.strip():
+            index_url = cuda_index.stdout.strip()
+            progress(f"Using CUDA wheel index: {index_url}")
+            # --no-deps: confirmed via a real failure (and reproduced
+            # directly) that installing torch's full dependency tree FROM
+            # this index breaks. PyTorch's index mirrors common transitive
+            # deps (typing_extensions, jinja2, etc.) to be self-contained,
+            # but its metadata has package-name casing (e.g.
+            # "typing_extensions" vs the normalized "typing-extensions")
+            # that pip 26.x's stricter validation rejects as a hard
+            # mismatch for some of them — it discards the (perfectly good)
+            # wheel and falls back to building from source, which then
+            # needs flit_core as a build dependency. flit_core isn't on
+            # this index at all (it's a build tool, not anything torch
+            # depends on at runtime), so that fails too: "No matching
+            # distribution for flit_core<4,>=3.11" was the actual error
+            # this produced. Installing only torch/torchaudio themselves
+            # from here, then their real dependencies from plain PyPI
+            # separately below, sidesteps the whole index-mirroring quirk.
+            torch_cmd += ["--index-url", index_url, "--no-deps"]
+            install_torch_deps_from_pypi = True
+        else:
+            progress("Could not find a matching CUDA wheel index for this Python version — "
+                     "falling back to CPU-only PyTorch. Transcription will still work, just "
+                     "much slower.")
+    rc = _stream_subprocess(torch_cmd, progress)
+    if rc != 0:
+        raise RuntimeError(f"PyTorch install failed (exit code {rc}). See the log above for details.")
+
+    if install_torch_deps_from_pypi:
+        # Deliberately from plain PyPI, not the CUDA index --no-deps
+        # skipped above — see the comment on that flag. These are generic,
+        # non-CUDA-specific packages, so there's no reason to route them
+        # through PyTorch's index at all. List confirmed directly against
+        # a real torch 2.14.0 install's own dependency metadata.
+        progress("Installing PyTorch's dependencies...")
+        rc = _stream_subprocess(
+            [str(vpy), "-m", "pip", "install", "filelock", "typing_extensions",
+             "sympy", "networkx", "jinja2", "fsspec", "setuptools"],
+            progress,
+        )
+        if rc != 0:
+            raise RuntimeError(f"Installing PyTorch's dependencies failed (exit code {rc}). See the log above for details.")
+
+    # Install everything except nemo_toolkit up front — it's the one line in
+    # requirements.txt that's both huge (~2GB) and unverified on native
+    # Windows, so it's handled as its own optional, skippable step rather
+    # than silently failing the whole install if it doesn't work out here.
+    progress("Installing worker dependencies...")
+    # requirements.txt has real inline comments (e.g. "flask>=2.0    # Local
+    # web dashboard") — splitting on "#" strips those before pip ever sees
+    # the line. A prior version only filtered out FULLY-commented lines
+    # (line.strip().startswith("#")) and left inline comments attached,
+    # which produced a malformed requirement string pip choked on with a
+    # confusing parser error (confirmed on a real run).
+    reqs = []
+    for raw_line in requirements.read_text().splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if line and not line.startswith("nemo_toolkit"):
+            reqs.append(line)
+    rc = _stream_subprocess([str(vpy), "-m", "pip", "install", *reqs], progress)
+    if rc != 0:
+        raise RuntimeError(f"Dependency install failed (exit code {rc}). See the log above for details.")
+
+    if include_canary:
+        progress("Installing NVIDIA NeMo (Canary engine, optional) — this is untested on native Windows, "
+                  "so failures here don't block setup.")
+        rc = _stream_subprocess([str(vpy), "-m", "pip", "install", "nemo_toolkit[asr]"], progress)
+        if rc != 0:
+            progress(f"NeMo install failed (exit code {rc}) — continuing without Canary support. "
+                      f"faster-whisper (the default engine) is unaffected.")
+
+    progress("Worker environment ready.")
+
+
+def write_worker_yaml(server_url: str, api_key: str, audio_dir: str, campaign_slug: Optional[str] = None) -> Path:
+    """
+    Writes worker.yaml. campaign_slug is intentionally optional — if it's
+    None, worker/config.py's own resolve_campaign_slug() auto-discovers it
+    from the api_key at worker startup, the same as it already does for
+    console-based setups. Not duplicating that logic here avoids the two
+    paths drifting apart.
+    """
+    config = {
+        "server_url": server_url.rstrip("/"),
+        "api_key": api_key,
+        "audio_dir": audio_dir,
+        "poll_interval": 30,
+    }
+    if campaign_slug:
+        config["campaign_slug"] = campaign_slug
+
+    path = paths.worker_yaml_path()
+    with open(path, "w") as f:
+        yaml.dump(config, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    return path

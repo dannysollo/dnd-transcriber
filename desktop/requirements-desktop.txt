@@ -1,0 +1,14 @@
+# Desktop launcher's own dependencies — deliberately separate from
+# worker/requirements.txt. This app is a thin PyInstaller-frozen shell (see
+# the "don't freeze CUDA torch" decision in the desktop launcher plan); the
+# worker's own heavy ML deps get installed into a per-user venv at onboarding
+# time instead, using worker/requirements.txt as today.
+pywebview==6.2.1
+pystray>=0.19
+Pillow>=10.0
+requests>=2.31
+pyyaml>=6.0
+
+# Build-time only (not needed at runtime, but kept here so `pip install -r
+# requirements-desktop.txt` sets up everything needed to build the .exe too):
+pyinstaller>=6.10

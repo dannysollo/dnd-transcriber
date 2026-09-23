@@ -16,17 +16,22 @@ _log_buffer = None   # collections.deque — set by main.py
 _config = None       # dict — set by main.py (live reference)
 _config_path = None  # Path — set by main.py
 _start_time = None   # float — set by main.py
+_stop_event = None   # threading.Event — set by main.py (optional, for /api/shutdown)
 
+# discord_token stays masked here even though Craig Watcher (the feature
+# that used it) has been removed — harmless defensively, in case a stale
+# worker.yaml from before the removal still has one sitting in it.
 SENSITIVE_FIELDS = {"api_key", "hf_token", "discord_token"}
 EDITABLE_FIELDS = {"poll_interval", "diarize_speakers", "whisper_model", "audio_dir", "use_hotwords"}
 
 
-def init(log_buffer, config: dict, config_path, start_time: float):
-    global _log_buffer, _config, _config_path, _start_time
+def init(log_buffer, config: dict, config_path, start_time: float, stop_event=None):
+    global _log_buffer, _config, _config_path, _start_time, _stop_event
     _log_buffer = log_buffer
     _config = config
     _config_path = Path(config_path)
     _start_time = start_time
+    _stop_event = stop_event
 
 
 def _mask(key: str, value) -> str:
@@ -404,6 +409,17 @@ def create_app():
             return jsonify({"ok": True, "updated": list(updates.keys())})
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.route("/api/shutdown", methods=["POST"])
+    def api_shutdown():
+        """Request a graceful stop. Used by the desktop launcher instead of
+        relying on KeyboardInterrupt, which is awkward to deliver to a
+        console-less Windows subprocess. Unblocks main()'s wait loop via
+        stop_event directly."""
+        if _stop_event is None:
+            return jsonify({"ok": False, "error": "shutdown not supported by this worker instance"}), 501
+        _stop_event.set()
+        return jsonify({"ok": True})
 
     return app
 

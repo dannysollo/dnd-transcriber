@@ -1,11 +1,16 @@
 """
 worker/audio.py — Audio file utilities for the worker: finding and merging audio tracks.
 """
+import os
 import subprocess
 import tempfile
 from pathlib import Path
 
 AUDIO_EXTENSIONS = {".flac", ".wav", ".mp3", ".m4a", ".ogg"}
+
+# Overridable so a packaged desktop launcher can point at a bundled ffmpeg.exe
+# without needing it on the system PATH. Defaults to today's PATH-based lookup.
+FFMPEG_BIN = os.environ.get("FFMPEG_BIN", "ffmpeg")
 
 
 def find_audio_files(session_dir) -> list:
@@ -30,7 +35,7 @@ def merge_audio_files(files: list, output_path) -> str:
     encode_flags = ["-codec:a", "libmp3lame", "-b:a", "64k", "-ac", "1"]
 
     if len(files) == 1:
-        cmd = ["ffmpeg", "-y", "-i", str(files[0])] + encode_flags + [output_path]
+        cmd = [FFMPEG_BIN, "-y", "-i", str(files[0])] + encode_flags + [output_path]
         result = subprocess.run(cmd, capture_output=True)
         if result.returncode != 0:
             raise RuntimeError(f"ffmpeg failed: {result.stderr.decode()}")
@@ -42,7 +47,7 @@ def merge_audio_files(files: list, output_path) -> str:
 
     filter_str = f"amix=inputs={len(files)}:duration=longest:normalize=0"
     cmd = (
-        ["ffmpeg", "-y"]
+        [FFMPEG_BIN, "-y"]
         + inputs
         + ["-filter_complex", filter_str]
         + encode_flags

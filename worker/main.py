@@ -549,46 +549,58 @@ def main():
     print(f"  Poll:     every {config['poll_interval']}s")
     print("=" * 60)
 
-    # ── Start GUI server ─────────────────────────────────────────────────────
-    try:
-        import gui_server
-        gui_server.init(log_ring, config, args.config, start_time)
-        gui_thread = threading.Thread(
-            target=gui_server.run_server,
-            kwargs={"port": 8788},
-            daemon=True,
-            name="gui-server",
-        )
-        gui_thread.start()
-        print("[gui] Dashboard at http://localhost:8788")
-    except ImportError as e:
-        print(f"[gui] Warning: could not start GUI server (Flask missing?): {e}")
-    except Exception as e:
-        print(f"[gui] Warning: GUI server failed to start: {e}")
-
+    # stop_event is created before the GUI server starts so gui_server.init()
+    # can be given it up front: it's what /api/shutdown uses to request a
+    # graceful stop (used by e.g. a desktop launcher managing this as a
+    # subprocess, which can't cleanly deliver a Ctrl+C-style KeyboardInterrupt
+    # to a console-less Windows child).
     stop_event = threading.Event()
 
-    # Start transcription poll loop in background thread
-    poll_thread = threading.Thread(target=poll_loop, args=(config, stop_event), daemon=True)
-    poll_thread.start()
-
-    # Start analysis poll loop in background thread
-    analysis_thread = threading.Thread(target=analysis_poll_loop, args=(config, stop_event), daemon=True)
-    analysis_thread.start()
-
-    _run_poll_only(stop_event)
-
-    poll_thread.join(timeout=5)
-    print("Worker stopped.")
-
-
-def _run_poll_only(stop_event: threading.Event):
-    """Block the main thread until Ctrl+C."""
+    # Everything below is wrapped so callers spawning this as a subprocess
+    # (e.g. a desktop launcher) can tell a clean stop apart from a crash by
+    # exit code, without having to parse stdout.
     try:
-        while not stop_event.is_set():
-            time.sleep(1)
-    except KeyboardInterrupt:
-        stop_event.set()
+        # ── Start GUI server ─────────────────────────────────────────────
+        try:
+            import gui_server
+            gui_server.init(log_ring, config, args.config, start_time, stop_event)
+            gui_thread = threading.Thread(
+                target=gui_server.run_server,
+                kwargs={"port": 8788},
+                daemon=True,
+                name="gui-server",
+            )
+            gui_thread.start()
+            print("[gui] Dashboard at http://localhost:8788")
+        except ImportError as e:
+            print(f"[gui] Warning: could not start GUI server (Flask missing?): {e}")
+        except Exception as e:
+            print(f"[gui] Warning: GUI server failed to start: {e}")
+
+        # Start transcription poll loop in background thread
+        poll_thread = threading.Thread(target=poll_loop, args=(config, stop_event), daemon=True)
+        poll_thread.start()
+
+        # Start analysis poll loop in background thread
+        analysis_thread = threading.Thread(target=analysis_poll_loop, args=(config, stop_event), daemon=True)
+        analysis_thread.start()
+
+        # Block the main thread until stopped (Ctrl+C, or /api/shutdown
+        # setting stop_event from another thread).
+        try:
+            while not stop_event.is_set():
+                time.sleep(1)
+        except KeyboardInterrupt:
+            stop_event.set()
+
+        poll_thread.join(timeout=5)
+        print("Worker stopped.")
+    except Exception:
+        print("[worker] Fatal error:")
+        traceback.print_exc()
+        sys.exit(1)
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":
