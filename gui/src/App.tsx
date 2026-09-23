@@ -393,7 +393,12 @@ export default function App() {
       </nav>
 
       {/* Main content */}
-      <main className="app-main" style={{ flex: 1, overflow: 'auto' }}>
+      {/* Session view pins its header/tabs and scrolls only its content pane,
+          so main must be a height-bounded flex column there (mobile CSS does
+          this for every page). Other pages scroll main itself. */}
+      <main className="app-main" style={isSessionView
+        ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+        : { flex: 1, overflow: 'auto' }}>
         {/* Mobile campaign indicator — hidden on session view (has its own header) */}
         {!isSessionView && (
           <div className="mobile-campaign-bar" style={{

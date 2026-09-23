@@ -329,8 +329,10 @@ export default function SessionView() {
     }
   }
 
-  const load = async () => {
-    setLoading(true)
+  /** silent: refresh data without the loading skeleton, which would unmount
+   *  the active tab (losing e.g. the Names tab's expanded sections). */
+  const load = async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) setLoading(true)
     const [t, s, w, n, d, p] = await Promise.allSettled([
       fetch(apiUrl(`/sessions/${name}/transcript`)).then(r => r.ok ? r.json() : null),
       fetch(apiUrl(`/sessions/${name}/summary`)).then(r => r.ok ? r.json() : null),
@@ -704,7 +706,7 @@ export default function SessionView() {
   ]
 
   return (
-    <div className="session-view-root" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div className="session-view-root" style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minHeight: 0 }}>
       {/* Window drag overlay */}
       {isDragOver && (
         <div style={{
@@ -1438,7 +1440,7 @@ export default function SessionView() {
               sessionName={name!}
               canEdit={!authEnabled || activeCampaign?.role === 'dm'}
               onJump={goToHallucination}
-              onRuleAdded={() => { load(); setChangesLoaded(false); setChangesReport(null) }}
+              onRuleAdded={() => { load({ silent: true }); setChangesLoaded(false); setChangesReport(null) }}
             />
           ) : (
             <EmptyTabState icon="🎙️" title="No transcript yet" message="Names are scanned once there's a transcript." />
