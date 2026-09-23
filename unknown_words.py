@@ -49,13 +49,26 @@ def _english() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
     return frozenset(real), frozenset(common), frozenset(everyday)
 
 
-def _in(words: frozenset[str], w: str) -> bool:
+def _in(words: set[str] | frozenset[str], w: str) -> bool:
+    """w, or w minus a plural "s", is in words."""
     return w in words or (w.endswith("s") and w[:-1] in words)
 
 
 def _norm(word: str) -> str:
+    """Lowercase, possessive stripped: "Mario's" -> "mario"."""
     w = word.lower()
     return w[:-2] if w.endswith("'s") else w
+
+
+def ignore_key(word: str) -> str:
+    """
+    Canonical form an ignored word is stored and matched under, so one Ignore
+    covers its variants: "Mario's", "Mario", "Marios" all -> "mario". Only
+    strips a plural "s" off 4+ letter words so short names like "Isa"/"Iss"
+    don't collide.
+    """
+    w = _norm(word.strip())
+    return w[:-1] if len(w) > 4 and w.endswith("s") and not w.endswith("ss") else w
 
 
 def known_terms(config: dict, vault_path: Path | None = None) -> list[str]:
@@ -134,7 +147,8 @@ def find_unknown_words(
         for w in words:
             if len(w) >= 3 and (len(words) == 1 or not _in(common, w.lower())):
                 targets.setdefault(w.lower(), w)
-    ignored_set = {w.lower() for w in (ignored or [])}
+    # Stored entries predating ignore_key (e.g. "mario's") are normalized here too.
+    ignored_set = {ignore_key(w) for w in (ignored or [])}
 
     low_conf_by_ts: dict[str, set[str]] = {}
     for entry in (confidence or {}).get("lines", []):
@@ -151,7 +165,8 @@ def find_unknown_words(
         for wm in WORD_RE.finditer(text):
             word = wm.group(0)
             key = _norm(word)
-            if len(key) < 3 or key in ignored_set or key in known:
+            # Plurals/possessives of known terms ("Malkuths", "Tiferet's") are fine.
+            if len(key) < 3 or ignore_key(key) in ignored_set or _in(known, key):
                 continue
             if _in(real, key):
                 # A real word — only interesting as a mishearing of a known

@@ -2680,7 +2680,16 @@ def campaign_put_config(
     body: ConfigBody,
     _member=Depends(require_campaign_member("dm")),
 ):
-    save_config(body.config, slug)
+    config = dict(body.config)
+    # ignored_words is only managed through its own endpoints (Names tab), so
+    # always keep what's on disk — a settings page loaded before someone
+    # clicked Ignore would otherwise silently wipe those entries on save.
+    current = load_config(slug)
+    if "ignored_words" in current:
+        config["ignored_words"] = current["ignored_words"]
+    else:
+        config.pop("ignored_words", None)
+    save_config(config, slug)
     return {"ok": True}
 
 
@@ -2999,13 +3008,14 @@ def campaign_unknown_words(
     config = load_config(slug)
     confidence_path = session_dir / CONFIDENCE_FILE
     confidence = json.loads(confidence_path.read_text(encoding="utf-8")) if confidence_path.exists() else None
+    ignored = config.get("ignored_words") or []
     words = find_unknown_words(
         transcript_path.read_text(encoding="utf-8"),
         known_terms(config, _campaign_vault_dir(config, slug)),
-        ignored=config.get("ignored_words") or [],
+        ignored=ignored,
         confidence=confidence,
     )
-    return {"words": words}
+    return {"words": words, "ignored": sorted(ignored)}
 
 
 class IgnoreWordBody(BaseModel):
@@ -3018,16 +3028,35 @@ def campaign_ignore_word(
     body: IgnoreWordBody,
     _member=Depends(require_campaign_member("dm")),
 ):
-    word = body.word.strip().lower()
+    from unknown_words import ignore_key
+
+    word = ignore_key(body.word)
     if not word:
         raise HTTPException(400, "Empty word")
     config = load_config(slug)
-    ignored = list(config.get("ignored_words") or [])
-    if word not in ignored:
-        ignored.append(word)
-        config["ignored_words"] = sorted(ignored)
-        save_config(config, slug)
-    return {"ignored_words": config.get("ignored_words", [])}
+    # Re-key existing entries too, so older raw entries ("mario's") collapse
+    # into their canonical form instead of sitting there as near-duplicates.
+    ignored = {ignore_key(w) for w in (config.get("ignored_words") or [])} | {word}
+    config["ignored_words"] = sorted(ignored)
+    save_config(config, slug)
+    return {"ignored_words": config["ignored_words"]}
+
+
+@app.delete("/campaigns/{slug}/config/ignored-words/{word}")
+def campaign_unignore_word(
+    slug: str,
+    word: str,
+    _member=Depends(require_campaign_member("dm")),
+):
+    from unknown_words import ignore_key
+
+    key = ignore_key(word)
+    config = load_config(slug)
+    config["ignored_words"] = sorted(
+        w for w in (config.get("ignored_words") or []) if ignore_key(w) != key
+    )
+    save_config(config, slug)
+    return {"ignored_words": config["ignored_words"]}
 
 
 class AddCorrectionBody(BaseModel):

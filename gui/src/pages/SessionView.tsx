@@ -3736,6 +3736,14 @@ interface UnknownWord {
   examples: { line: number; ts: string; speaker: string | null; text: string }[]
 }
 
+/** Mirrors unknown_words.ignore_key: one Ignore covers "Mario's" / "Mario" / "Marios". */
+function ignoreKey(word: string): string {
+  let w = word.trim().toLowerCase()
+  if (w.endsWith("'s")) w = w.slice(0, -2)
+  if (w.length > 4 && w.endsWith('s') && !w.endsWith('ss')) w = w.slice(0, -1)
+  return w
+}
+
 function UnknownWordsPanel({
   sessionName,
   canEdit,
@@ -3755,6 +3763,8 @@ function UnknownWordsPanel({
   const [targets, setTargets] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [showOther, setShowOther] = useState(false)
+  const [ignored, setIgnored] = useState<string[]>([])
+  const [showIgnored, setShowIgnored] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -3765,6 +3775,7 @@ function UnknownWordsPanel({
       .then(data => {
         if (cancelled) return
         setWords(data.words)
+        setIgnored(data.ignored ?? [])
         setTargets(Object.fromEntries(data.words.map((w: UnknownWord) => [w.word, w.suggestion ?? ''])))
       })
       .catch(() => { if (!cancelled) setError('Could not scan this transcript.') })
@@ -3797,11 +3808,58 @@ function UnknownWordsPanel({
         body: JSON.stringify({ word: w.word }),
       })
       if (!r.ok) { toast('Failed to ignore word', 'error'); return }
-      drop(w.word)
+      const data = await r.json()
+      setIgnored(data.ignored_words ?? [])
+      const key = ignoreKey(w.word)
+      setWords(prev => prev?.filter(x => ignoreKey(x.word) !== key) ?? null)
     } finally {
       setBusy(null)
     }
   }
+
+  const unignore = async (word: string) => {
+    setBusy(word)
+    try {
+      const r = await fetch(apiUrl(`/config/ignored-words/${encodeURIComponent(word)}`), { method: 'DELETE' })
+      if (!r.ok) { toast('Failed to un-ignore word', 'error'); return }
+      const data = await r.json()
+      setIgnored(data.ignored_words ?? [])
+      toast(`"${word}" will be flagged again on the next scan`, 'info')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const ignoredSection = ignored.length > 0 && (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <button onClick={() => setShowIgnored(v => !v)} aria-expanded={showIgnored} style={{
+        background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
+        fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)',
+      }}>
+        {showIgnored ? '▾' : '▸'} Ignored in this campaign ({ignored.length})
+      </button>
+      {showIgnored && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {ignored.map(word => (
+            <span key={word} style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              fontSize: '12px', color: 'var(--text-secondary)',
+              border: '1px solid var(--border-default)', borderRadius: '12px', padding: '2px 4px 2px 10px',
+            }}>
+              {word}
+              {canEdit && (
+                <button onClick={() => unignore(word)} disabled={busy === word}
+                  aria-label={`Un-ignore ${word}`} title="Un-ignore"
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0 4px', fontSize: '13px' }}>
+                  ×
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+    </section>
+  )
 
   if (error) return <EmptyTabState icon="⚠️" title="Scan failed" message={error} />
   if (!words) {
@@ -3815,7 +3873,12 @@ function UnknownWordsPanel({
   const nearMisses = words.filter(w => w.suggestion)
   const other = words.filter(w => !w.suggestion)
   if (words.length === 0) {
-    return <EmptyTabState icon="✓" title="Nothing unrecognized" message="Every word is either ordinary English or a known campaign term." />
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '820px' }}>
+        <EmptyTabState icon="✓" title="Nothing unrecognized" message="Every word is either ordinary English, a known campaign term, or ignored." />
+        {ignoredSection}
+      </div>
+    )
   }
 
   const row = (w: UnknownWord) => (
@@ -3853,7 +3916,7 @@ function UnknownWordsPanel({
             </button>
             <button className="btn-ghost" style={{ fontSize: '12px', padding: '3px 10px' }}
               disabled={busy === w.word} onClick={() => ignore(w)}
-              title="It's spelled right — stop flagging it in this campaign">
+              title="It's spelled right: stop flagging it (and its plural/possessive) in every session of this campaign">
               Ignore
             </button>
           </>
@@ -3899,6 +3962,7 @@ function UnknownWordsPanel({
           {showOther && other.map(row)}
         </section>
       )}
+      {ignoredSection}
     </div>
   )
 }
