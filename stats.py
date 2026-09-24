@@ -161,6 +161,7 @@ def campaign_stats(sessions: list[dict], terms: list[str], config: dict) -> dict
 
 LAUGH_RE = re.compile(r"^(?:(?:ha){2,}h?|(?:he){2,}|lol|lmao|lmfao|rofl)$", re.I)
 SIG_WORD_RE = re.compile(r"[a-z]{4,}")
+WHOLE_WORD_RE = re.compile(r"[a-z]+(?:'[a-z]+)*")
 
 
 def wiki_terms(config: dict, vault_path: Path | None = None) -> list[str]:
@@ -219,6 +220,9 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
     people: dict[str, dict] = {}
     all_pairs: dict[tuple[str, str], int] = {}
     pace: dict[int, dict] = {}
+    rules_by_session: list[dict] = []
+    nat20s: dict[str, int] = {}
+    name_by_session: dict[str, dict[str, int]] = {}
     dm_people: set[str] = set()
     all_word_counts: dict[str, int] = {}
     total_sig_words = 0
@@ -228,7 +232,7 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
         return people.setdefault(key, {
             "person": key, "characters": set(), "sessions": 0, "words": 0, "seconds": 0,
             "shares": {}, "questions": 0, "exclamations": 0, "laughs": 0,
-            "names": {}, "word_counts": {}, "sig_total": 0, "quoted": 0,
+            "names": {}, "word_counts": {}, "sig_total": 0, "quoted": 0, "mech_words": 0,
         })
 
     for sess in sessions:
@@ -239,6 +243,13 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
         duration = lines[-1]["start"] + round(lines[-1]["words"] / SPEECH_RATE)
         per_person_words: dict[str, int] = {}
         sess_laughs = 0
+        sess_mech = mechanics_words(lines)
+        rules_by_session.append({"session": sess["name"], "share": round(sess_mech / sess_words, 4) if sess_words else 0})
+        for l in lines:
+            if is_mechanics(l["text"]):
+                person(l["person"])["mech_words"] += l["words"]
+            if NAT20_RE.search(l["text"]):
+                nat20s[l["person"]] = nat20s.get(l["person"], 0) + 1
         for pair, n in exchange_pairs(lines).items():
             all_pairs[pair] = all_pairs.get(pair, 0) + n
         for i, words in enumerate(pace_buckets(lines, PACE_BUCKET_CAMPAIGN)):
@@ -272,6 +283,8 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
                 for hit in name_re.finditer(l["text"]):
                     key = names_lower[hit.group(1).lower()]
                     p["names"][key] = p["names"].get(key, 0) + 1
+                    per_sess = name_by_session.setdefault(key, {})
+                    per_sess[sess["name"]] = per_sess.get(sess["name"], 0) + 1
 
             # Longest single line
             r = records.get("longest_monologue")
@@ -346,6 +359,7 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
             "exclamations": p["exclamations"],
             "laughs": p["laughs"],
             "quoted": p["quoted"],
+            "rules_share": round(p["mech_words"] / p["words"], 4),
             "favorite_names": [{"name": n, "count": c} for n, c in sorted(p["names"].items(), key=lambda kv: -kv[1])[:3]],
             "signature_words": [{"word": w, "count": c} for _, c, w in sig[:5] if _ >= 1.5],
         })
@@ -372,6 +386,35 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
     if dropper and len(people[dropper["person"]]["names"]) >= 3:
         records["name_dropper"] = {"person": dropper["person"], "names": len(people[dropper["person"]]["names"])}
 
+    if rules_by_session:
+        crunch = max(rules_by_session, key=lambda r: r["share"])
+        if crunch["share"] > 0:
+            avg = sum(r["share"] for r in rules_by_session) / len(rules_by_session)
+            records["crunchiest_night"] = {"session": crunch["session"], "share": crunch["share"], "average_share": round(avg, 4)}
+    lawyer = max((p for p in players_only if p["words"] >= 2000), key=lambda p: p["rules_share"], default=None)
+    if lawyer and lawyer["rules_share"] > 0:
+        records["rules_lawyer"] = {"person": lawyer["person"], "share": lawyer["rules_share"]}
+    if nat20s:
+        caller, n = max(nat20s.items(), key=lambda kv: kv[1])
+        records["nat20s"] = {"total": sum(nat20s.values()), "person": caller, "count": n}
+
+    # Names over time: the most-mentioned names, mentions per session, and
+    # whether they're coming up more (or less) in the latest third of sessions.
+    name_trends = []
+    top_names = sorted(name_by_session.items(), key=lambda kv: -sum(kv[1].values()))[:8]
+    k = max(1, len(session_order) // 3)
+    for name, per in top_names:
+        counts = [per.get(s, 0) for s in session_order]
+        recent = sum(counts[-k:]) / k
+        before = sum(counts[:-k]) / max(1, len(counts) - k)
+        trend = None
+        if len(session_order) >= 4:
+            if recent >= 2 * max(before, 1) and recent >= 5:
+                trend = "rising"
+            elif before >= 5 and recent <= before / 3:
+                trend = "fading"
+        name_trends.append({"name": name, "counts": counts, "total": sum(counts), "trend": trend})
+
     pairs = [{"a": a, "b": b, "count": n} for (a, b), n in sorted(all_pairs.items(), key=lambda kv: -kv[1])[:8]]
     pace_rows = []
     for i in sorted(pace):
@@ -380,7 +423,7 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
             continue
         pace_rows.append({"start": i * PACE_BUCKET_CAMPAIGN, "sessions": b["sessions"], "wpm": round(b["words"] / b["minutes"])})
     return {"records": records, "profiles": profiles, "session_order": session_order,
-            "exchanges": pairs, "pace": pace_rows}
+            "exchanges": pairs, "pace": pace_rows, "rules_by_session": rules_by_session, "name_trends": name_trends}
 
 
 # ─── One session in depth ────────────────────────────────────────────────────
@@ -391,7 +434,7 @@ BREAK_SECONDS = 180          # a gap this long reads as a break, not a pause
 
 
 def session_details(transcript: str, terms: list[str], config: dict,
-                    earlier: list[str], all_rows: list[dict]) -> dict:
+                    earlier: list[str], all_rows: list[dict], other_transcripts: list[str] | None = None) -> dict:
     """
     Moments, pace, breaks, conversation pairs, names and a comparison with the
     rest of the campaign, for the Stats tab of one session.
@@ -488,12 +531,84 @@ def session_details(transcript: str, terms: list[str], config: dict,
             "average_wpm": round(sum(wpm_all) / len(wpm_all)),
         }
 
+    # Rules and dice: this session's share against the campaign's, per speaker, and the nat 20s.
+    other_lines = [parse_lines(t) for t in (other_transcripts or [])]
+    share = mechanics_words(lines) / total_words if total_words else 0
+    other_shares = [mechanics_words(ol) / max(1, sum(l["words"] for l in ol)) for ol in other_lines if ol]
+    per_person: dict[str, list[int]] = {}
+    for l in lines:
+        acc = per_person.setdefault(l["person"], [0, 0])
+        acc[1] += l["words"]
+        if is_mechanics(l["text"]):
+            acc[0] += l["words"]
+    rules = {
+        "share": round(share, 4),
+        "average_share": round(sum(other_shares) / len(other_shares), 4) if other_shares else None,
+        "by_person": {p: round(m / w, 4) for p, (m, w) in per_person.items() if w},
+        "nat20s": [{"ts": l["ts"], "person": l["person"], "excerpt": _excerpt(l["text"], 16)} for l in lines if NAT20_RE.search(l["text"])],
+    }
+    skip = player_names(config) | {t.lower() for t in terms}
+    words_of_night = distinctive_words(lines, other_lines, skip) if other_lines else []
+
     return {"moments": moments, "pace": pace, "breaks": breaks, "exchanges": pairs,
+            "rules": rules, "words_of_night": words_of_night,
             "names": names[:15], "new_names": [n for n in sorted(names, key=lambda n: parse_timestamp(n["first_ts"])) if n["new"]],
             "comparison": comparison}
 
 
 # ─── Shared counting helpers ─────────────────────────────────────────────────
+
+# Rules and dice talk. The table rolls on a dice bot, so this counts what's
+# said about the rules (checks, saves, damage, spell slots), not every roll.
+# A line counts if it has one unambiguous term, or two looser ones.
+MECH_STRONG = re.compile(
+    r"\b(d(?:4|6|8|10|12|20|100)|initiative|(?:dis)?advantage|saving throws?|spell slots?|hit points?|hp|"
+    r"armor class|bonus action|cantrips?|proficiency|modifier|nat(?:ural)? ?(?:1|20|one|twenty)|crit(?:ical)?s?|"
+    r"roll(?:s|ed|ing)?|perception|stealth|athletics|insight|investigation)\b", re.I)
+MECH_WEAK = re.compile(r"\b(saves?|checks?|damage|ac|reaction|concentration|attacks?|dc|plus|minus|hits?|misses)\b", re.I)
+NAT20_RE = re.compile(r"\bnat(?:ural)?\s*(?:20|twenty)\b", re.I)
+
+
+def is_mechanics(text: str) -> bool:
+    return bool(MECH_STRONG.search(text)) or len(MECH_WEAK.findall(text)) >= 2
+
+
+def mechanics_words(lines: list[dict]) -> int:
+    return sum(l["words"] for l in lines if is_mechanics(l["text"]))
+
+
+def distinctive_words(lines: list[dict], others: list[list[dict]], skip: set[str], n: int = 10) -> list[dict]:
+    """
+    Words that set this session apart: said often here, rarely in the other
+    sessions (tf-idf over sessions). Everyday English, the people at the
+    table and wiki names are left out, so what's left is the night's jargon,
+    running jokes and one-off subjects.
+    """
+    import math
+    _, _, everyday = _english()
+    # Speakers' own names (characters and players) are never the night's words.
+    skip = skip | {x.lower() for l in lines for x in (l["name"], l["person"]) if x}
+    def counts(ls: list[dict]) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for l in ls:
+            for w in WHOLE_WORD_RE.findall(l["text"].lower()):
+                if len(w) < 4 or "'" in w:  # contractions ("doesn't") aren't subjects
+                    continue
+                if w not in everyday and w not in skip and not (w.endswith("s") and w[:-1] in skip):
+                    out[w] = out.get(w, 0) + 1
+        return out
+    here = counts(lines)
+    seen_in = [set(counts(o)) for o in others]
+    total = len(others) + 1
+    scored = []
+    for w, c in here.items():
+        if c < 4:
+            continue
+        df = 1 + sum(1 for s in seen_in if w in s)
+        scored.append((c * math.log(total / df + 1), c, w))
+    scored.sort(reverse=True)
+    return [{"word": w, "count": c} for _, c, w in scored[:n]]
+
 
 def laugh_count(text: str) -> int:
     return sum(1 for tok in WORD_RE.findall(text) if LAUGH_RE.match(tok))

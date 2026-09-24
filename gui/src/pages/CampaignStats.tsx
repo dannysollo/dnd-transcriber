@@ -18,6 +18,7 @@ interface Profile {
   exclamations: number
   laughs: number
   quoted: number
+  rules_share?: number
   favorite_names: { name: string; count: number }[]
   signature_words: { word: string; count: number }[]
 }
@@ -35,6 +36,8 @@ interface CampaignStatsData {
   profiles: Profile[]
   exchanges?: { a: string; b: string; count: number }[]
   pace?: { start: number; sessions: number; wpm: number }[]
+  rules_by_session?: { session: string; share: number }[]
+  name_trends?: { name: string; counts: number[]; total: number; trend: 'rising' | 'fading' | null }[]
 }
 
 const clock = (seconds: number) => `${Math.floor(seconds / 3600)}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}`
@@ -91,6 +94,21 @@ function recordEntries(r: Records): { key: string; label: string; value: string;
     key: 'name_dropper', label: 'Name-dropper',
     value: String(r.name_dropper.person),
     detail: <>{Number(r.name_dropper.names)} different names from the wiki, the most of any player</>,
+  })
+  if (r.crunchiest_night) out.push({
+    key: 'crunchiest_night', label: 'Crunchiest night',
+    value: String(r.crunchiest_night.session),
+    detail: <>{percent(Number(r.crunchiest_night.share))} of the talk about rules and dice, against {percent(Number(r.crunchiest_night.average_share))} on average</>,
+  })
+  if (r.rules_lawyer) out.push({
+    key: 'rules_lawyer', label: 'Rules lawyer',
+    value: String(r.rules_lawyer.person),
+    detail: <>{percent(Number(r.rules_lawyer.share))} of their talk is about rules and dice, the most of any player</>,
+  })
+  if (r.nat20s) out.push({
+    key: 'nat20s', label: 'Nat 20s',
+    value: `${r.nat20s.total} called out`,
+    detail: <>{String(r.nat20s.person)} called the most, {Number(r.nat20s.count)}</>,
   })
   if (r.most_quoted) out.push({
     key: 'most_quoted', label: 'Most quoted',
@@ -224,6 +242,9 @@ export default function CampaignStats({ slug }: { slug: string }) {
                 {p.laughs > 0 && <>, laughed out loud <b>{p.laughs}</b> times</>}
                 {p.quoted > 0 && <>, quoted <b>{p.quoted}</b> time{p.quoted !== 1 ? 's' : ''}</>}.
               </p>
+              {(p.rules_share ?? 0) >= 0.005 && (
+                <p className="profile-line"><b>{percent(p.rules_share!)}</b> of their talk is about rules and dice.</p>
+              )}
               {p.favorite_names.length > 0 && (
                 <p className="profile-line">Talks most about {list(p.favorite_names.map(n => n.name))}.</p>
               )}
@@ -285,6 +306,25 @@ export default function CampaignStats({ slug }: { slug: string }) {
         }))}
       />
 
+      {(data.rules_by_session ?? []).length > 1 && (
+        <BarList
+          title="Rules and dice talk"
+          note="Share of each session's talk about checks, saves, damage, spell slots and the like. The high ones are usually the big fights."
+          valueHeader="Share"
+          rows={data.rules_by_session!.map(r => ({
+            key: r.session,
+            label: r.session,
+            labelText: r.session,
+            value: r.share,
+            display: percent(r.share),
+          }))}
+        />
+      )}
+
+      {(data.name_trends ?? []).length > 0 && data.sessions > 1 && (
+        <NameTrends trends={data.name_trends!} sessions={data.per_session.map(s => s.name)} />
+      )}
+
       {data.mentions.length > 0 && (
         <BarList
           title="Most mentioned"
@@ -340,6 +380,35 @@ function Attendance({ profiles, sessions }: { profiles: Profile[]; sessions: str
           </div>
         </>
       )}
+    </section>
+  )
+}
+
+/** The most-mentioned names as small multiples: mentions per session on one shared scale. */
+function NameTrends({ trends, sessions }: { trends: NonNullable<CampaignStatsData['name_trends']>; sessions: string[] }) {
+  const max = Math.max(1, ...trends.flatMap(t => t.counts))
+  return (
+    <section aria-label="Names over time" style={{ marginBottom: 36 }}>
+      <div className="barlist-head"><h3 className="sc">Names over time</h3></div>
+      <p className="barlist-note">Mentions per session, in the order sessions were added, on the same scale for every name.</p>
+      {trends.map(t => (
+        <div key={t.name} className="name-trend">
+          <div>
+            <div className="name-trend-name">{t.name}</div>
+            <div className="name-trend-note">
+              {t.total.toLocaleString()} mentions
+              {t.trend === 'rising' && <>, coming up more lately</>}
+              {t.trend === 'fading' && <>, coming up less lately</>}
+            </div>
+          </div>
+          <TrendLine
+            label={`Mentions of ${t.name} per session`}
+            max={max}
+            format={v => `${v} mention${v !== 1 ? 's' : ''}`}
+            points={t.counts.map((c, i) => ({ label: sessions[i] ?? `Session ${i + 1}`, value: c }))}
+          />
+        </div>
+      ))}
     </section>
   )
 }

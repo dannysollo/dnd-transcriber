@@ -3146,7 +3146,8 @@ def campaign_session_stats(
     rows = campaign_stats(sessions, [], config)["per_session"]
     terms = wiki_terms(config, _campaign_vault_dir(config, slug))
     earlier = [s["transcript"] for s in sessions[:here]]
-    return {**session_stats(transcript), **session_details(transcript, terms, config, earlier, rows)}
+    others = [s["transcript"] for s in sessions if s["name"] != name]
+    return {**session_stats(transcript), **session_details(transcript, terms, config, earlier, rows, others)}
 
 
 def _campaign_transcripts(slug: str) -> list[dict]:
@@ -3923,6 +3924,19 @@ if gui_dist.exists():
     # revalidation check on every load (cheap — a 304 if nothing changed)
     # rather than trusting a browser's caching heuristic.
     _NO_CACHE_HEADERS = {"Cache-Control": "no-cache"}
+
+    # A few page URLs share their path with a JSON endpoint (/campaigns lists
+    # campaigns for the app, and is also the Campaigns page). A browser
+    # loading the address gets the app; the app's own fetch() calls, which
+    # don't ask for HTML, still get the JSON.
+    _PAGE_PATHS = re.compile(r"^/(sessions|campaigns)(/[^/]+)?/?$")
+
+    @app.middleware("http")
+    async def pages_over_api(request: Request, call_next):
+        if (request.method == "GET" and _PAGE_PATHS.match(request.url.path)
+                and "text/html" in request.headers.get("accept", "")):
+            return FileResponse(str(gui_dist / "index.html"), headers=_NO_CACHE_HEADERS)
+        return await call_next(request)
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def serve_spa(full_path: str):

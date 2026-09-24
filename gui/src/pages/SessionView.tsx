@@ -3941,6 +3941,8 @@ interface SessionStats {
   names?: { name: string; count: number; first_ts: string; first_by: string; new: boolean }[]
   new_names?: { name: string; first_ts: string; first_by: string }[]
   comparison?: { rank: number; of: number; average_duration_seconds: number; wpm: number; average_wpm: number } | null
+  rules?: { share: number; average_share: number | null; by_person: Record<string, number>; nat20s: { ts: string; person: string; excerpt: string }[] }
+  words_of_night?: { word: string; count: number }[]
 }
 
 const clock = (seconds: number) => `${Math.floor(seconds / 3600)}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}`
@@ -3992,6 +3994,19 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
     key: 'most_curious', label: 'Most curious',
     value: String(m.most_curious.person),
     detail: <>{Number(m.most_curious.questions).toLocaleString()} questions asked</>,
+  })
+  const rules = stats.rules
+  if (rules && rules.share > 0) moments.push({
+    key: 'rules', label: 'Rules and dice',
+    value: `${percent(rules.share)} of the talk`,
+    detail: rules.average_share !== null
+      ? <>{rules.share > rules.average_share * 1.4 ? 'a crunchy night; ' : rules.share < rules.average_share * 0.6 ? 'a light night for rules; ' : ''}the campaign averages {percent(rules.average_share)}</>
+      : <>checks, saves, damage, spell slots and the like</>,
+  })
+  if (rules && rules.nat20s.length > 0) moments.push({
+    key: 'nat20s', label: rules.nat20s.length === 1 ? 'Nat 20' : 'Nat 20s',
+    value: `${rules.nat20s.length} called out`,
+    detail: <>{joinList(rules.nat20s.map(n => <span key={n.ts}>{n.person} at {at(n.ts)}</span>))}</>,
   })
   if (m.opening_line) moments.push({
     key: 'opening_line', label: 'Opening line',
@@ -4059,6 +4074,7 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
             `${sp.questions ?? 0} questions, ${sp.exclamations ?? 0} exclamations`,
             ...(sp.laughs ? [`${sp.laughs} laughs`] : []),
             `longest line ${sp.longest ?? 0} words`,
+            ...(stats.rules?.by_person[sp.player || sp.name] ? [`${percent(stats.rules.by_person[sp.player || sp.name])} rules and dice`] : []),
           ],
         }))}
       />
@@ -4073,6 +4089,18 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
           {breaks.length === 1 ? 'One break' : `${breaks.length} breaks`}:{' '}
           {joinList(breaks.map(b => <span key={b.ts}>{at(b.ts)} for {formatDuration(b.seconds)}</span>))}.
         </p>
+      )}
+
+      {(stats.words_of_night ?? []).length > 0 && (
+        <section aria-label="Words of the night" style={{ marginBottom: 36 }}>
+          <div className="barlist-head"><h3 className="sc">Words of the night</h3></div>
+          <p className="barlist-note">Said often in this session and rarely in the others. Everyday words and names are left out.</p>
+          <ul className="word-list">
+            {stats.words_of_night!.map(w => (
+              <li key={w.word}>{w.word} <span className="word-count">{w.count}</span></li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {(stats.exchanges ?? []).length > 0 && (

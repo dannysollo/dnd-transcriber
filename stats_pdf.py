@@ -132,6 +132,12 @@ def _records(r: dict) -> list[tuple[str, str, str, str | None]]:
         out.append(("Funniest night", x["session"], f"{x['laughs']} laughs written into the transcript", None))
     if (x := r.get("name_dropper")):
         out.append(("Name-dropper", x["person"], f"{x['names']} different names from the wiki, the most of any player", None))
+    if (x := r.get("crunchiest_night")):
+        out.append(("Crunchiest night", x["session"], f"{_pct(x['share'])} of the talk about rules and dice, against {_pct(x['average_share'])} on average", None))
+    if (x := r.get("rules_lawyer")):
+        out.append(("Rules lawyer", x["person"], f"{_pct(x['share'])} of their talk is about rules and dice, the most of any player", None))
+    if (x := r.get("nat20s")):
+        out.append(("Nat 20s", f"{x['total']} called out", f"{x['person']} called the most, {x['count']}", None))
     if (x := r.get("most_quoted")):
         out.append(("Most quoted", x["person"], f"{x['quoted']} line{'s' if x['quoted'] != 1 else ''} saved to Quotes", None))
     return out
@@ -246,12 +252,13 @@ def render_stats_pdf(data: dict, campaign_name: str) -> bytes:
             if p["quoted"]:
                 extra.append(f"quoted <b>{p['quoted']}</b> time{'s' if p['quoted'] != 1 else ''}")
             quirks = f"Asked <b>{p['questions']:,}</b> questions, exclaimed <b>{p['exclamations']:,}</b> times" + (", " + ", ".join(extra) if extra else "") + "."
+            rules = f"<p><b>{_pct(p['rules_share'])}</b> of their talk is about rules and dice.</p>" if p.get("rules_share", 0) >= 0.005 else ""
             names = f"<p>Talks most about {escape(_list([n['name'] for n in p['favorite_names']]))}.</p>" if p["favorite_names"] else ""
             sig = f"<p>Signature words: {escape(_list(['“' + w['word'] + '”' for w in p['signature_words']]))}.</p>" if p["signature_words"] else ""
             block = f"""<div class="profile"><div>
   <div class="name">{escape(p['person'])}{chars}</div>
   <p><b>{p['sessions']}</b> session{'s' if p['sessions'] != 1 else ''}, <b>{_dur(p['seconds'])}</b> of talk, usually <b>{_pct(p['average_share'])}</b> of a session.</p>
-  <p>{quirks}</p>{names}{sig}
+  <p>{quirks}</p>{rules}{names}{sig}
 </div><div><div class="trend-cap">Share of talk per session{_latest(p)}</div>{_trend([s['share'] for s in p['share_by_session']], max_share)}</div></div>"""
             # The section heading travels with the first profile, never alone at a page foot.
             parts.append(f'<div class="keep">{head}{block}</div>' if i == 0 else block)
@@ -277,6 +284,21 @@ def render_stats_pdf(data: dict, campaign_name: str) -> bytes:
     if per:
         parts.append('<h2>Session length</h2><p class="note">In the order sessions were added.</p>')
         parts.append(_bars([(s["name"], s["duration_seconds"], _dur(s["duration_seconds"])) for s in per]))
+
+    rules_rows = data.get("rules_by_session", [])
+    if len(rules_rows) > 1:
+        parts.append('<h2>Rules and dice talk</h2><p class="note">Share of each session\'s talk about checks, saves, damage, spell slots and the like.</p>')
+        parts.append(_bars([(r["session"], r["share"], _pct(r["share"])) for r in rules_rows]))
+
+    trends = data.get("name_trends", [])
+    if trends and len(per) > 1:
+        top = max([1] + [c for t in trends for c in t["counts"]])
+        head = '<h2>Names over time</h2><p class="note">Mentions per session, on the same scale for every name.</p>'
+        for i, t in enumerate(trends):
+            note = {"rising": ", coming up more lately", "fading": ", coming up less lately"}.get(t["trend"] or "", "")
+            block = (f'<div class="profile"><div><div class="name">{escape(t["name"])}</div><p>{t["total"]:,} mentions{note}</p></div>'
+                     f'<div>{_trend(t["counts"], top)}</div></div>')
+            parts.append(f'<div class="keep">{head}{block}</div>' if i == 0 else block)
 
     mentions = data.get("mentions", [])
     if mentions:

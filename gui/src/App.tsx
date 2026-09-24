@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { CoverWordmark } from './Brand'
-import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
 import './App.css'
 import SessionsPage from './pages/SessionsPage'
 import SessionView from './pages/SessionView'
@@ -374,6 +374,8 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/campaigns/:slug/settings" element={<CampaignSettingsPage />} />
+          <Route path="/campaigns/:slug" element={<CampaignRedirect />} />
+          <Route path="/sessions" element={<Navigate to="/" replace />} />
           <Route path="/invite/:token" element={<InvitePage />} />
           <Route path="/edit-queue" element={<EditQueuePage />} />
           <Route path="/search" element={<SearchPage />} />
@@ -401,4 +403,10 @@ function NotFoundPage() {
       </button>
     </div>
   )
+}
+
+/** /campaigns/<slug> has no page of its own; its settings page is the campaign's home. */
+function CampaignRedirect() {
+  const { slug } = useParams()
+  return <Navigate to={`/campaigns/${slug}/settings`} replace />
 }
