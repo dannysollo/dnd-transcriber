@@ -121,7 +121,7 @@ function DiffView({ original, proposed }: { original: string; proposed: string }
     // Single-line: word diff inline
     const tokens = lcsWordDiff(tokenize(original), tokenize(proposed))
     const hasChange = tokens.some(t => t.type !== 'equal')
-    if (!hasChange) return <div style={{ fontSize: '14px', color: 'var(--ink-faint)', fontStyle: 'italic' }}>No changes.</div>
+    if (!hasChange) return <div style={{ fontSize: '14px', color: 'var(--ink-faint)' }}>No changes.</div>
     return (
       <div style={{ background: 'var(--page-sunk)', borderRadius: '3px', padding: '10px 14px', fontFamily: 'monospace', fontSize: '15px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
         <div style={{ color: 'var(--rubric)' }}>
@@ -142,14 +142,14 @@ function DiffView({ original, proposed }: { original: string; proposed: string }
 
   const fullDiff = computeLineDiff(original, proposed)
   const hasChanges = fullDiff.some(l => l.type !== 'equal')
-  if (!hasChanges) return <div style={{ fontSize: '14px', color: 'var(--ink-faint)', fontStyle: 'italic' }}>No changes detected.</div>
+  if (!hasChanges) return <div style={{ fontSize: '14px', color: 'var(--ink-faint)' }}>No changes detected.</div>
   const diff = collapseLineDiff(fullDiff)
 
   return (
     <div style={{ background: 'var(--page-sunk)', borderRadius: '3px', fontFamily: 'monospace', fontSize: '15px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
       {diff.map((line, i) => {
         if (line.type === 'separator') return (
-          <div key={i} style={{ padding: '2px 12px', color: 'var(--rule-strong)', background: 'color-mix(in srgb, var(--ink) 2%, transparent)', fontStyle: 'italic' }}>
+          <div key={i} style={{ padding: '2px 12px', color: 'var(--rule-strong)', background: 'color-mix(in srgb, var(--ink) 2%, transparent)' }}>
             … {line.skipped} unchanged {line.skipped === 1 ? 'line' : 'lines'} …
           </div>
         )

@@ -218,7 +218,7 @@ export default function CorrectionsPage() {
     <div className="page-content" style={{ padding: '40px 56px', maxWidth: '1140px' }}>
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{ margin: 0, fontSize: '34px', fontWeight: 500, color: 'var(--ink)' }}>Corrections</h1>
-        <p style={{ margin: '4px 0 0', fontSize: '17px', fontStyle: 'italic', color: 'var(--ink-soft)' }}>
+        <p style={{ margin: '4px 0 0', fontSize: '17px', color: 'var(--ink-soft)' }}>
           Spellings the campaign always fixes after transcription: whole-word rules, plus regex patterns for trickier cases.
         </p>
       </div>
@@ -253,7 +253,7 @@ export default function CorrectionsPage() {
               </button>
             ))}
             {saving && <span style={{ marginLeft: 'auto', fontSize: '15px', color: 'var(--ink-faint)', alignSelf: 'center' }}>Saving...</span>}
-            {saved && <span style={{ marginLeft: 'auto', fontSize: '16px', fontStyle: 'italic', color: 'var(--moss)', alignSelf: 'center' }}>Saved</span>}
+            {saved && <span style={{ marginLeft: 'auto', fontSize: '16px', color: 'var(--moss)', alignSelf: 'center' }}>Saved</span>}
           </div>
 
           {loading ? (

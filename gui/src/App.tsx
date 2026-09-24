@@ -175,7 +175,7 @@ export default function App() {
             DnD Transcriber
           </div>
           {!authEnabled && (
-            <div style={{ marginTop: '6px', fontSize: '14px', fontStyle: 'italic', color: 'var(--cover-ink-soft)' }}>
+            <div style={{ marginTop: '6px', fontSize: '14px', color: 'var(--cover-ink-soft)' }}>
               Development build, v{APP_VERSION}
             </div>
           )}
@@ -198,7 +198,7 @@ export default function App() {
               }}
             >
               <span style={{ minWidth: 0 }}>
-                <span style={{ display: 'block', fontSize: '14px', fontStyle: 'italic', color: 'var(--cover-ink-soft)' }}>Campaign</span>
+                <span style={{ display: 'block', fontSize: '14px', color: 'var(--cover-ink-soft)' }}>Campaign</span>
                 <span style={{ display: 'block', fontSize: '18px', color: 'var(--cover-ink)', lineHeight: 1.25 }}>
                   {activeCampaign?.name ?? 'None chosen'}
                 </span>
@@ -250,7 +250,7 @@ export default function App() {
                       }}
                     >
                       {c.name}
-                      <span style={{ fontSize: '14px', fontStyle: 'italic', color: 'var(--ink-faint)', marginLeft: '6px' }}>{c.role}</span>
+                      <span style={{ fontSize: '14px', color: 'var(--ink-faint)', marginLeft: '6px' }}>{c.role}</span>
                     </button>
                   )
                 })}
@@ -310,7 +310,7 @@ export default function App() {
                 <img src={avatarUrl(user)} alt="" style={{ width: 28, height: 28, borderRadius: '50%', boxShadow: '0 0 0 1px var(--gilt)' }} />
                 <span style={{ minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: '16px', color: 'var(--cover-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.username}</span>
-                  {user.is_admin && <span style={{ display: 'block', fontSize: '13px', fontStyle: 'italic', color: 'var(--cover-ink-soft)' }}>admin</span>}
+                  {user.is_admin && <span style={{ display: 'block', fontSize: '13px', color: 'var(--cover-ink-soft)' }}>admin</span>}
                 </span>
               </button>
               <button
@@ -383,7 +383,7 @@ function NotFoundPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 32, textAlign: 'center' }}>
       <div style={{ fontSize: 34, color: 'var(--ink)', marginBottom: 8 }}>This page isn't in the journal</div>
-      <div style={{ fontSize: 17, fontStyle: 'italic', color: 'var(--ink-soft)', marginBottom: 24 }}>The link may be old, or the page was moved.</div>
+      <div style={{ fontSize: 17, color: 'var(--ink-soft)', marginBottom: 24 }}>The link may be old, or the page was moved.</div>
       <button
         onClick={() => navigate('/')}
         style={{ background: 'var(--accent)', border: 'none', borderRadius: 3, color: 'var(--on-rubric)', padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}

@@ -210,7 +210,7 @@ select:focus {
   border-color: var(--gilt) !important;
   box-shadow: 0 0 0 1px var(--gilt);
 }
-::placeholder { color: var(--ink-faint); opacity: 1; font-style: italic; }
+::placeholder { color: var(--ink-faint); opacity: 1; }
 
 /* Skeleton: faint ruled lines filling in */
 .skeleton {
@@ -278,13 +278,12 @@ select:focus {
   letter-spacing: 0.05em;
   font-weight: 600;
 }
-.speaker-player { color: var(--ink-faint); font-style: italic; font-size: 0.85em; }
+.speaker-player { color: var(--ink-faint); font-size: 0.85em; }
 .time-passes {
   display: flex;
   align-items: center;
   gap: 10px;
   color: var(--ink-faint);
-  font-style: italic;
   font-size: 14px;
   margin: 10px 0 8px;
   max-width: 640px;
@@ -346,7 +345,6 @@ select:focus {
 }
 .lowconf-badge {
   font-size: 14px;
-  font-style: italic;
   color: var(--rubric);
 }
 .unknown-word-example {
@@ -426,7 +424,7 @@ span.transcript-ts { cursor: default; }
 .session-card:hover .entry-action, .session-card:focus-within .entry-action { opacity: 1; }
 .desc-add {
   background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--ink-faint); font-style: italic; font-size: 16px;
+  color: var(--ink-faint); font-size: 16px;
   opacity: 0; transition: opacity 0.15s ease;
 }
 .session-header:hover .desc-add, .desc-add:focus-visible { opacity: 1; }

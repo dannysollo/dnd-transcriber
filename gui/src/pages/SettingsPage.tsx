@@ -12,7 +12,7 @@ export default function SettingsPage() {
   return (
     <div className="page-content" style={{ padding: '40px 56px', maxWidth: '760px' }}>
       <h1 style={{ margin: 0, fontSize: '34px' }}>Preferences</h1>
-      <p style={{ margin: '4px 0 0', color: 'var(--ink-soft)', fontStyle: 'italic' }}>
+      <p style={{ margin: '4px 0 0', color: 'var(--ink-soft)' }}>
         Saved in this browser only.
       </p>
 

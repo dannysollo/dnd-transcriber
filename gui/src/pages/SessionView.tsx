@@ -798,7 +798,7 @@ export default function SessionView() {
           <span style={{ flex: '1 1 0' }} />
 
           {editMode && tab === 'transcript' && (
-            <span style={{ color: 'var(--rubric)', fontStyle: 'italic', fontSize: '17px', flexShrink: 0, paddingBottom: '4px' }}>
+            <span style={{ color: 'var(--rubric)', fontSize: '17px', flexShrink: 0, paddingBottom: '4px' }}>
               Editing
             </span>
           )}
@@ -872,7 +872,6 @@ export default function SessionView() {
                   fontSize: '16px',
                   color: 'var(--text-muted)',
                   lineHeight: 1.6,
-                  fontStyle: 'italic',
                   flex: 1,
                 }}>
                   {description}
@@ -1168,14 +1167,14 @@ export default function SessionView() {
                     }}
                   >
                     <span className={showConfidence ? 'lowconf-word' : undefined} data-strong="" style={showConfidence ? undefined : { textDecoration: 'line-through' }}>Unsure words</span>
-                    <span style={{ color: 'var(--ink-faint)', fontStyle: 'italic', marginLeft: 6 }}>{showConfidence ? 'shown' : 'hidden'}</span>
+                    <span style={{ color: 'var(--ink-faint)', marginLeft: 6 }}>{showConfidence ? 'shown' : 'hidden'}</span>
                   </button>
                 )}
                 {search && transcript && (() => {
                   const q = search.toLowerCase()
                   const count = transcript.split('\n').filter(l => l.toLowerCase().includes(q)).length
                   return (
-                    <span style={{ fontSize: '16px', fontStyle: 'italic', color: count > 0 ? 'var(--ink-soft)' : 'var(--rubric)', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '16px', color: count > 0 ? 'var(--ink-soft)' : 'var(--rubric)', whiteSpace: 'nowrap' }}>
                       {count > 0 ? `${count} line${count !== 1 ? 's' : ''}` : 'not found'}
                     </span>
                   )
@@ -1874,7 +1873,7 @@ function TranscriptView({
               {isPending && (
                 <span style={{
                   flexShrink: 0, alignSelf: 'center',
-                  fontSize: '15px', fontStyle: 'italic',
+                  fontSize: '15px',
                   color: 'var(--ochre)', whiteSpace: 'nowrap',
                 }}>
                   sent to the DM for review
@@ -2545,7 +2544,7 @@ function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: str
 
   if (items.length === 0) {
     return (
-      <div style={{ color: 'var(--ink-faint)', fontSize: '16px', fontStyle: 'italic' }}>
+      <div style={{ color: 'var(--ink-faint)', fontSize: '16px' }}>
         No {label.toLowerCase()} configured.
       </div>
     )
@@ -2598,7 +2597,6 @@ function CorrectionList({ items, label }: { items: CorrectionEntry[]; label: str
               <span style={{
                 color: item.hit_count > 0 ? 'var(--moss)' : 'var(--ink-faint)',
                 fontSize: '16px',
-                fontStyle: 'italic',
                 flexShrink: 0,
               }}>
                 {item.hit_count} {item.hit_count === 1 ? 'hit' : 'hits'}
@@ -2725,13 +2723,13 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
         <span>
           {speakers.length > 0 ? `${speakers.length} speaker${speakers.length !== 1 ? 's' : ''}` : 'Speakers'}
         </span>
-        <span style={{ color: 'var(--ink-faint)', fontStyle: 'italic' }}>rename who's who</span>
+        <span style={{ color: 'var(--ink-faint)' }}>rename who's who</span>
         {renameResult && <span style={{ fontSize: '14px', color: 'var(--moss)', marginLeft: '8px' }}>{renameResult}</span>}
       </button>
 
       {open && (
         <div style={{ padding: '0 48px 12px 68px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <p style={{ margin: '0 0 4px', fontSize: '15px', fontStyle: 'italic', color: 'var(--ochre)' }}>
+          <p style={{ margin: '0 0 4px', fontSize: '15px', color: 'var(--ochre)' }}>
             Renaming edits this transcript directly. Re-merging from the original audio would bring the old names back.
           </p>
           {speakers.map(s => (
@@ -3148,7 +3146,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
         if (corrections.length === 0) return null
         return (
           <p style={{ margin: 0, fontSize: '17px', lineHeight: 1.7 }}>
-            <span style={{ fontStyle: 'italic', color: 'var(--ink-faint)', marginRight: 8 }}>Suggested name fixes:</span>
+            <span style={{ color: 'var(--ink-faint)', marginRight: 8 }}>Suggested name fixes:</span>
             {corrections.map((c, i) => (
               <span key={i} style={{ whiteSpace: 'nowrap', marginRight: 14 }}>
                 <span style={{ color: 'var(--ink-faint)', textDecoration: 'line-through' }}>{c.wrong}</span>
@@ -3204,13 +3202,13 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
               }}>
                 {s.title}
               </span>
-              <span style={{ fontSize: '16px', fontStyle: 'italic', color: 'var(--rubric)', flexShrink: 0 }}>
+              <span style={{ fontSize: '16px', color: 'var(--rubric)', flexShrink: 0 }}>
                 {s.new_page ? `new page, ${s.section}` : s.section}
               </span>
             </div>
 
             {s.page && (
-              <div style={{ fontSize: '15px', fontStyle: 'italic', color: 'var(--ink-faint)', marginTop: '2px' }}>
+              <div style={{ fontSize: '15px', color: 'var(--ink-faint)', marginTop: '2px' }}>
                 {s.page}
               </div>
             )}
@@ -3225,7 +3223,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
 
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               {isApplied ? (
-                <span style={{ color: 'var(--moss)', fontSize: '16px', fontStyle: 'italic' }}>Applied to the vault</span>
+                <span style={{ color: 'var(--moss)', fontSize: '16px' }}>Applied to the vault</span>
               ) : (
                 <>
                   <button
@@ -3284,7 +3282,7 @@ function SpecialInstructionsRow({ notes, onNotesChange, onNotesBlur, notesSaving
         <Chevron open={open} />
         <span>Special instructions</span>
         {hasNotes && !open && (
-          <span style={{ color: 'var(--ink-faint)', fontWeight: 400, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '320px' }}>
+          <span style={{ color: 'var(--ink-faint)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '320px' }}>
             — {notes.trim().slice(0, 60)}{notes.trim().length > 60 ? '…' : ''}
           </span>
         )}
@@ -3369,11 +3367,11 @@ function GenerateWikiPanel({
           </div>
         )}
         {compact && (
-          <span style={{ fontSize: '17px', fontStyle: 'italic', color: 'var(--ink-soft)', flex: 1 }}>Re-read the transcript and rewrite the summary (the worker runs the analysis)</span>
+          <span style={{ fontSize: '17px', color: 'var(--ink-soft)', flex: 1 }}>Re-read the transcript and rewrite the summary (the worker runs the analysis)</span>
         )}
         {analysisPending && !generating && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '16px', fontStyle: 'italic', color: 'var(--ochre)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '16px', color: 'var(--ochre)' }}>
               <SpinnerIcon size={14} /> The worker is analyzing…
             </span>
             <button
@@ -3484,7 +3482,7 @@ function ChangesView({
       <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
 
       {/* Stats: one ruled sentence */}
-      <p style={{ margin: 0, paddingBottom: '12px', borderBottom: '1px solid var(--rule)', fontSize: '18px', fontStyle: 'italic', color: 'var(--ink-soft)' }}>
+      <p style={{ margin: 0, paddingBottom: '12px', borderBottom: '1px solid var(--rule)', fontSize: '18px', color: 'var(--ink-soft)' }}>
         {stats.total_corrections} correction rule{stats.total_corrections !== 1 ? 's' : ''} fixed{' '}
         <span style={{ color: 'var(--moss)' }}>{stats.total_hits} word{stats.total_hits !== 1 ? 's' : ''}</span> in this session
         {stats.hallucination_count > 0
@@ -3514,7 +3512,7 @@ function ChangesView({
           Possible hallucinations
         </h3>
         {hallucinations.length === 0 ? (
-          <div style={{ color: 'var(--ink-faint)', fontSize: '16px', fontStyle: 'italic' }}>
+          <div style={{ color: 'var(--ink-faint)', fontSize: '16px' }}>
             No suspicious lines detected.
           </div>
         ) : (
@@ -3819,7 +3817,7 @@ function EmptyTabState({ title, message }: { icon?: string; title: string; messa
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, textAlign: 'center', padding: '32px' }}>
       <div style={{ fontSize: 24, color: 'var(--ink)', marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: 17, fontStyle: 'italic', color: 'var(--ink-soft)', maxWidth: 400, lineHeight: 1.55 }}>{message}</div>
+      <div style={{ fontSize: 17, color: 'var(--ink-soft)', maxWidth: 400, lineHeight: 1.55 }}>{message}</div>
     </div>
   )
 }

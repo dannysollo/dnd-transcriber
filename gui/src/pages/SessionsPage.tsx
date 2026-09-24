@@ -6,8 +6,6 @@ import { useAuth } from '../AuthContext'
 import { useToast } from '../Toast'
 
 type SortKey = 'name' | 'date_added' | 'modified'
-type ReviewStatus = 'unreviewed' | 'reviewed' | 'published'
-type FilterKey = 'all' | 'transcript' | 'summary' | 'wiki' | 'reviewed' | 'published' | 'unreviewed'
 
 interface Session {
   name: string
@@ -15,7 +13,6 @@ interface Session {
   has_transcript: boolean
   has_summary: boolean
   has_wiki: boolean
-  review_status: ReviewStatus
   created_at: string | null
   modified_at: string | null
   description: string | null
@@ -85,17 +82,7 @@ const RefreshIcon = () => (
   </svg>
 )
 
-const REVIEW_CYCLE: Record<ReviewStatus, ReviewStatus> = {
-  unreviewed: 'reviewed',
-  reviewed: 'published',
-  published: 'unreviewed',
-}
 
-const REVIEW_BADGE: Record<ReviewStatus, { bg: string; color: string; label: string }> = {
-  unreviewed: { bg: 'color-mix(in srgb, var(--ink-faint) 12%, transparent)', color: 'var(--ink-soft)', label: 'Unreviewed' },
-  reviewed:   { bg: 'color-mix(in srgb, var(--ochre) 12%, transparent)',  color: 'var(--ochre)', label: 'Reviewed' },
-  published:  { bg: 'color-mix(in srgb, var(--moss) 12%, transparent)',   color: 'var(--moss)', label: 'Published' },
-}
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([])
@@ -112,7 +99,6 @@ export default function SessionsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [jobMap, setJobMap] = useState<Record<string, TranscriptionJob>>({})
   const [sortKey, setSortKey] = useState<SortKey>('date_added')
-  const [filterKey, setFilterKey] = useState<FilterKey>('all')
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragCounters = useRef<Record<string, number>>({})
@@ -211,21 +197,6 @@ export default function SessionsPage() {
     }
   }
 
-  const updateReviewStatus = async (sessionName: string, currentStatus: ReviewStatus) => {
-    const nextStatus = REVIEW_CYCLE[currentStatus]
-    const r = await fetch(apiUrl(`/sessions/${sessionName}/review-status`), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ review_status: nextStatus }),
-    })
-    if (r.ok) {
-      setSessions(prev => prev.map(s =>
-        s.name === sessionName ? { ...s, review_status: nextStatus } : s
-      ))
-    } else {
-      toast('Failed to update review status', 'error')
-    }
-  }
 
   const createSession = async () => {
     if (!newName.trim()) return
@@ -354,16 +325,6 @@ export default function SessionsPage() {
     return 0
   })
 
-  const filteredSessions = sortedSessions.filter(s => {
-    if (filterKey === 'all') return true
-    if (filterKey === 'transcript') return s.has_transcript
-    if (filterKey === 'summary') return s.has_summary
-    if (filterKey === 'wiki') return s.has_wiki
-    if (filterKey === 'reviewed') return s.review_status === 'reviewed'
-    if (filterKey === 'published') return s.review_status === 'published'
-    if (filterKey === 'unreviewed') return s.review_status === 'unreviewed'
-    return true
-  })
 
   const handleDragEnter = (e: React.DragEvent, name: string) => {
     e.preventDefault()
@@ -407,7 +368,7 @@ export default function SessionsPage() {
           <h1 style={{ margin: 0, fontSize: '34px', lineHeight: 1.15, color: 'var(--ink)' }}>
             Sessions
             {!loading && sessions.length > 0 && (
-              <span style={{ marginLeft: 12, fontSize: 20, fontStyle: 'italic', color: 'var(--ink-faint)' }}>
+              <span style={{ marginLeft: 12, fontSize: 20, color: 'var(--ink-faint)' }}>
                 {sessions.length} {sessions.length === 1 ? 'entry' : 'entries'}
               </span>
             )}
@@ -417,7 +378,7 @@ export default function SessionsPage() {
         {/* Sort + Filter + New session row */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 16, color: 'var(--ink-faint)', fontStyle: 'italic', marginRight: 4, minWidth: 64 }}>Order by</span>
+            <span style={{ fontSize: 16, color: 'var(--ink-faint)', marginRight: 4, minWidth: 64 }}>Order by</span>
             {(['name', 'date_added', 'modified'] as SortKey[]).map(k => (
               <button
                 key={k}
@@ -430,38 +391,6 @@ export default function SessionsPage() {
             ))}
           </div>
 
-          {/* Filter row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 16, color: 'var(--ink-faint)', fontStyle: 'italic', marginRight: 4, minWidth: 64 }}>Show</span>
-            {([
-              ['all', 'All'],
-              ['transcript', 'Transcript'],
-              ['summary', 'Summary'],
-              ['wiki', 'Wiki'],
-              ['unreviewed', 'Unreviewed'],
-              ['reviewed', 'Reviewed'],
-              ['published', 'Published'],
-            ] as [FilterKey, string][]).map(([k, label]) => (
-              <button
-                key={k}
-                onClick={() => setFilterKey(k)}
-                aria-pressed={filterKey === k}
-                className="index-link"
-              >
-                {label.toLowerCase()}
-                {k !== 'all' && sessions.length > 0 && (
-                  <span style={{ marginLeft: 4, color: 'var(--ink-faint)', fontVariantNumeric: 'lining-nums' }}>
-                    {k === 'transcript' ? sessions.filter(s => s.has_transcript).length
-                      : k === 'summary' ? sessions.filter(s => s.has_summary).length
-                      : k === 'wiki' ? sessions.filter(s => s.has_wiki).length
-                      : k === 'reviewed' ? sessions.filter(s => s.review_status === 'reviewed').length
-                      : k === 'published' ? sessions.filter(s => s.review_status === 'published').length
-                      : sessions.filter(s => s.review_status === 'unreviewed').length}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
 
           {(!authEnabled || (isLoggedIn && activeCampaign != null)) && (
             <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 14 }}>
@@ -535,18 +464,7 @@ export default function SessionsPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {filteredSessions.length === 0 && sessions.length > 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 24px', color: 'var(--text-muted)' }}>
-              <div style={{ fontSize: 16 }}>No sessions match this filter.</div>
-              <button
-                onClick={() => setFilterKey('all')}
-                style={{ marginTop: 10, background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 16 }}
-              >
-                Clear filter
-              </button>
-            </div>
-          ) : null}
-          {filteredSessions.map(s => {
+          {sortedSessions.map(s => {
             const isRenaming = renamingSession === s.name
             const isDragOver = dragOverSession === s.name
             const isUploading = uploadingFor === s.name
@@ -625,28 +543,16 @@ export default function SessionsPage() {
 
                       {/* Status badges — top right */}
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                        {(s.has_transcript || s.has_summary || s.has_wiki) && (
-                          <span style={{ fontSize: '16px', fontStyle: 'italic', color: 'var(--ink-faint)' }}>
-                            {[s.has_transcript && 'transcript', s.has_summary && 'summary', s.has_wiki && 'wiki'].filter(Boolean).join(', ')}
-                          </span>
-                        )}
                         {s.has_craig_link && !s.has_transcript && (
                           <span title="Audio comes from a Craig link" style={{ color: 'var(--text-muted)', display: 'flex' }}>
                             <LinkIcon />
                           </span>
                         )}
-                        {s.review_status !== 'unreviewed' && (!authEnabled || isLoggedIn) && (
-                          <ReviewStatusBadge
-                            status={s.review_status}
-                            onClick={() => updateReviewStatus(s.name, s.review_status)}
-                            isDm={!authEnabled || activeCampaign?.role === 'dm'}
-                          />
-                        )}
                         {job && job.status !== 'done' && (
                           <JobStatusBadge job={job} onCancel={() => cancelJob(s.name)} />
                         )}
                         {isDragOver && (
-                          <span style={{ fontSize: '14px', color: 'var(--accent-text)', fontStyle: 'italic' }}>
+                          <span style={{ fontSize: '14px', color: 'var(--accent-text)' }}>
                             Drop to upload
                           </span>
                         )}
@@ -661,7 +567,6 @@ export default function SessionsPage() {
                           margin: '0 0 8px 0',
                           fontSize: '16px',
                           color: 'var(--text-secondary)',
-                          fontStyle: 'italic',
                           lineHeight: 1.55,
                           cursor: 'pointer',
                           // Clamp to 2 lines
@@ -683,14 +588,6 @@ export default function SessionsPage() {
 
                       {/* Action buttons */}
                       <div style={{ display: 'flex', gap: '4px', flexShrink: 0, alignItems: 'center' }}>
-                        {(!authEnabled || (isLoggedIn && activeCampaign?.role === 'dm')) && (
-                          <ActionBtn
-                            title={`Mark as ${REVIEW_CYCLE[s.review_status ?? 'unreviewed']} (currently ${s.review_status ?? 'unreviewed'})`}
-                            onClick={() => updateReviewStatus(s.name, s.review_status ?? 'unreviewed')}
-                          >
-                            <ReviewIcon status={s.review_status ?? 'unreviewed'} />
-                          </ActionBtn>
-                        )}
                         {(!authEnabled || isLoggedIn) && (
                           <ActionBtn
                             title={job && job.status === 'claimed' ? 'Reset stuck job and re-queue' : 'Queue transcription'}
@@ -773,7 +670,7 @@ function EmptyState({ title, body }: { icon?: string; title: string; body: strin
   return (
     <div style={{ padding: '56px 32px', textAlign: 'center', borderTop: '1px solid var(--rule)', borderBottom: '1px solid var(--rule)' }}>
       <div style={{ color: 'var(--ink)', marginBottom: 6, fontSize: 24 }}>{title}</div>
-      <div style={{ color: 'var(--ink-soft)', fontSize: 17, fontStyle: 'italic' }}>{body}</div>
+      <div style={{ color: 'var(--ink-soft)', fontSize: 17 }}>{body}</div>
     </div>
   )
 }
@@ -795,7 +692,7 @@ function JobStatusBadge({ job, onCancel }: { job: TranscriptionJob; onCancel?: (
         title={job.status === 'error' ? (job.error_message ?? undefined) : undefined}
         style={{
           color: b.text,
-          fontSize: '16px', fontStyle: 'italic',
+          fontSize: '16px',
           whiteSpace: 'nowrap', cursor: job.status === 'error' ? 'help' : 'default',
         }}
       >
@@ -832,50 +729,4 @@ function ActionBtn({ children, onClick, title, loading, danger }: {
   )
 }
 
-/** Clickable review status badge */
-function ReviewStatusBadge({ status, onClick, isDm }: { status: ReviewStatus; onClick: () => void; isDm: boolean }) {
-  const b = REVIEW_BADGE[status]
-  return (
-    <span
-      onClick={isDm ? e => { e.stopPropagation(); onClick() } : undefined}
-      title={isDm ? `Click to advance review status (currently: ${b.label})` : b.label}
-      style={{
-        color: b.color,
-        fontSize: '16px',
-        fontStyle: 'italic',
-        cursor: isDm ? 'pointer' : 'default',
-        userSelect: 'none',
-      }}
-    >
-      {b.label.toLowerCase()}
-    </span>
-  )
-}
 
-/** Small icon for the review status action button */
-function ReviewIcon({ status }: { status: ReviewStatus }) {
-  // Checkmark states: empty circle → single check → double check
-  if (status === 'published') {
-    // Double check — already published, clicking resets to unreviewed
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="17 9 11 15 8 12"/>
-        <polyline points="22 9 16 15 13 12"/>
-      </svg>
-    )
-  }
-  if (status === 'reviewed') {
-    // Single check — reviewed, clicking marks as published
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ochre)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-    )
-  }
-  // Empty circle — unreviewed, clicking marks as reviewed
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9"/>
-    </svg>
-  )
-}

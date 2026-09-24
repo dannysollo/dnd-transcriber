@@ -118,7 +118,7 @@
       },
       "moss": {
         "role": "tertiary",
-        "displayName": "Moss (published)",
+        "displayName": "Moss (applied / success)",
         "canonical": "#46632F",
         "tonalRamp": [
           "#151E0E",
@@ -248,7 +248,7 @@
       },
       "label": {
         "displayName": "Marginal Note",
-        "purpose": "Italic labels, status words, placeholders, meta."
+        "purpose": "Upright faint labels, placeholders, meta (no italic in UI chrome)."
       },
       "figures": {
         "displayName": "Tabular Figures",
@@ -379,9 +379,9 @@
       "name": "Written Line Input",
       "kind": "input",
       "refersTo": "written-line",
-      "description": "A field written on a ruled line: underline only, italic placeholder, gilt underline on focus.",
+      "description": "A field written on a ruled line: underline only, upright faint placeholder, gilt underline on focus.",
       "html": "<input class=\"ds-written-line\" placeholder=\"Find a word, name, or phrase\">",
-      "css": ".ds-written-line{font-family:var(--font-journal,'EB Garamond',Garamond,serif);background:transparent;border:none;border-bottom:1px solid var(--rule-strong,#BFAF93);border-radius:0;padding:6px 2px;font-size:18px;color:var(--ink,#2B2622);outline:none;caret-color:var(--rubric,#9E2B25);width:320px}.ds-written-line::placeholder{color:var(--ink-faint,#716250);font-style:italic;opacity:1}.ds-written-line:focus{border-bottom-color:var(--gilt,#B08D57)}"
+      "css": ".ds-written-line{font-family:var(--font-journal,'EB Garamond',Garamond,serif);background:transparent;border:none;border-bottom:1px solid var(--rule-strong,#BFAF93);border-radius:0;padding:6px 2px;font-size:18px;color:var(--ink,#2B2622);outline:none;caret-color:var(--rubric,#9E2B25);width:320px}.ds-written-line::placeholder{color:var(--ink-faint,#716250);opacity:1}.ds-written-line:focus{border-bottom-color:var(--gilt,#B08D57)}"
     },
     {
       "name": "Cover Navigation",
@@ -403,17 +403,17 @@
       "name": "Transcript Line",
       "kind": "custom",
       "refersTo": "transcript-timestamp",
-      "description": "Time column, rubricated small-caps speaker, italic player, 19px text; the current line gets the gilt rule.",
+      "description": "Time column, rubricated small-caps speaker, faint upright player, 19px text; the current line gets the gilt rule.",
       "html": "<div class=\"ds-line ds-current\"><button class=\"ds-ts\">00:00</button><p><span class=\"ds-speaker\">Rowan</span><span class=\"ds-player\">Sam</span>We should check the <span class=\"ds-unsure\">lockbox</span> first.</p></div><div class=\"ds-line\"><button class=\"ds-ts\">00:03</button><p><span class=\"ds-speaker\">Wren</span><span class=\"ds-player\">Alex</span>Then ask the <mark class=\"ds-hit\">ferryman</mark> about the toll.</p></div><div class=\"ds-passes\">a few moments pass</div>",
-      "css": ".ds-line{font-family:var(--font-journal,'EB Garamond',Garamond,serif);display:grid;grid-template-columns:78px minmax(0,1fr);column-gap:18px;padding:4px 0;transition:background .4s}.ds-line p{margin:0;font-size:19px;line-height:1.55;color:var(--ink,#2B2622);max-width:70ch}.ds-current{background:linear-gradient(90deg,color-mix(in srgb,var(--gilt,#B08D57) 16%,transparent),transparent 70%);box-shadow:inset 2px 0 0 var(--gilt,#B08D57)}.ds-current .ds-ts{color:var(--gilt-ink,#86662F)}.ds-ts{font:inherit;background:none;border:none;padding:3px 0 0;text-align:right;font-size:15px;color:var(--ink-faint,#716250);font-variant-numeric:lining-nums tabular-nums;cursor:pointer;align-self:start}.ds-ts:hover{color:var(--rubric,#9E2B25);text-decoration:underline;text-underline-offset:3px}.ds-speaker{color:var(--rubric,#9E2B25);font-variant:small-caps;letter-spacing:.05em;font-weight:600;margin-right:.4em}.ds-player{color:var(--ink-faint,#716250);font-style:italic;font-size:.85em;margin-right:.5em}.ds-unsure{text-decoration:underline wavy color-mix(in srgb,var(--rubric,#9E2B25) 45%,transparent);text-decoration-thickness:1px;text-underline-offset:4px;cursor:help}.ds-hit{background:linear-gradient(transparent 52%,var(--highlighter,rgba(222,184,74,.5)) 52%);color:inherit}.ds-passes{font-family:var(--font-journal,'EB Garamond',Garamond,serif);display:flex;align-items:center;gap:10px;margin:10px 0 8px 96px;max-width:640px;color:var(--ink-faint,#716250);font-style:italic;font-size:14px}.ds-passes::before,.ds-passes::after{content:'';flex:1;border-top:1px dotted var(--rule-strong,#BFAF93)}"
+      "css": ".ds-line{font-family:var(--font-journal,'EB Garamond',Garamond,serif);display:grid;grid-template-columns:78px minmax(0,1fr);column-gap:18px;padding:4px 0;transition:background .4s}.ds-line p{margin:0;font-size:19px;line-height:1.55;color:var(--ink,#2B2622);max-width:70ch}.ds-current{background:linear-gradient(90deg,color-mix(in srgb,var(--gilt,#B08D57) 16%,transparent),transparent 70%);box-shadow:inset 2px 0 0 var(--gilt,#B08D57)}.ds-current .ds-ts{color:var(--gilt-ink,#86662F)}.ds-ts{font:inherit;background:none;border:none;padding:3px 0 0;text-align:right;font-size:15px;color:var(--ink-faint,#716250);font-variant-numeric:lining-nums tabular-nums;cursor:pointer;align-self:start}.ds-ts:hover{color:var(--rubric,#9E2B25);text-decoration:underline;text-underline-offset:3px}.ds-speaker{color:var(--rubric,#9E2B25);font-variant:small-caps;letter-spacing:.05em;font-weight:600;margin-right:.4em}.ds-player{color:var(--ink-faint,#716250);font-size:.85em;margin-right:.5em}.ds-unsure{text-decoration:underline wavy color-mix(in srgb,var(--rubric,#9E2B25) 45%,transparent);text-decoration-thickness:1px;text-underline-offset:4px;cursor:help}.ds-hit{background:linear-gradient(transparent 52%,var(--highlighter,rgba(222,184,74,.5)) 52%);color:inherit}.ds-passes{font-family:var(--font-journal,'EB Garamond',Garamond,serif);display:flex;align-items:center;gap:10px;margin:10px 0 8px 96px;max-width:640px;color:var(--ink-faint,#716250);font-size:14px}.ds-passes::before,.ds-passes::after{content:'';flex:1;border-top:1px dotted var(--rule-strong,#BFAF93)}"
     },
     {
       "name": "Journal Entry",
       "kind": "card",
       "refersTo": "journal-entry",
-      "description": "A session in the index: ruled, not boxed; status as italic words; actions brighten on hover.",
+      "description": "A session in the index: ruled, not boxed; title, description and date only (no status tags); actions brighten on hover.",
       "html": "<div class=\"ds-entry\"><div class=\"ds-entry-top\"><span class=\"ds-entry-title\">2-22-2026 -- The Lacuna</span><span class=\"ds-entry-meta\">transcript <em class=\"ds-reviewed\">reviewed</em></span></div><div class=\"ds-entry-bottom\"><span class=\"ds-date\">Added Feb 22, 2026</span><button class=\"ds-action\" aria-label=\"Delete\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14\"/></svg></button></div></div>",
-      "css": ".ds-entry{font-family:var(--font-journal,'EB Garamond',Garamond,serif);padding:16px 20px;border-bottom:1px solid var(--rule,#D8CCB6);transition:background-color .15s ease;max-width:760px}.ds-entry:hover{background:color-mix(in srgb,var(--gilt,#B08D57) 7%,transparent)}.ds-entry-top,.ds-entry-bottom{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.ds-entry-bottom{margin-top:10px;align-items:center}.ds-entry-title{font-size:23px;line-height:1.25;color:var(--ink,#2B2622)}.ds-entry-meta{font-size:16px;font-style:italic;color:var(--ink-faint,#716250)}.ds-reviewed{color:var(--ochre,#8A5B0C);margin-left:10px}.ds-date{font-size:14px;color:var(--ink-faint,#716250)}.ds-action{display:flex;background:transparent;border:none;border-radius:3px;padding:6px;color:var(--ink-faint,#716250);cursor:pointer;opacity:.55;transition:opacity .15s ease,color .15s ease}.ds-entry:hover .ds-action,.ds-entry:focus-within .ds-action{opacity:1}.ds-action:hover{color:var(--rubric,#9E2B25);background:color-mix(in srgb,var(--ink,#2B2622) 6%,transparent)}.ds-action:focus-visible{outline:2px solid var(--gilt,#B08D57);outline-offset:2px}"
+      "css": ".ds-entry{font-family:var(--font-journal,'EB Garamond',Garamond,serif);padding:16px 20px;border-bottom:1px solid var(--rule,#D8CCB6);transition:background-color .15s ease;max-width:760px}.ds-entry:hover{background:color-mix(in srgb,var(--gilt,#B08D57) 7%,transparent)}.ds-entry-top,.ds-entry-bottom{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.ds-entry-bottom{margin-top:10px;align-items:center}.ds-entry-title{font-size:23px;line-height:1.25;color:var(--ink,#2B2622)}.ds-entry-meta{font-size:16px;color:var(--ink-faint,#716250)}.ds-reviewed{color:var(--ochre,#8A5B0C);margin-left:10px}.ds-date{font-size:14px;color:var(--ink-faint,#716250)}.ds-action{display:flex;background:transparent;border:none;border-radius:3px;padding:6px;color:var(--ink-faint,#716250);cursor:pointer;opacity:.55;transition:opacity .15s ease,color .15s ease}.ds-entry:hover .ds-action,.ds-entry:focus-within .ds-action{opacity:1}.ds-action:hover{color:var(--rubric,#9E2B25);background:color-mix(in srgb,var(--ink,#2B2622) 6%,transparent)}.ds-action:focus-visible{outline:2px solid var(--gilt,#B08D57);outline-offset:2px}"
     },
     {
       "name": "Ribbon Bookmark",
@@ -434,12 +434,12 @@
   ],
   "narrative": {
     "northStar": "The Adventurer's Journal",
-    "overview": "The campaign is kept as a bound book. Navigation lives on a dark tooled-leather cover down the left edge; everything else is a laid-paper page written in sepia ink, with speakers rubricated in red the way a scribe marks names in a manuscript. There are no cards, panels or colored pills: structure comes from hairline rules, measured columns and generous leading. A thin gilt rule marks where you are in the book.\n\nIt is one look shown in two lights. **Daylight** is dark ink on warm paper. **Lamplit** is the same book read at night: an umber page, pale ink and a lifted, warmer rubric. The reader picks System, Daylight or Lamplit under Preferences, in a section called \"Reading light\". The resolved mode is set as `data-theme=\"light|dark\"` on `<html>`, before first paint, by an inline script in `index.html`, then kept in sync by `ThemeContext`. The choice is stored in `localStorage` under the key `dnd-color-mode`. Every token below has a value for both lights, and components use only the tokens, never raw colors.\n\nThe density is set for reading: the transcript is the product, so it runs in one column with a maximum width of 70ch, set at 19px with 1.55 leading, a figure column for time and small-caps speaker names. Tools sit in the margins. They are italic labels, underlined \"written lines\" and quiet stroke icons that brighten when you hover them. The only stagecraft is the ribbon bookmark, which drops in once to offer \"Continue from 1:23:10\", and the dotted \"a few moments pass\" rule in long silences.",
+    "overview": "The campaign is kept as a bound book. Navigation lives on a dark tooled-leather cover down the left edge; everything else is a laid-paper page written in sepia ink, with speakers rubricated in red the way a scribe marks names in a manuscript. There are no cards, panels or colored pills: structure comes from hairline rules, measured columns and generous leading. A thin gilt rule marks where you are in the book.\n\nIt is one look shown in two lights. **Daylight** is dark ink on warm paper. **Lamplit** is the same book read at night: an umber page, pale ink and a lifted, warmer rubric. The reader picks System, Daylight or Lamplit under Preferences, in a section called \"Reading light\". The resolved mode is set as `data-theme=\"light|dark\"` on `<html>`, before first paint, by an inline script in `index.html`, then kept in sync by `ThemeContext`. The choice is stored in `localStorage` under the key `dnd-color-mode`. Every token below has a value for both lights, and components use only the tokens, never raw colors.\n\nThe density is set for reading: the transcript is the product, so it runs in one column with a maximum width of 70ch, set at 19px with 1.55 leading, a figure column for time and small-caps speaker names. Tools sit in the margins. They are faint upright labels, underlined \"written lines\" and quiet stroke icons that brighten when you hover them. The only stagecraft is the ribbon bookmark, which drops in once to offer \"Continue from 1:23:10\", and the dotted \"a few moments pass\" rule in long silences.",
     "keyCharacteristics": [
       "Leather cover for navigation, paper page for content, one serif (EB Garamond) for everything.",
       "Rubric red used sparingly: speaker names, the active tab, primary actions, and the current state of play and scrub.",
       "Gilt means \"you are here\": the active nav link, the current audio line, focus rings.",
-      "Rules instead of borders, entries instead of cards, italic and small caps instead of badges.",
+      "Rules instead of borders, entries instead of cards, small caps and faint ink instead of badges.",
       "Two lights, each with a full token set; the mode is a reader preference, not a separate theme."
     ],
     "rules": [
@@ -477,7 +477,7 @@
     "dos": [
       "**Do** use the journal tokens (`--page`, `--ink`, `--rubric`, `--gilt`, `--rule` and the rest) for every color, so both lights come for free.",
       "**Do** separate content with 1px `--rule` hairlines and whitespace, and let lists be ruled entries.",
-      "**Do** set speaker and section labels in real small caps (0.04–0.06em tracking) and marginal notes in italic.",
+      "**Do** set speaker and section labels in real small caps (0.04–0.06em tracking) and marginal notes in upright faint ink.",
       "**Do** put lining tabular figures on every timestamp, duration and count.",
       "**Do** keep reading text at 19px/1.55 in a column no wider than 70ch.",
       "**Do** mark \"you are here\" with a gilt inset rule and focus with a 2px gilt outline at 2px offset.",
@@ -486,7 +486,7 @@
     ],
     "donts": [
       "**Don't** wrap content in cards, panels or bordered boxes with rounded corners. Entries are ruled, not boxed.",
-      "**Don't** use colored pills or per-speaker color chips. Speakers are rubric small caps, and status is an italic word in moss, ochre or ink.",
+      "**Don't** use colored pills, per-speaker color chips, or italic for UI labels. Speakers are rubric small caps, and states are a plain word in moss, ochre or ink.",
       "**Don't** add drop shadows to page content. Only the cover and objects lying on the page (ribbon, menus, floating player) cast.",
       "**Don't** introduce a second typeface for display or UI. A system monospace is allowed only for machine strings (regex, keys, URLs, raw markdown).",
       "**Don't** set labels in uppercase with wide tracking. Use small caps.",

@@ -84,7 +84,6 @@ typography:
     fontFamily: "'EB Garamond Variable', 'EB Garamond', Garamond, 'Times New Roman', serif"
     fontSize: "16px"
     fontWeight: 400
-    fontFeature: "italic"
   figures:
     fontFamily: "'EB Garamond Variable', 'EB Garamond', Garamond, 'Times New Roman', serif"
     fontSize: "15px"
@@ -195,13 +194,13 @@ The campaign is kept as a bound book. Navigation lives on a dark tooled-leather 
 
 It is one look shown in two lights. **Daylight** is dark ink on warm paper. **Lamplit** is the same book read at night: an umber page, pale ink and a lifted, warmer rubric. The reader picks System, Daylight or Lamplit under Preferences, in a section called "Reading light". The resolved mode is set as `data-theme="light|dark"` on `<html>`, before first paint, by an inline script in `index.html`, then kept in sync by `ThemeContext`. The choice is stored in `localStorage` under the key `dnd-color-mode`. Every token below has a value for both lights, and components use only the tokens, never raw colors.
 
-The density is set for reading: the transcript is the product, so it runs in one column with a maximum width of 70ch, set at 19px with 1.55 leading, a figure column for time and small-caps speaker names. Tools sit in the margins. They are italic labels, underlined "written lines" and quiet stroke icons that brighten when you hover them. The only stagecraft is the ribbon bookmark, which drops in once to offer "Continue from 1:23:10", and the dotted "a few moments pass" rule in long silences.
+The density is set for reading: the transcript is the product, so it runs in one column with a maximum width of 70ch, set at 19px with 1.55 leading, a figure column for time and small-caps speaker names. Tools sit in the margins. They are faint upright labels, underlined "written lines" and quiet stroke icons that brighten when you hover them. The only stagecraft is the ribbon bookmark, which drops in once to offer "Continue from 1:23:10", and the dotted "a few moments pass" rule in long silences.
 
 **Key Characteristics:**
 - Leather cover for navigation, paper page for content, one serif (EB Garamond) for everything.
 - Rubric red used sparingly: speaker names, the active tab, primary actions, and the current state of play and scrub.
 - Gilt means "you are here": the active nav link, the current audio line, focus rings.
-- Rules instead of borders, entries instead of cards, italic and small caps instead of badges.
+- Rules instead of borders, entries instead of cards, small caps and faint ink instead of badges.
 - Two lights, each with a full token set; the mode is a reader preference, not a separate theme.
 
 ## Colors
@@ -216,8 +215,8 @@ A warm, low-chroma paper-and-ink palette with two pigments, rubric red and gilt,
 - **Gilt Ink** (`--gilt-ink`): the gilt at text strength. It is used for the active line's timestamp and the insert-line control in edit mode.
 
 ### Tertiary
-- **Moss** (`--moss`): "published" status and copy-succeeded confirmation.
-- **Ochre** (`--ochre`): "reviewed" status, pending edits ("Submitted for review") and warnings.
+- **Moss** (`--moss`): success and applied states, such as "Applied to the vault", copy-succeeded confirmations, and the corrections-hit count.
+- **Ochre** (`--ochre`): pending and warning states, such as an edit sent to the DM for review, a running pipeline, and likely hallucinations.
 
 ### Neutral
 - **Cover Leather** (`--cover`), **Cover Edge** (`--cover-edge`): the sidebar surface and its 1px right edge. The leather carries a 3px dot grain made from a `radial-gradient` of white at 3.5% opacity.
@@ -241,19 +240,19 @@ Legacy aliases (`--bg-*`, `--text-*`, `--accent*`, `--success`, `--error`, `--wa
 
 ## Typography
 
-**Display Font:** EB Garamond Variable, self-hosted through `@fontsource-variable/eb-garamond` in upright and italic, falling back to EB Garamond, Garamond and Times New Roman.
+**Display Font:** EB Garamond Variable, self-hosted through `@fontsource-variable/eb-garamond` upright (the italic cut is loaded only for emphasis inside rendered markdown, such as summaries), falling back to EB Garamond, Garamond and Times New Roman.
 **Body Font:** the same face.
 **Label/Mono Font:** there is no display or label face. A system monospace appears only for machine strings (regex rules, worker keys, share URLs, raw markdown editors).
 
-**Character:** one old-style book face doing every job. Small caps give the label voice, italic gives the marginal-note voice, and the two figure styles separate prose from data.
+**Character:** one old-style book face doing every job. Small caps give the label voice, faint ink gives the marginal-note voice (italic is not used for UI chrome), and the two figure styles separate prose from data.
 
 ### Hierarchy
-- **Display** (500, 34px, 1.15): the page title, used for the session name as a chapter heading, "Sessions" and "Preferences". It shrinks to 28px on phones. An italic count in faint ink at 20px can sit beside it ("5 entries").
+- **Display** (500, 34px, 1.15): the page title, used for the session name as a chapter heading, "Sessions" and "Preferences". It shrinks to 28px on phones. A count in faint ink at 20px can sit beside it ("5 entries").
 - **Headline** (400, 23–24px, 1.25): entry titles in the journal index and empty-state titles ("The journal is empty").
 - **Title** (500–600, 19–20px, small caps with 0.04em tracking): index tabs, fieldset legends such as "Reading light" and in-transcript section headings. It is rubric when active or used as a heading, and faint ink otherwise.
-- **Reading** (400, 19px, 1.55, max 70ch): transcript lines. The speaker name is set inline in 600-weight small caps with 0.05em tracking in rubric, followed by the player name in italic faint ink at 0.85em.
+- **Reading** (400, 19px, 1.55, max 70ch): transcript lines. The speaker name is set inline in 600-weight small caps with 0.05em tracking in rubric, followed by the player name in upright faint ink at 0.85em.
 - **Body** (400, 17px): UI prose, the base size of `body`, with old-style proportional figures by default.
-- **Label** (400, 14–16px, italic): marginal notes such as "Order by", "Show", "Campaign", status words ("reviewed", "transcript, summary"), placeholders and the time-passes note.
+- **Label** (400, 14–16px, upright, ink-faint or ink-soft): marginal notes such as "Order by", "Campaign", placeholders, the "a few moments pass" note and secondary hints. Never italic: an earlier pass set these in italic, and it read as overdone.
 - **Figures** (15–16px, lining tabular): timestamps, audio time and counts. Apply them with `.tnum`, `<time>` or `data-tnum`.
 - **Brand** (22px small caps, 0.06em tracking, cover ink): "DnD Transcriber" on the cover.
 
@@ -305,29 +304,29 @@ The session view's tabs, read as a book's index.
 - **Active:** rubric at weight 600 with a 2px rubric underline drawn as an inset shadow. The Names tab can carry a rubric lining-figure count.
 
 ### Inputs / Fields
-- **Written line** (search, new-session name, Craig link): transparent, with only a 1px rule-strong bottom border, 18px ink text and an italic faint placeholder. On focus the underline turns gilt, with no box and no ring.
+- **Written line** (search, new-session name, Craig link): transparent, with only a 1px rule-strong bottom border, 18px ink text and an upright faint placeholder. On focus the underline turns gilt, with no box and no ring.
 - **Boxed fields** (textareas, dialogs, rename): a 3px radius and a rule border. On focus the border turns gilt and gains a 1px gilt ring.
 - **Select** (audio speed): underline only, ink-soft text, no box.
 - **Radios:** native, with `accent-color` set to rubric, laid out in ruled rows (Preferences).
 
 ### Navigation (the cover)
-- **Style:** a 232px leather column with the brand in small caps, an italic "Campaign" label over the campaign name between gilt-toned hairlines, then nav links.
+- **Style:** a 232px leather column with the brand in small caps, a faint "Campaign" label over the campaign name between gilt-toned hairlines, then nav links.
 - **Links:** 18px cover-ink-soft text with a 16px stroke icon at 75% opacity, padding 7px 24px and a 12px gap. On hover the text becomes cover-ink on a gilt tint.
 - **Active:** cover-ink text, the gilt tint, a 3px gilt inset rule at the left edge and the icon at full opacity. Shortcut hints ("Ctrl K") are 13px at 70% opacity.
 - **Mobile:** the same leather as a bottom bar, with the icon above the label.
 
 ### Journal entries (session index)
 - **Corner style:** none. Each entry is a block closed by a hairline bottom rule.
-- **Content:** a 23px ink title. Content present ("transcript, summary, wiki") and review status appear as italic words at the right, with no pills. Reviewed is ochre and published is moss. Below come an optional italic description clamped to two lines and a 14px faint date line.
+- **Content:** a 23px ink title, an optional one-line description in ink-soft, and an "Added …" date line in faint ink. Sessions carry no content or review-status tags; that feature was removed on request (the list only shows a Craig link icon and live job status).
 - **Hover:** a 7% gilt wash. Row actions are 16px stroke icons (`entry-action`) at 55% opacity that rise to full opacity when you hover or focus the entry. Danger actions turn rubric on hover.
-- **Filters:** `index-link` text links, 17px ink-soft. When pressed (`aria-pressed`) they turn rubric with a 1px underline at a 4px offset. Counts follow in lining figures.
+- **Order by:** `index-link` text links (name, date added, last changed), 17px ink-soft. When pressed (`aria-pressed`) they turn rubric with a 1px underline at a 4px offset. There is no status filter row.
 
 ### Transcript line
-- A two-column grid with the time on the left (`transcript-ts`: 15px lining tabular figures in faint ink, right-aligned; when clickable, it turns rubric and underlined on hover and seeks the audio). The text follows on the right: rubric small-caps speaker, italic player, then the words.
+- A two-column grid with the time on the left (`transcript-ts`: 15px lining tabular figures in faint ink, right-aligned; when clickable, it turns rubric and underlined on hover and seeks the audio). The text follows on the right: rubric small-caps speaker, faint upright player, then the words.
 - **Current line:** a gilt wash that fades out by 70% across the line, a 2px gilt inset rule, and the timestamp in gilt ink. The background transition takes 0.4s.
 - **Search hit:** the highlighter drawn across the lower 48% of the glyph box.
 - **Unsure words:** a 1px wavy underline at 45% rubric with a 4px offset, full rubric when strong, and a help cursor.
-- **Time passes:** for silences of 12s or more, a centered italic "a few moments pass" note between two dotted rule-strong lines, aligned to the text column.
+- **Time passes:** for silences of 12s or more, a centered upright "a few moments pass" note in faint ink between two dotted rule-strong lines, aligned to the text column.
 
 ### Audio bar
 Hairline controls in the page's own ink.
@@ -340,7 +339,7 @@ Hairline controls in the page's own ink.
 When a reader comes back to a session, a rubric ribbon with vertical text ("Continue from 09:41") hangs from the top right of the page and drops in once (`translateY(-100%)` to `0` over 0.7s with `cubic-bezier(0.16, 1, 0.3, 1)`). A small faint × below it dismisses it. On phones it lies horizontally above the transcript.
 
 ### Disclosures
-A stroke chevron at 11px with a 2.5px stroke points right when closed and rotates 90° when open (0.2s). It is followed by a plain label and an italic secondary note ("6 speakers *rename who's who*").
+A stroke chevron at 11px with a 2.5px stroke points right when closed and rotates 90° when open (0.2s). It is followed by a plain label and a faint secondary note ("6 speakers, rename who's who").
 
 ### Loading
 - **Skeletons** are sunk/raised gradient bars with a 2px radius that shimmer over 1.6s.
@@ -355,7 +354,7 @@ Custom inline SVG stroke icons (`Icons.tsx`) on a 24px grid with a 2px stroke, r
 ### Do:
 - **Do** use the journal tokens (`--page`, `--ink`, `--rubric`, `--gilt`, `--rule` and the rest) for every color, so both lights come for free.
 - **Do** separate content with 1px `--rule` hairlines and whitespace, and let lists be ruled entries.
-- **Do** set speaker and section labels in real small caps (0.04–0.06em tracking) and marginal notes in italic.
+- **Do** set speaker and section labels in real small caps (0.04–0.06em tracking) and marginal notes in upright faint ink.
 - **Do** put lining tabular figures on every timestamp, duration and count.
 - **Do** keep reading text at 19px/1.55 in a column no wider than 70ch.
 - **Do** mark "you are here" with a gilt inset rule and focus with a 2px gilt outline at 2px offset.
@@ -364,7 +363,7 @@ Custom inline SVG stroke icons (`Icons.tsx`) on a 24px grid with a 2px stroke, r
 
 ### Don't:
 - **Don't** wrap content in cards, panels or bordered boxes with rounded corners. Entries are ruled, not boxed.
-- **Don't** use colored pills or per-speaker color chips. Speakers are rubric small caps, and status is an italic word in moss, ochre or ink.
+- **Don't** use colored pills, per-speaker color chips, or italic for UI labels. Speakers are rubric small caps, and states are a plain word in moss, ochre or ink.
 - **Don't** add drop shadows to page content. Only the cover and objects lying on the page (ribbon, menus, floating player) cast.
 - **Don't** introduce a second typeface for display or UI. A system monospace is allowed only for machine strings (regex, keys, URLs, raw markdown).
 - **Don't** set labels in uppercase with wide tracking. Use small caps.
