@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { CoverWordmark } from './Brand'
 import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import './App.css'
 import SessionsPage from './pages/SessionsPage'
@@ -179,14 +180,13 @@ export default function App() {
       }}>
         {/* Title, as stamped on the cover */}
         <div className="sidebar-logo" style={{ padding: '28px 24px 18px' }}>
-          <div className="sc" style={{ fontSize: '22px', lineHeight: 1.15, color: 'var(--cover-ink)', letterSpacing: '0.06em' }}>
-            Co-DM
-          </div>
-          {!authEnabled && (
-            <div style={{ marginTop: '6px', fontSize: '14px', color: 'var(--cover-ink-soft)' }}>
-              Development build, v{APP_VERSION}
-            </div>
-          )}
+          <CoverWordmark>
+            {!authEnabled && (
+              <div style={{ marginTop: '6px', fontSize: '14px', color: 'var(--cover-ink-soft)' }}>
+                Development build, v{APP_VERSION}
+              </div>
+            )}
+          </CoverWordmark>
         </div>
 
         {/* Campaign: the book this cover belongs to */}

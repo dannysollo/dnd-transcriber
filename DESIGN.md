@@ -378,3 +378,10 @@ Custom inline SVG stroke icons (`Icons.tsx`) on a 24px grid with a 2px stroke, r
 - **Quotes**: saved lines are upright 22px ink in rubric curly quotes (`.quote-entry blockquote`), with speaker small caps, a source link (`session, time`), the round rubric play button, download and remove as `entry-action` icons.
 - **Unsure-word walkthrough** (`.walkthrough`): a raised slip over the page (page-raised, rule-strong border, 3px rubric top rule, the shared shadow). Its layout is a counter and confidence line, the line with the word under the highlighter, then a written-line input, an "also save as a rule" checkbox and Back / Play again / Keep-or-Fix buttons.
 - **Summary citations** (`.citation`): `[1:15:57]` in a summary renders as a small rubric underlined timestamp that opens the transcript at that line and plays.
+
+## Brand: the gilt-stamped title (2026-09-23)
+
+`gui/src/Brand.tsx`. The mark is a d20 (icosahedron) drawn in single gilt strokes (`BrandMark`). The name "Co-DM" is set in EB Garamond in `--gilt-foil` (#D8BC85 daylight, #CFAE72 lamplit), always on the leather, with a 1px dark text-shadow so it reads as pressed into the cover.
+- **Cover** (`CoverWordmark`): a 30px mark beside the name at 27px/600, over "campaign journal" in 14px small caps (cover-ink-soft).
+- **Front cover** (`FrontCover`, used by the landing and login pages): full-bleed leather, a gilt double-tooled inset frame (1px border plus an outline at 6px offset), and centered: a 64px mark, the name at clamp(56px, 9vw, 88px)/500, "a campaign journal for the whole table" in small caps, then `GiltRule` (a double rule with a center lozenge), the tagline and the Discord button. There's one entrance: the title block rises 8px and fades in over 0.7s (skipped under reduced motion).
+- The Discord button keeps Discord's own blurple (#5865f2) with 3px corners; it's a third-party mark, not a rubric action.

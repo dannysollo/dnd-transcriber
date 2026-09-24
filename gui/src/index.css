@@ -15,6 +15,7 @@
   --cover-ink: #E7D5B3;
   --cover-ink-soft: #A89170;
   --cover-hover: rgba(176, 141, 87, 0.13);
+  --gilt-foil: #D8BC85;    /* gilt stamped on the leather cover */
   /* the page */
   --page: #F5F0E6;
   --page-sunk: #EDE6D8;
@@ -76,6 +77,7 @@
   --cover-ink: #D9C7A8;
   --cover-ink-soft: #9A8465;
   --cover-hover: rgba(201, 166, 107, 0.1);
+  --gilt-foil: #CFAE72;
   --page: #1F1914;
   --page-sunk: #282019;
   --page-raised: #2C241D;
@@ -655,3 +657,57 @@ input.written-line:focus {
 @media (max-width: 768px) {
   .walkthrough { left: 50%; width: calc(100vw - 24px); bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* ── Brand: the gilt-stamped title (Brand.tsx) ─────────────────────────────── */
+.brand-cover { display: flex; align-items: center; gap: 12px; }
+.brand-name {
+  font-size: 27px; line-height: 1; font-weight: 600; letter-spacing: 0.03em;
+  color: var(--gilt-foil);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);   /* pressed into the leather */
+}
+.brand-sub {
+  margin-top: 3px; font-size: 14px; font-variant: small-caps; letter-spacing: 0.08em;
+  color: var(--cover-ink-soft);
+}
+
+.front-cover {
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; align-items: stretch; justify-content: stretch;
+  padding: 28px;
+  box-shadow: none; border: none;
+}
+.front-cover-frame {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  padding: 48px 24px;
+  border: 1px solid var(--gilt-foil);
+  outline: 1px solid color-mix(in srgb, var(--gilt-foil) 55%, transparent);
+  outline-offset: 6px;                          /* the double tooled border */
+  text-align: center;
+  color: var(--cover-ink);
+}
+.front-cover-title { display: flex; flex-direction: column; align-items: center; gap: 10px; animation: cover-title 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.brand-hero-name {
+  margin: 6px 0 0; font-size: clamp(56px, 9vw, 88px); line-height: 1; font-weight: 500; letter-spacing: 0.02em;
+  color: var(--gilt-foil); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+.brand-hero-sub { font-size: 19px; font-variant: small-caps; letter-spacing: 0.1em; color: var(--cover-ink-soft); margin-bottom: 6px; text-wrap: balance; max-width: 22em; }
+.front-cover-tagline { margin: 0; max-width: 46ch; font-size: 18px; line-height: 1.6; color: var(--cover-ink); text-wrap: pretty; }
+.front-cover .cover-note { font-size: 15px; color: var(--cover-ink-soft); max-width: 40ch; }
+@keyframes cover-title {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@media (max-width: 600px) {
+  .front-cover { padding: 14px; }
+  .brand-hero-sub { font-size: 17px; letter-spacing: 0.07em; }
+  .front-cover-frame { padding: 36px 16px; outline-offset: 4px; }
+}
+
+.discord-login {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: #5865f2; color: #fff; text-decoration: none;
+  border-radius: 3px; padding: 11px 26px; font-size: 18px; font-weight: 500;
+  margin-top: 6px;
+}
+.discord-login:hover { background: #4752c4; }
