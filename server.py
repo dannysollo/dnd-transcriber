@@ -3092,7 +3092,8 @@ def campaign_add_correction(
     from merge import apply_corrections
 
     wrong, right = body.wrong.strip(), body.right.strip()
-    if not wrong or not right or wrong.lower() == right.lower():
+    # A case-only rule ("emerentia" -> "Emerentia") is fine: rules match any casing.
+    if not wrong or not right or wrong == right:
         raise HTTPException(400, "Need a non-empty 'wrong' and a different 'right'")
     config = load_config(slug)
     corrections = dict(config.get("corrections") or {})
@@ -3106,7 +3107,9 @@ def campaign_add_correction(
         path = get_sessions_dir(slug) / body.apply_to_session / "transcript.md"
         if path.exists():
             before = path.read_text(encoding="utf-8")
-            replaced = len(re.findall(r"\b" + re.escape(wrong) + r"\b", before, flags=re.IGNORECASE))
+            # Count only the spots that change (already-correct casings don't).
+            replaced = sum(1 for m in re.finditer(r"\b" + re.escape(wrong) + r"\b", before, flags=re.IGNORECASE)
+                           if m.group(0) != right)
             if replaced:
                 path.write_text(apply_corrections(before, {wrong: right}), encoding="utf-8")
     return {"ok": True, "replaced": replaced, "previous": previous}
