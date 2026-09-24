@@ -13,6 +13,7 @@ import LandingPage from './pages/LandingPage'
 import SearchPage from './pages/SearchPage'
 import ShareView from './pages/ShareView'
 import SettingsPage from './pages/SettingsPage'
+import QuotesPage from './pages/QuotesPage'
 import { useAuth, avatarUrl } from './AuthContext'
 import { useCampaign } from './CampaignContext'
 
@@ -61,8 +62,15 @@ const EditQueueIcon = () => (
   </svg>
 )
 
+const QuotesNavIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 17c0-5 1.5-8 5-10M13 17c0-5 1.5-8 5-10" /><circle cx="6.5" cy="15.5" r="2.5" /><circle cx="15.5" cy="15.5" r="2.5" />
+  </svg>
+)
+
 const navItems = [
   { to: '/', label: 'Sessions', Icon: ScrollIcon },
+  { to: '/quotes', label: 'Quotes', Icon: QuotesNavIcon },
   { to: '/search', label: 'Search', Icon: SearchIcon },
   { to: '/campaigns', label: 'Campaigns', Icon: ShieldIcon },
   { to: '/corrections', label: 'Corrections', Icon: PencilIcon },
@@ -369,6 +377,7 @@ export default function App() {
           <Route path="/invite/:token" element={<InvitePage />} />
           <Route path="/edit-queue" element={<EditQueuePage />} />
           <Route path="/search" element={<SearchPage />} />
+          <Route path="/quotes" element={<QuotesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

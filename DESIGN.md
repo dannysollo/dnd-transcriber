@@ -371,3 +371,10 @@ Custom inline SVG stroke icons (`Icons.tsx`) on a 24px grid with a 2px stroke, r
 - **Don't** add parchment textures, burnt edges, stains or fantasy display faces. The only texture is the cover's faint dot grain.
 - **Don't** hard-code hex or `rgba()` colors in components. They break lamplit.
 - **Don't** use emoji as icons.
+
+## Additions (2026-09-23): charts, quotes, walkthrough
+
+- **Charts** (`gui/src/Charts.tsx`, `BarList`): single-series horizontal bars only. One hue per light, `--chart-bar` (#9E2B25 daylight, #DC6A5B lamplit). Both were validated with the dataviz six checks against their page colors; the lamplit rubric itself is too light for filled marks. Bars are 14px thick, square at the baseline with a 4px rounded data end, and scaled within the track minus room for the value label. Values sit at the tip in ink-soft tabular figures, never in the bar color. Every bar row is focusable and shows a tooltip (value first) on hover and focus, and every chart has a "show as table" view. Headline totals are a written sentence (`.stats-sentence`), not number tiles.
+- **Quotes**: saved lines are upright 22px ink in rubric curly quotes (`.quote-entry blockquote`), with speaker small caps, a source link (`session, time`), the round rubric play button, download and remove as `entry-action` icons.
+- **Unsure-word walkthrough** (`.walkthrough`): a raised slip over the page (page-raised, rule-strong border, 3px rubric top rule, the shared shadow). Its layout is a counter and confidence line, the line with the word under the highlighter, then a written-line input, an "also save as a rule" checkbox and Back / Play again / Keep-or-Fix buttons.
+- **Summary citations** (`.citation`): `[1:15:57]` in a summary renders as a small rubric underlined timestamp that opens the transcript at that line and plays.

@@ -21,6 +21,13 @@ import time
 import traceback
 from pathlib import Path
 
+# Desktop installs update their own worker code from GitHub before anything
+# else is imported, so a new main.py never runs against old modules. See
+# updater.py (no-op in a git checkout, with auto_update: false, or offline).
+if __name__ == "__main__":
+    from updater import run_with_update
+    run_with_update()
+
 WORKER_VERSION = "1.0.0"
 
 # ─── Log ring buffer & stdout tee ────────────────────────────────────────────

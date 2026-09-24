@@ -49,6 +49,16 @@ Then write 3–5 paragraphs covering:
 - How relationships shifted
 - Where things stand at the end / cliffhangers
 
+**Cite the moment.** End each TL;DR bullet and each paragraph with the transcript
+timestamp where it happens, copied exactly from the line it's based on, in square
+brackets: `[1:15:57]` or `[09:41]`. Use the line where the event starts. For a
+paragraph that spans a stretch of the session, cite where it begins, and add a
+second timestamp mid-paragraph only when it jumps to a clearly different scene. The
+site turns these into links that jump to that line and play the audio, so a wrong
+timestamp is worse than none: if you can't pin a point to a specific line, leave
+it uncited. Timestamps go in the summary only. Never put them in wiki suggestions
+(those bullets are written into the vault as-is).
+
 ### 2. Wiki Update Suggestions
 **This section has a strict format** — it gets parsed by `apply_updates.py` to apply
 changes automatically once Danny approves. Follow it exactly.

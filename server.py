@@ -3107,6 +3107,180 @@ def _rule_suggestions(slug: str, old_line: str, new_line: str) -> list[dict]:
     ]
 
 
+# ── Stats: talk time per session, and the campaign as a whole ────────────────
+
+@app.get("/campaigns/{slug}/sessions/{name}/stats")
+def campaign_session_stats(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    from stats import session_stats
+
+    path = get_sessions_dir(slug) / name / "transcript.md"
+    if not path.exists():
+        raise HTTPException(404, "Transcript not found")
+    return session_stats(path.read_text(encoding="utf-8"))
+
+
+@app.get("/campaigns/{slug}/stats")
+def campaign_overall_stats(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    from stats import campaign_stats
+    from unknown_words import known_terms
+
+    config = load_config(slug)
+    sessions = []
+    sessions_dir = get_sessions_dir(slug)
+    if sessions_dir.exists():
+        for d in sessions_dir.iterdir():
+            t = d / "transcript.md"
+            if d.is_dir() and not d.name.startswith(".") and t.exists():
+                sessions.append({
+                    "name": d.name,
+                    "created_at": get_or_create_session_created_at(d),
+                    "transcript": t.read_text(encoding="utf-8"),
+                })
+    terms = known_terms(config, _campaign_vault_dir(config, slug))
+    return campaign_stats(sessions, terms, config)
+
+
+# ── Quotes: lines people saved, with an audio clip of the moment ─────────────
+
+QUOTES_FILE = "quotes.json"
+MAX_CLIP_SECONDS = 90
+
+
+def _read_quotes(session_dir: Path) -> list[dict]:
+    path = session_dir / QUOTES_FILE
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+
+
+def _write_quotes(session_dir: Path, quotes: list[dict]) -> None:
+    (session_dir / QUOTES_FILE).write_text(json.dumps(quotes, indent=1), encoding="utf-8")
+
+
+class QuoteBody(BaseModel):
+    ts: str                      # line start, "MM:SS" or "H:MM:SS"
+    end_ts: Optional[str] = None # next line's start; bounds the audio clip
+    speaker: Optional[str] = None
+    text: str
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/quotes")
+def campaign_session_quotes(
+    slug: str,
+    name: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    return _read_quotes(get_sessions_dir(slug) / name)
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/quotes")
+def campaign_add_quote(
+    slug: str,
+    name: str,
+    body: QuoteBody,
+    _member=Depends(require_campaign_member("player")),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    import uuid
+    from stats import parse_timestamp
+
+    session_dir = get_sessions_dir(slug) / name
+    if not (session_dir / "transcript.md").exists():
+        raise HTTPException(404, "Session has no transcript")
+    try:
+        start = parse_timestamp(body.ts)
+        end = parse_timestamp(body.end_ts) if body.end_ts else None
+    except ValueError:
+        raise HTTPException(400, "Bad timestamp")
+    quotes = _read_quotes(session_dir)
+    if any(q["ts"] == body.ts and q["text"] == body.text for q in quotes):
+        raise HTTPException(409, "That line is already a quote")
+    quote = {
+        "id": uuid.uuid4().hex[:12],
+        "ts": body.ts,
+        "start": start,
+        "end": end if end and end > start else None,
+        "speaker": body.speaker,
+        "text": body.text.strip(),
+        "saved_by": current_user.username if current_user else None,
+        "saved_by_id": current_user.id if current_user else None,
+        "saved_at": datetime.utcnow().isoformat(),
+    }
+    quotes.append(quote)
+    _write_quotes(session_dir, quotes)
+    return quote
+
+
+@app.delete("/campaigns/{slug}/sessions/{name}/quotes/{quote_id}", status_code=204)
+def campaign_delete_quote(
+    slug: str,
+    name: str,
+    quote_id: str,
+    member=Depends(require_campaign_member("player")),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    session_dir = get_sessions_dir(slug) / name
+    quotes = _read_quotes(session_dir)
+    quote = next((q for q in quotes if q["id"] == quote_id), None)
+    if not quote:
+        raise HTTPException(404, "Quote not found")
+    # Whoever saved it, or a DM, can remove it.
+    if AUTH_ENABLED and not _is_campaign_dm(member) and (not current_user or quote.get("saved_by_id") != current_user.id):
+        raise HTTPException(403, "Only the person who saved this quote or a DM can remove it")
+    _write_quotes(session_dir, [q for q in quotes if q["id"] != quote_id])
+
+
+@app.get("/campaigns/{slug}/quotes")
+def campaign_all_quotes(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    out = []
+    sessions_dir = get_sessions_dir(slug)
+    if sessions_dir.exists():
+        for d in sessions_dir.iterdir():
+            if d.is_dir() and not d.name.startswith("."):
+                for q in _read_quotes(d):
+                    out.append({**q, "session": d.name, "has_audio": (d / "merged.mp3").exists()})
+    out.sort(key=lambda q: q.get("saved_at") or "", reverse=True)
+    return out
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/clip")
+def campaign_audio_clip(
+    slug: str,
+    name: str,
+    start: float,
+    end: Optional[float] = None,
+    download: bool = False,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    """A short MP3 cut from the session recording (stream-copied, no re-encode)."""
+    audio = get_sessions_dir(slug) / name / "merged.mp3"
+    if not audio.exists():
+        raise HTTPException(404, "This session has no recording")
+    begin = max(0.0, start - 0.5)
+    stop = end + 0.5 if end and end > start else start + 20
+    duration = min(stop - begin, MAX_CLIP_SECONDS)
+    proc = subprocess.run(
+        ["ffmpeg", "-v", "error", "-ss", f"{begin:.2f}", "-t", f"{duration:.2f}",
+         "-i", str(audio), "-c", "copy", "-f", "mp3", "pipe:1"],
+        capture_output=True, timeout=60,
+    )
+    if proc.returncode != 0 or not proc.stdout:
+        raise HTTPException(500, "Could not cut the clip")
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", name)
+    headers = {"Cache-Control": "private, max-age=86400"}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="{safe}-{int(start)}s.mp3"'
+    return Response(content=proc.stdout, media_type="audio/mpeg", headers=headers)
+
+
 # ── Craig links ───────────────────────────────────────────────────────────────
 
 def _parse_craig_url(url: str) -> tuple[str, str]:

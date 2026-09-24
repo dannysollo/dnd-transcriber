@@ -22,3 +22,4 @@ poll_interval: 30
 # diarize_tracks:           # Diarize only these tracks (partial filename match)
 #   - dannysollo
 # # diarize_all: true       # Or diarize every track
+# auto_update: false   # Desktop installs pull the latest worker code from GitHub on launch; set false to pin the current version.

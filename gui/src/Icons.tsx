@@ -39,3 +39,12 @@ export const TrashIcon = (p: IconProps) => <Svg {...p}><path d="M3 6h18M8 6V4h8v
 export const SpinnerIcon = (p: IconProps) => (
   <Svg {...p} style={{ animation: 'spin 1s linear infinite', ...p.style }}><path d="M21 12a9 9 0 1 1-6.2-8.6" /></Svg>
 )
+/** Opening quotation marks: save a line as a quote. `filled` when already saved. */
+export const QuoteIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => (
+  <Svg {...p}>
+    <path d="M4 17c0-5 1.5-8 5-10M13 17c0-5 1.5-8 5-10" />
+    <circle cx="6.5" cy="15.5" r="2.5" fill={filled ? 'currentColor' : 'none'} />
+    <circle cx="15.5" cy="15.5" r="2.5" fill={filled ? 'currentColor' : 'none'} />
+  </Svg>
+)
+export const DownloadIcon = (p: IconProps) => <Svg {...p}><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></Svg>

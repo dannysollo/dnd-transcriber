@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Chevron, CloseIcon, CopyIcon, PauseIcon, PlayIcon, SpinnerIcon } from '../Icons'
+import { Chevron, CloseIcon, CopyIcon, PauseIcon, PlayIcon, QuoteIcon, SpinnerIcon } from '../Icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
 import { useToast } from '../Toast'
 import { RuleSuggestionBar, type SessionRuleSuggestion, addCorrectionRule } from '../RuleSuggestions'
 import ReactMarkdown from 'react-markdown'
+import { BarList } from '../Charts'
+import { formatDuration, percent } from '../chartFormat'
 
 
 interface AudioFile {
@@ -205,7 +207,7 @@ interface WikiSuggestion {
   description: string | null
 }
 
-type Tab = 'transcript' | 'summary' | 'wiki' | 'changes' | 'names'
+type Tab = 'transcript' | 'summary' | 'wiki' | 'changes' | 'names' | 'stats'
 
 export default function SessionView() {
   const { name } = useParams<{ name: string }>()
@@ -228,6 +230,26 @@ export default function SessionView() {
   })
   const [namesKey, setNamesKey] = useState(0)
   const [namesPending, setNamesPending] = useState(0)
+  const [walkItems, setWalkItems] = useState<WalkItem[] | null>(null)
+  const walkStopRef = useRef<number | null>(null)
+  const canEditTranscript = !activeCampaign || activeCampaign.role !== 'spectator'
+  const unsureCount = useMemo(
+    () => (transcript && confidence ? buildWalkItems(transcript, confidence).length : 0),
+    [transcript, confidence],
+  )
+  /** Play [from, until) of the recording, for the walkthrough. */
+  const playMoment = (from: number, until: number) => {
+    const el = audioRef.current
+    if (!el) return
+    if (walkStopRef.current) window.clearTimeout(walkStopRef.current)
+    el.currentTime = from
+    el.play().catch(() => {})
+    walkStopRef.current = window.setTimeout(() => el.pause(), Math.max(1, until - from) * 1000 / (el.playbackRate || 1))
+  }
+  const stopMoment = () => {
+    if (walkStopRef.current) window.clearTimeout(walkStopRef.current)
+    audioRef.current?.pause()
+  }
   const tabsRowRef = useRef<HTMLDivElement | null>(null)
   // On narrow screens the tab row scrolls; keep the active tab in view.
   useEffect(() => {
@@ -699,12 +721,45 @@ export default function SessionView() {
     setTab('transcript')
   }
 
+  // Every speech line's start, for mapping a time (from a summary citation
+  // or a #t= link) to the line it falls in.
+  const lineStarts = useMemo(() => {
+    const out: { seconds: number; ts: string }[] = []
+    for (const line of transcript?.split('\n') ?? []) {
+      const m = line.match(/^\*\*\[([^\]]+)\]/)
+      if (m) out.push({ seconds: parseTimestampToSeconds(m[1]), ts: m[1] })
+    }
+    return out
+  }, [transcript])
+
+  /** Open the transcript at the line containing `seconds` and play from there. */
+  const jumpToTime = (seconds: number, play = true) => {
+    let hit = lineStarts[0]
+    for (const l of lineStarts) {
+      if (l.seconds <= seconds) hit = l
+      else break
+    }
+    if (!hit) return
+    setSearch('')
+    setTab('transcript')
+    setTargetTimestamp(hit.ts)
+    if (play && audioRef.current) seekTo(seconds)
+  }
+
+  // Deep link: /sessions/<name>#t=1:15:57 (used by the Quotes page).
+  useEffect(() => {
+    const m = window.location.hash.match(/^#t=([\d:]+)$/)
+    if (!m || lineStarts.length === 0) return
+    jumpToTime(parseTimestampToSeconds(m[1]), false)
+    history.replaceState(null, '', window.location.pathname)
+  }, [lineStarts])
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'transcript', label: 'Transcript' },
     { id: 'summary', label: 'Summary' },
     { id: 'wiki', label: 'Wiki' },
     { id: 'changes', label: 'Changes' },
-    ...(activeCampaign ? [{ id: 'names' as Tab, label: 'Names' }] : []),
+    ...(activeCampaign ? [{ id: 'names' as Tab, label: 'Names' }, { id: 'stats' as Tab, label: 'Stats' }] : []),
   ]
 
   return (
@@ -1171,6 +1226,17 @@ export default function SessionView() {
                     <span style={{ color: 'var(--ink-faint)', marginLeft: 6 }}>{showConfidence ? 'shown' : 'hidden'}</span>
                   </button>
                 )}
+                {canEditTranscript && unsureCount > 0 && (
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={() => { setSearch(''); setWalkItems(buildWalkItems(transcript!, confidence)) }}
+                    title="Step through each word Whisper wasn't sure about, with the audio"
+                    style={{ flexShrink: 0 }}
+                  >
+                    Review {unsureCount} unsure word{unsureCount !== 1 ? 's' : ''}
+                  </button>
+                )}
                 {search && transcript && (() => {
                   const q = search.toLowerCase()
                   const count = transcript.split('\n').filter(l => l.toLowerCase().includes(q)).length
@@ -1378,6 +1444,7 @@ export default function SessionView() {
               sessionName={name!}
               endpoint="summary"
               onSaved={load}
+              onJump={jumpToTime}
             />
           </div>
         ) : tab === 'wiki' ? (
@@ -1397,6 +1464,10 @@ export default function SessionView() {
             analysisPending={analysisPending}
             onCancelAnalysis={cancelAnalysis}
           />
+        ) : tab === 'stats' ? (
+          transcript ? <SessionStatsPanel sessionName={name!} /> : (
+            <EmptyTabState title="No transcript yet" message="Talk time is counted once there's a transcript." />
+          )
         ) : tab === 'names' ? (
           transcript ? (
             <UnknownWordsPanel
@@ -1418,6 +1489,19 @@ export default function SessionView() {
           />
         )}
       </div>
+
+      {walkItems && transcript && tab === 'transcript' && (
+        <UnsureWalkthrough
+          items={walkItems}
+          transcript={transcript}
+          sessionName={name!}
+          onClose={() => { stopMoment(); setWalkItems(null) }}
+          onShowLine={ts => setTargetTimestamp(ts)}
+          onPlay={playMoment}
+          onStop={stopMoment}
+          onChanged={() => load({ silent: true })}
+        />
+      )}
 
       {/* Mini audio player: shown on tabs where the main bar is hidden, so playback stays reachable */}
       {audioFiles.length > 0 && !mainAudioVisible && (
@@ -1574,6 +1658,36 @@ function TranscriptView({
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => { scroller.removeEventListener('scroll', onScroll); window.clearTimeout(pending) }
   }, [storageKey, editMode, content])
+  // Quotes: lines saved to the campaign's quote board.
+  const { toast } = useToast()
+  const canQuote = !!activeCampaign && activeCampaign.role !== 'spectator'
+  const [quotes, setQuotes] = useState<{ id: string; ts: string; text: string }[]>([])
+  useEffect(() => {
+    if (!activeCampaign || !sessionName) return
+    fetch(apiUrl(`/sessions/${sessionName}/quotes`))
+      .then(r => (r.ok ? r.json() : []))
+      .then(setQuotes)
+      .catch(() => setQuotes([]))
+  }, [activeCampaign?.slug, sessionName])
+  const quoteFor = (line: ParsedLine) => quotes.find(q => q.ts === line.timestamp && q.text === (line.text ?? '').trim())
+  const toggleQuote = async (line: ParsedLine, nextTs?: string) => {
+    if (!sessionName || !line.timestamp) return
+    const existing = quoteFor(line)
+    if (existing) {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/quotes/${existing.id}`), { method: 'DELETE' })
+      if (r.ok || r.status === 204) { setQuotes(prev => prev.filter(q => q.id !== existing.id)); toast('Quote removed', 'info') }
+      else toast(r.status === 403 ? 'Only whoever saved this quote, or a DM, can remove it' : 'Could not remove the quote', 'error')
+      return
+    }
+    const r = await fetch(apiUrl(`/sessions/${sessionName}/quotes`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ts: line.timestamp, end_ts: nextTs ?? null, speaker: line.speaker ?? null, text: line.text ?? '' }),
+    })
+    if (r.ok) { const q = await r.json(); setQuotes(prev => [...prev, q]); toast('Saved to Quotes', 'success') }
+    else toast('Could not save the quote', 'error')
+  }
+
   const continueReading = () => {
     if (!ribbonTs) return
     const el = pageRef.current?.querySelector<HTMLElement>(`[data-ts="${ribbonTs}"]`)
@@ -1982,6 +2096,7 @@ function TranscriptView({
               <div
                 data-line-idx={line.lineIdx ?? i}
                 data-ts={line.timestamp}
+                className="transcript-line"
                 ref={el => {
                   if (isActive) activeLineRef.current = el
                   if (isTarget) targetLineRef.current = el
@@ -2016,6 +2131,21 @@ function TranscriptView({
                   {who.name && <span className="speaker-name" style={{ marginRight: '0.4em' }}>{who.name}</span>}
                   {who.player && <span className="speaker-player" style={{ marginRight: '0.5em' }}>{who.player}</span>}
                   {highlight(line)}
+                  {canQuote && (() => {
+                    const saved = !!quoteFor(line)
+                    const next = visible.slice(i + 1).find(l => l.type === 'speech')
+                    return (
+                      <button
+                        type="button"
+                        className={'quote-toggle' + (saved ? ' saved' : '')}
+                        onClick={() => toggleQuote(line, next?.timestamp)}
+                        aria-label={saved ? 'Remove from quotes' : 'Save this line as a quote'}
+                        title={saved ? 'Saved to Quotes (click to remove)' : 'Save to Quotes'}
+                      >
+                        <QuoteIcon size={15} filled={saved} />
+                      </button>
+                    )
+                  })()}
                 </p>
               </div>
             </React.Fragment>
@@ -2027,7 +2157,10 @@ function TranscriptView({
   )
 }
 
-function MarkdownView({ content, emptyMsg }: { content: string | null; emptyMsg: string }) {
+// "[1:15:57]" / "[09:41]" citations in a summary -> links into the transcript.
+const CITATION_RE = /\[(\d{1,2}:\d{2}(?::\d{2})?)\](?!\()/g
+
+function MarkdownView({ content, emptyMsg, onJump }: { content: string | null; emptyMsg: string; onJump?: (seconds: number) => void }) {
   if (!content) {
     return (
       <div style={{ color: 'var(--ink-faint)', textAlign: 'center', paddingTop: '60px' }}>
@@ -2039,6 +2172,18 @@ function MarkdownView({ content, emptyMsg }: { content: string | null; emptyMsg:
     <div style={{ maxWidth: '820px', color: 'var(--ink)', fontSize: '17px', lineHeight: 1.7 }}>
       <ReactMarkdown
         components={{
+          a: ({ href, children }) => {
+            const t = href?.match(/^#t=([\d:]+)$/)
+            if (t && onJump) {
+              return (
+                <button type="button" className="citation" onClick={() => onJump(parseTimestampToSeconds(t[1]))}
+                  title={`Open the transcript at ${t[1]} and play`}>
+                  {children}
+                </button>
+              )
+            }
+            return <a href={href} target="_blank" rel="noreferrer">{children}</a>
+          },
           h1: ({ children }) => <h1 style={{ color: 'var(--ink)', fontSize: '22px', marginBottom: '12px' }}>{children}</h1>,
           h2: ({ children }) => <h2 style={{ color: 'var(--ink)', fontSize: '18px', marginTop: '24px', marginBottom: '8px' }}>{children}</h2>,
           h3: ({ children }) => <h3 style={{ color: 'var(--ink)', fontSize: '17px', marginTop: '16px', marginBottom: '6px' }}>{children}</h3>,
@@ -2052,7 +2197,7 @@ function MarkdownView({ content, emptyMsg }: { content: string | null; emptyMsg:
           ),
         }}
       >
-        {content}
+        {onJump ? content.replace(CITATION_RE, '[$1](#t=$1)') : content}
       </ReactMarkdown>
     </div>
   )
@@ -2064,7 +2209,9 @@ function MarkdownEditView({
   sessionName,
   endpoint,
   onSaved,
+  onJump,
 }: {
+  onJump?: (seconds: number) => void
   content: string | null
   emptyMsg: string
   sessionName: string
@@ -2189,7 +2336,7 @@ function MarkdownEditView({
           }}
         />
       ) : (
-        <MarkdownView content={content} emptyMsg={emptyMsg} />
+        <MarkdownView content={content} emptyMsg={emptyMsg} onJump={onJump} />
       )}
     </div>
   )
@@ -3568,6 +3715,221 @@ function ChangesView({
 
       </div>
       )}
+    </div>
+  )
+}
+
+// ─── Unsure-word walkthrough ──────────────────────────────────────────────────
+// Steps through words Whisper decoded with low confidence, oldest first: plays
+// the moment, shows the word in its line, and lets the reviewer keep it or fix
+// it (optionally also saving the fix as a correction rule).
+
+const WALK_THRESHOLD = 0.5
+const LINE_PARTS = /^(\*\*\[([^\]]+)\] ([^:]+):\*\* )(.*)$/
+
+interface WalkItem { lineIdx: number; ts: string; seconds: number; speaker: string; word: string; prob: number }
+
+function wordRegex(word: string) {
+  return new RegExp(`(^|[^A-Za-z0-9'])(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?![A-Za-z0-9'])`, 'i')
+}
+
+function buildWalkItems(transcript: string, confidence: ConfidenceMap | null): WalkItem[] {
+  if (!confidence) return []
+  const lines = transcript.split('\n')
+  const byTs = new Map<string, number[]>()
+  lines.forEach((l, i) => {
+    const m = l.match(LINE_PARTS)
+    if (m) byTs.set(m[2], [...(byTs.get(m[2]) ?? []), i])
+  })
+  const items: WalkItem[] = []
+  const seen = new Set<string>()
+  for (const entry of confidence.lines) {
+    const candidates = byTs.get(entry.ts) ?? []
+    const lineIdx = candidates.find(i => lines[i].includes(`] ${entry.speaker}:**`)) ?? candidates[0]
+    if (lineIdx === undefined) continue
+    const m = lines[lineIdx].match(LINE_PARTS)!
+    for (const w of entry.words) {
+      if (w.prob >= WALK_THRESHOLD || w.word.length < 2) continue
+      if (!wordRegex(w.word).test(m[4])) continue // already corrected since
+      const key = `${lineIdx}|${w.word.toLowerCase()}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      items.push({ lineIdx, ts: m[2], seconds: parseTimestampToSeconds(m[2]), speaker: m[3], word: w.word, prob: w.prob })
+    }
+  }
+  return items.sort((a, b) => a.seconds - b.seconds || a.lineIdx - b.lineIdx)
+}
+
+function UnsureWalkthrough({
+  items, transcript, sessionName, onClose, onShowLine, onPlay, onStop, onChanged,
+}: {
+  items: WalkItem[]
+  transcript: string
+  sessionName: string
+  onClose: () => void
+  onShowLine: (ts: string) => void
+  onPlay: (from: number, until: number) => void
+  onStop: () => void
+  onChanged: () => void
+}) {
+  const apiUrl = useApiUrl()
+  const { activeCampaign } = useCampaign()
+  const { toast } = useToast()
+  const [idx, setIdx] = useState(0)
+  const [value, setValue] = useState(items[0]?.word ?? '')
+  const [addRule, setAddRule] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [fixed, setFixed] = useState(0)
+  const lines = useMemo(() => transcript.split('\n'), [transcript])
+  const item = items[idx]
+
+  // Each stop: bring the line into view and play from just before it to the
+  // next line (or 8s at most).
+  useEffect(() => {
+    if (!item) return
+    setValue(item.word)
+    setAddRule(false)
+    onShowLine(item.ts)
+    const next = items.slice(idx + 1).find(i => i.lineIdx !== item.lineIdx)?.seconds
+    onPlay(Math.max(0, item.seconds - 0.5), Math.min(next ?? item.seconds + 8, item.seconds + 8))
+  }, [idx])
+  useEffect(() => () => onStop(), [])
+
+  if (!item) {
+    return (
+      <div className="walkthrough" role="dialog" aria-label="Unsure words">
+        <div style={{ fontSize: 19 }}>All {items.length} unsure words reviewed{fixed ? `, ${fixed} fixed` : ''}.</div>
+        <button className="btn-primary" onClick={onClose} autoFocus>Done</button>
+      </div>
+    )
+  }
+
+  const text = lines[item.lineIdx]?.match(LINE_PARTS)?.[4] ?? ''
+  const hit = wordRegex(item.word).exec(text)
+  const at = hit ? hit.index + hit[1].length : -1
+  const before = at >= 0 ? text.slice(Math.max(0, at - 90), at) : text
+  const after = at >= 0 ? text.slice(at + item.word.length, at + item.word.length + 90) : ''
+  const changed = value.trim() !== '' && value.trim() !== item.word
+
+  const advance = () => setIdx(i => i + 1)
+
+  const applyFix = async () => {
+    const m = lines[item.lineIdx]?.match(LINE_PARTS)
+    if (!m || !changed) return
+    const replacement = value.trim()
+    const newText = m[4].replace(wordRegex(item.word), (_all, pre) => `${pre}${replacement}`)
+    setBusy(true)
+    try {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/transcript/line/${item.lineIdx + 1}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: m[1] + newText }),
+      })
+      if (!r.ok) { toast('Could not save the fix', 'error'); return }
+      if (r.status === 202) toast('Fix sent to the DM for review', 'info')
+      lines[item.lineIdx] = m[1] + newText
+      if (addRule && activeCampaign) {
+        const n = await addCorrectionRule(activeCampaign.slug, item.word, replacement, sessionName)
+        if (n === null) toast('Fixed, but the rule could not be saved', 'error')
+        else if (n > 0) toast(`Rule saved: ${item.word} → ${replacement} (${n} more fixed)`, 'success')
+      }
+      setFixed(f => f + 1)
+      onChanged()
+      advance()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="walkthrough" role="dialog" aria-label="Unsure words"
+      onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
+      <div className="walkthrough-head">
+        <span>Unsure word {idx + 1} of {items.length}</span>
+        <span style={{ color: 'var(--ink-faint)' }}>at {item.ts}, Whisper was {Math.round(item.prob * 100)}% sure</span>
+        <span style={{ flex: 1 }} />
+        <button type="button" className="entry-action" onClick={onClose} aria-label="Close walkthrough"><CloseIcon /></button>
+      </div>
+      <p className="walkthrough-line">
+        <span className="speaker-name" style={{ marginRight: 6 }}>{splitSpeaker(item.speaker).name}</span>
+        {before.length < at ? '…' : ''}{before}
+        <mark className="search-hit">{at >= 0 ? text.slice(at, at + item.word.length) : item.word}</mark>
+        {after}{at + item.word.length + 90 < text.length ? '…' : ''}
+      </p>
+      <form
+        className="walkthrough-actions"
+        onSubmit={e => { e.preventDefault(); if (changed) applyFix(); else advance() }}
+      >
+        <input
+          autoFocus
+          className="written-line"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          aria-label={`Correct spelling of ${item.word}`}
+          style={{ width: 200 }}
+        />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, color: 'var(--ink-soft)' }}>
+          <input type="checkbox" checked={addRule} onChange={e => setAddRule(e.target.checked)} disabled={!changed}
+            style={{ accentColor: 'var(--rubric)' }} />
+          also save as a rule
+        </label>
+        <span style={{ flex: 1 }} />
+        <button type="button" className="btn-ghost" onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0}>Back</button>
+        <button type="button" className="btn-ghost"
+          onClick={() => onPlay(Math.max(0, item.seconds - 0.5), item.seconds + 8)}>Play again</button>
+        <button type="submit" className={changed ? 'btn-primary' : 'btn-secondary'} disabled={busy}>
+          {changed ? 'Fix' : 'Keep'}
+        </button>
+      </form>
+      <div style={{ fontSize: 14, color: 'var(--ink-faint)' }}>Enter keeps the word (or applies your fix). Esc closes.</div>
+    </div>
+  )
+}
+
+// ─── Stats tab: talk time per speaker ─────────────────────────────────────────
+
+interface SessionStats {
+  duration_seconds: number
+  lines: number
+  words: number
+  speakers: { label: string; name: string; player: string; lines: number; words: number; seconds: number; share: number }[]
+}
+
+function SessionStatsPanel({ sessionName }: { sessionName: string }) {
+  const apiUrl = useApiUrl()
+  const [stats, setStats] = useState<SessionStats | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    fetch(apiUrl(`/sessions/${sessionName}/stats`))
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then(setStats)
+      .catch(() => setFailed(true))
+  }, [sessionName, apiUrl])
+
+  if (failed) return <EmptyTabState title="Stats unavailable" message="The transcript couldn't be counted. Try reloading." />
+  if (!stats) return <div className="skeleton" style={{ height: 200, maxWidth: 820 }} />
+
+  return (
+    <div style={{ maxWidth: '820px' }}>
+      <p className="stats-sentence">
+        {formatDuration(stats.duration_seconds)} at the table, {stats.words.toLocaleString()} words
+        across {stats.lines.toLocaleString()} lines from {stats.speakers.length} speaker{stats.speakers.length !== 1 ? 's' : ''}.
+      </p>
+      <p style={{ margin: '0 0 28px', fontSize: 15, color: 'var(--ink-faint)' }}>
+        Talk time is estimated from words spoken, at about 160 words a minute.
+      </p>
+      <BarList
+        title="Talk time"
+        valueHeader="Talk time"
+        rows={stats.speakers.map(sp => ({
+          key: sp.label,
+          label: <><span className="speaker-name">{sp.name}</span>{sp.player && <span className="speaker-player" style={{ marginLeft: 6 }}>{sp.player}</span>}</>,
+          labelText: sp.player ? `${sp.name} (${sp.player})` : sp.name,
+          value: sp.seconds,
+          display: `${formatDuration(sp.seconds)}, ${percent(sp.share)}`,
+          details: [`${sp.words.toLocaleString()} words`, `${sp.lines.toLocaleString()} lines`],
+        }))}
+      />
     </div>
   )
 }
