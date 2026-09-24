@@ -51,102 +51,124 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
 <title>DnD Transcriber Worker</title>
 <style>
+  /* The site's journal look (see DESIGN.md): laid paper and ink by day, the
+     same page by lamplight when the system is in dark mode. */
+  @font-face {
+    font-family: 'EB Garamond Worker';
+    src: url('/font/eb-garamond.woff2') format('woff2');
+    font-weight: 400 800;
+    font-display: swap;
+  }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #0f1117;
-    --panel: #1e2130;
-    --panel2: #252840;
-    --border: #2e3350;
-    --accent: #7c6af7;
-    --accent2: #5db0f7;
-    --text: #d4d8f0;
-    --muted: #8890b0;
-    --ok: #4caf82;
-    --warn: #f5c543;
-    --err: #e05c68;
-    --font: 'Segoe UI', system-ui, sans-serif;
+    color-scheme: light;
+    --cover: #2A1E17; --cover-ink: #E7D5B3; --gilt: #B08D57;
+    --page: #F5F0E6; --sunk: #EDE6D8; --rule: #D8CCB6; --rule-strong: #BFAF93;
+    --ink: #2B2622; --ink-soft: #5E5347; --ink-faint: #716250;
+    --rubric: #9E2B25; --rubric-hover: #85231E; --on-rubric: #FBF5EA;
+    --moss: #46632F; --ochre: #8A5B0C;
+    --font: 'EB Garamond Worker', 'EB Garamond', Garamond, 'Times New Roman', serif;
     --mono: 'Consolas', 'Fira Mono', monospace;
   }
-  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.5; }
-  header {
-    background: var(--panel); border-bottom: 1px solid var(--border);
-    padding: 14px 24px; display: flex; align-items: center; gap: 16px;
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --cover: #120D0A; --cover-ink: #D9C7A8; --gilt: #C9A66B;
+      --page: #1F1914; --sunk: #282019; --rule: #3E3329; --rule-strong: #57493B;
+      --ink: #EAE0CE; --ink-soft: #BFAF97; --ink-faint: #9C8C73;
+      --rubric: #E57A6C; --rubric-hover: #EE9285; --on-rubric: #1F1914;
+      --moss: #9DBB7E; --ochre: #DDAA4B;
+    }
   }
-  header h1 { font-size: 18px; font-weight: 600; color: var(--accent); }
-  header .meta { color: var(--muted); font-size: 12px; margin-left: auto; text-align: right; }
-  .container { max-width: 1100px; margin: 0 auto; padding: 20px 24px; display: grid; gap: 20px; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; }
-  .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 14px; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  body { background: var(--page); color: var(--ink); font-family: var(--font); font-size: 17px; line-height: 1.5; font-variant-numeric: lining-nums; }
+  ::selection { background: color-mix(in srgb, var(--rubric) 18%, transparent); }
+  :focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
+  header {
+    background: var(--cover); color: var(--cover-ink);
+    padding: 16px 32px; display: flex; align-items: center; gap: 14px;
+    border-bottom: 1px solid var(--gilt);
+  }
+  header h1 { font-size: 22px; font-weight: 500; font-variant: small-caps; letter-spacing: .06em; }
+  header .meta { font-size: 15px; margin-left: auto; text-align: right; opacity: .8; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 28px 32px 40px; display: grid; gap: 36px; }
+  .card h2 { font-size: 19px; font-weight: 600; font-variant: small-caps; letter-spacing: .04em; color: var(--rubric);
+             border-bottom: 1px solid var(--rule); padding-bottom: 4px; margin-bottom: 14px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  @media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
   /* Config */
-  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; }
-  .field { display: flex; flex-direction: column; gap: 4px; }
-  .field label { font-size: 11px; color: var(--muted); }
-  .field .val { color: var(--text); background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 13px; }
-  .field input, .field select { background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; color: var(--text); font-size: 13px; outline: none; }
-  .field input:focus, .field select:focus { border-color: var(--accent); }
-  .btn { background: var(--accent); color: #fff; border: none; border-radius: 5px; padding: 7px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
-  .btn:hover { opacity: .85; }
-  .btn.secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
-  .btn.secondary:hover { border-color: var(--accent); color: var(--accent); }
-  .save-row { margin-top: 12px; display: flex; align-items: center; gap: 10px; }
-  #save-msg { font-size: 12px; color: var(--ok); }
+  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; }
+  .field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .field label { font-size: 15px; color: var(--ink-soft); }
+  .field .val { color: var(--ink); font-size: 17px; overflow-wrap: anywhere; }
+  .field input, .field select {
+    background: transparent; border: none; border-bottom: 1px solid var(--rule-strong); border-radius: 0;
+    padding: 4px 2px; color: var(--ink); font: inherit; font-size: 17px; outline: none;
+  }
+  .field input:focus, .field select:focus { border-bottom-color: var(--gilt); }
+  .btn { background: var(--rubric); color: var(--on-rubric); border: 1px solid var(--rubric); border-radius: 3px;
+         padding: 5px 16px; font: inherit; font-size: 16px; cursor: pointer; }
+  .btn:hover { background: var(--rubric-hover); border-color: var(--rubric-hover); }
+  .btn.secondary { background: transparent; color: var(--ink-soft); border-color: var(--rule-strong); }
+  .btn.secondary:hover { color: var(--ink); border-color: var(--ink-faint); }
+  .save-row { margin-top: 16px; display: flex; align-items: center; gap: 12px; }
+  #save-msg { font-size: 16px; color: var(--moss); }
+  .sub { margin: 24px 0 12px; }
   /* Sessions table */
   table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; padding: 6px 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
-  td { padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
-  tr:last-child td { border-bottom: none; }
-  tr:hover td { background: rgba(255,255,255,.03); }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
-  .badge.pending { background: rgba(245,197,67,.15); color: var(--warn); }
-  .badge.done, .badge.complete, .badge.transcribed { background: rgba(76,175,130,.15); color: var(--ok); }
-  .badge.error, .badge.failed { background: rgba(224,92,104,.15); color: var(--err); }
-  .badge.processing, .badge.claimed { background: rgba(93,176,247,.15); color: var(--accent2); }
-  .tbl-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-  /* Logs */
+  th { text-align: left; padding: 4px 8px 6px 0; font-size: 15px; font-weight: 600; color: var(--ink-soft); border-bottom: 1px solid var(--rule-strong); }
+  td { padding: 8px 8px 8px 0; border-bottom: 1px solid var(--rule); font-size: 16px; }
+  tr:hover td { background: color-mix(in srgb, var(--gilt) 7%, transparent); }
+  .badge { font-size: 16px; color: var(--ink-soft); }
+  .badge.pending { color: var(--ochre); }
+  .badge.done, .badge.complete, .badge.transcribed { color: var(--moss); }
+  .badge.error, .badge.failed { color: var(--rubric); }
+  .badge.processing, .badge.claimed { color: var(--ink); font-weight: 600; }
+  .tbl-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; border-bottom: 1px solid var(--rule); padding-bottom: 4px; }
+  .tbl-header h2 { border: none; padding: 0; }
+  /* Logs: machine output, so monospace on a sunk panel */
   #log-panel {
-    background: #0a0c12; border: 1px solid var(--border); border-radius: 5px;
-    font-family: var(--mono); font-size: 12px; color: #9fa8d4;
-    height: 260px; overflow-y: auto; padding: 10px 12px;
+    background: var(--sunk); border: 1px solid var(--rule); border-radius: 3px;
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft); line-height: 1.55;
+    height: 300px; overflow-y: auto; padding: 10px 12px;
     white-space: pre-wrap; word-break: break-all;
   }
-  .log-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  #autoscroll-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; color: var(--muted); }
-  /* Status dot */
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-  .empty { color: var(--muted); font-style: italic; text-align: center; padding: 20px; }
+  .log-controls { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid var(--rule); padding-bottom: 4px; }
+  .log-controls h2 { border: none; padding: 0; margin: 0; }
+  #autoscroll-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 15px; color: var(--ink-soft); }
+  #autoscroll-toggle input { accent-color: var(--rubric); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #9DBB7E; display: inline-block; }
+  .empty { color: var(--ink-faint); text-align: center; padding: 20px; }
+  * { scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent; }
 </style>
 </head>
 <body>
 <header>
-  <span class="dot"></span>
+  <span class="dot" title="Worker running"></span>
   <h1>DnD Transcriber Worker</h1>
   <div class="meta">
-    <div>Uptime: <span id="uptime">…</span></div>
-    <div id="server-url" style="color:var(--accent2)">…</div>
+    <div>Running for <span id="uptime">…</span></div>
+    <div id="server-url">…</div>
   </div>
 </header>
 
 <div class="container">
   <div class="grid2">
-    <!-- Config card -->
-    <div class="card">
+    <section class="card">
       <h2>Configuration</h2>
       <div class="config-grid" id="config-display"></div>
-      <hr style="border-color:var(--border);margin:16px 0">
-      <h2>Edit Settings</h2>
+      <h2 class="sub">Change settings</h2>
       <div class="config-grid">
         <div class="field">
-          <label>Poll Interval (s)</label>
+          <label for="ed-poll_interval">Check for jobs every (seconds)</label>
           <input type="number" id="ed-poll_interval" min="5" max="3600">
         </div>
         <div class="field">
-          <label>Diarize Speakers</label>
+          <label for="ed-diarize_speakers">Speakers per shared mic</label>
           <select id="ed-diarize_speakers">
-            <option value="">— (not set)</option>
+            <option value="">Not set</option>
             <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>
@@ -156,9 +178,9 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
           </select>
         </div>
         <div class="field">
-          <label>Whisper Model</label>
+          <label for="ed-whisper_model">Transcription model</label>
           <select id="ed-whisper_model">
-            <option value="">— (from campaign)</option>
+            <option value="">Campaign default</option>
             <option value="tiny">tiny</option>
             <option value="base">base</option>
             <option value="small">small</option>
@@ -168,40 +190,38 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
           </select>
         </div>
         <div class="field">
-          <label>Use Hotwords</label>
+          <label for="ed-use_hotwords">Name biasing (hotwords)</label>
           <select id="ed-use_hotwords">
-            <option value="">— (from campaign)</option>
+            <option value="">Campaign default</option>
             <option value="true">On</option>
             <option value="false">Off</option>
           </select>
         </div>
       </div>
       <div class="save-row">
-        <button class="btn" onclick="saveConfig()">Save</button>
+        <button class="btn" onclick="saveConfig()">Save settings</button>
         <span id="save-msg"></span>
       </div>
-    </div>
+    </section>
 
-    <!-- Sessions card -->
-    <div class="card">
+    <section class="card">
       <div class="tbl-header">
-        <h2 style="margin-bottom:0">Sessions</h2>
-        <button class="btn secondary" onclick="loadJobs()">↺ Refresh</button>
+        <h2>Sessions</h2>
+        <button class="btn secondary" onclick="loadJobs()">Refresh</button>
       </div>
       <div id="sessions-table"><p class="empty">Loading…</p></div>
-    </div>
+    </section>
   </div>
 
-  <!-- Logs card -->
-  <div class="card">
+  <section class="card">
     <div class="log-controls">
-      <h2 style="margin-bottom:0">Live Logs</h2>
+      <h2>Live log</h2>
       <label id="autoscroll-toggle">
-        <input type="checkbox" id="autoscroll" checked> Auto-scroll
+        <input type="checkbox" id="autoscroll" checked> Follow new lines
       </label>
     </div>
     <div id="log-panel"></div>
-  </div>
+  </section>
 </div>
 
 <script>
@@ -227,10 +247,20 @@ function renderStatus(d) {
   document.getElementById('server-url').textContent = cfg.server_url || '';
 
   const display = document.getElementById('config-display');
-  const SHOW = ['server_url','campaign_slug','audio_dir','poll_interval','whisper_model','use_hotwords','diarize_speakers','api_key','hf_token'];
-  display.innerHTML = SHOW.filter(k => cfg[k] !== undefined && cfg[k] !== null && cfg[k] !== '').map(k =>
-    `<div class="field"><label>${k}</label><div class="val">${cfg[k]}</div></div>`
-  ).join('');
+  const SHOW = {
+    server_url: 'Site', campaign_slug: 'Campaign', audio_dir: 'Audio folder',
+    poll_interval: 'Checks every (s)', whisper_model: 'Model', use_hotwords: 'Name biasing',
+    diarize_speakers: 'Speakers per shared mic', api_key: 'Worker key', hf_token: 'Hugging Face token',
+    auto_update: 'Auto-update',
+  };
+  display.replaceChildren(...Object.entries(SHOW)
+    .filter(([k]) => cfg[k] !== undefined && cfg[k] !== null && cfg[k] !== '')
+    .map(([k, label]) => {
+      const f = document.createElement('div'); f.className = 'field';
+      const l = document.createElement('label'); l.textContent = label;
+      const v = document.createElement('div'); v.className = 'val'; v.textContent = cfg[k] === true ? 'On' : cfg[k] === false ? 'Off' : String(cfg[k]);
+      f.append(l, v); return f;
+    }));
 
   // Pre-fill editable fields
   ['poll_interval','diarize_speakers','whisper_model','use_hotwords'].forEach(k => {
@@ -247,16 +277,22 @@ async function loadJobs() {
     const d = await r.json();
     const sessions = d.sessions || d;
     if (!sessions.length) { tbody.innerHTML = '<p class="empty">No sessions found.</p>'; return; }
-    tbody.innerHTML = `<table>
-      <tr><th>Session</th><th>Status</th><th>Created</th></tr>
-      ${sessions.map(s => {
-        const st = (s.status||'').toLowerCase();
-        const dt = s.created_at ? new Date(s.created_at).toLocaleString() : '—';
-        return `<tr><td>${s.name||s.session_name||'—'}</td><td><span class="badge ${st}">${s.status||'—'}</span></td><td>${dt}</td></tr>`;
-      }).join('')}
-    </table>`;
+    const LABEL = { pending: 'queued', claimed: 'transcribing', processing: 'transcribing', done: 'done', error: 'failed' };
+    const table = document.createElement('table');
+    const head = table.insertRow();
+    ['Session', 'Status', 'Queued'].forEach(t => { const th = document.createElement('th'); th.textContent = t; head.append(th); });
+    sessions.forEach(s => {
+      const st = (s.status || '').toLowerCase();
+      const row = table.insertRow();
+      row.insertCell().textContent = s.name || s.session_name || '';
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + st; badge.textContent = LABEL[st] || s.status || '';
+      row.insertCell().append(badge);
+      row.insertCell().textContent = s.created_at ? new Date(s.created_at).toLocaleString() : '';
+    });
+    tbody.replaceChildren(table);
   } catch(e) {
-    tbody.innerHTML = `<p class="empty">Error: ${e.message}</p>`;
+    tbody.innerHTML = '<p class="empty">Could not load sessions. Is the site reachable?</p>';
   }
 }
 
@@ -297,13 +333,13 @@ async function saveConfig() {
       body: JSON.stringify(payload)
     });
     const d = await r.json();
-    msg.textContent = d.ok ? '✓ Saved' : ('Error: ' + (d.error||'unknown'));
-    msg.style.color = d.ok ? 'var(--ok)' : 'var(--err)';
+    msg.textContent = d.ok ? 'Saved' : ('Not saved: ' + (d.error||'unknown error'));
+    msg.style.color = d.ok ? 'var(--moss)' : 'var(--rubric)';
     if (d.ok) fetchStatus();
     setTimeout(() => msg.textContent = '', 3000);
   } catch(e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.style.color = 'var(--err)';
+    msg.textContent = 'Not saved: ' + e.message;
+    msg.style.color = 'var(--rubric)';
   }
 }
 
@@ -336,6 +372,12 @@ def create_app():
     import logging
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)  # suppress request logs in terminal
+
+    @app.route("/font/eb-garamond.woff2")
+    def dashboard_font():
+        from journal_font import EB_GARAMOND_WOFF2
+        return Response(EB_GARAMOND_WOFF2, content_type="font/woff2",
+                        headers={"Cache-Control": "public, max-age=604800"})
 
     @app.route("/")
     def index():
