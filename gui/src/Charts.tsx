@@ -80,3 +80,56 @@ export function BarList({ title, note, rows, valueHeader = 'Value' }: {
     </section>
   )
 }
+
+/**
+ * One series over time as a small line (for per-player small multiples).
+ * `max` is shared across the multiples so their heights compare honestly.
+ * Missing values (not at that session) break the line.
+ */
+export function TrendLine({ points, max, format, label }: {
+  points: { label: string; value: number | null }[]
+  max: number
+  format: (v: number) => string
+  label: string
+}) {
+  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null)
+  const W = 320, H = 64, PAD = 8
+  const n = points.length
+  const x = (i: number) => (n <= 1 ? W / 2 : PAD + (i * (W - PAD * 2)) / (n - 1))
+  const y = (v: number) => H - PAD - (Math.min(v, max) / (max || 1)) * (H - PAD * 2)
+  // Break the path where a value is missing.
+  let d = ''
+  let pen = false
+  points.forEach((p, i) => {
+    if (p.value === null) { pen = false; return }
+    d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)} ${y(p.value).toFixed(1)} `
+    pen = true
+  })
+  const hp = hover ? points[hover.i] : null
+  return (
+    <div className="trendline" aria-label={label}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" role="img" aria-label={label}
+        onPointerLeave={() => setHover(null)}>
+        <line x1={0} x2={W} y1={H - PAD} y2={H - PAD} className="trend-baseline" vectorEffect="non-scaling-stroke" />
+        <path d={d} className="trend-line" vectorEffect="non-scaling-stroke" />
+        {points.map((p, i) => p.value === null ? null : (
+          <g key={p.label}>
+            <circle cx={x(i)} cy={y(p.value)} r={4} className={'trend-dot' + (hover?.i === i ? ' hot' : '')} vectorEffect="non-scaling-stroke" />
+            {/* 24px hit target, bigger than the mark */}
+            <rect x={x(i) - 12} y={0} width={24} height={H} fill="transparent" tabIndex={0}
+              aria-label={`${p.label}: ${format(p.value)}`}
+              onPointerMove={e => setHover({ i, x: e.clientX, y: e.clientY })}
+              onFocus={e => { const b = e.currentTarget.getBoundingClientRect(); setHover({ i, x: b.left + b.width / 2, y: b.top }) }}
+              onBlur={() => setHover(null)} />
+          </g>
+        ))}
+      </svg>
+      {hp && hover && hp.value !== null && (
+        <div className="chart-tooltip" role="tooltip" style={{ left: hover.x + 14, top: hover.y + 14 }}>
+          <strong>{format(hp.value)}</strong>
+          <span>{hp.label}</span>
+        </div>
+      )}
+    </div>
+  )
+}

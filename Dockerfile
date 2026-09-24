@@ -1,8 +1,10 @@
 FROM python:3.12-slim
 
 # System deps (ffmpeg for audio merge)
+# pango/harfbuzz: WeasyPrint's text layout for the stats PDF (stats_pdf.py)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg nodejs npm git \
+    libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

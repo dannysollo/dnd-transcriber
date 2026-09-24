@@ -18,3 +18,6 @@ passlib
 # Utilities
 pyyaml
 anthropic
+
+# PDF export of campaign stats (needs pango: see Dockerfile)
+weasyprint

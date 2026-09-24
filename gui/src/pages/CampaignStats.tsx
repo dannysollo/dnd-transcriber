@@ -1,6 +1,28 @@
-import { useEffect, useState } from 'react'
-import { BarList } from '../Charts'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { BarList, TrendLine } from '../Charts'
 import { formatDuration, percent } from '../chartFormat'
+import { DownloadIcon, SpinnerIcon } from '../Icons'
+import { useToast } from '../Toast'
+
+interface Profile {
+  person: string
+  characters: string[]
+  sessions: number
+  words: number
+  seconds: number
+  share: number
+  average_share: number
+  share_by_session: { session: string; share: number | null }[]
+  questions: number
+  exclamations: number
+  laughs: number
+  quoted: number
+  favorite_names: { name: string; count: number }[]
+  signature_words: { word: string; count: number }[]
+}
+
+type Records = Record<string, Record<string, string | number>>
 
 interface CampaignStatsData {
   sessions: number
@@ -9,19 +31,103 @@ interface CampaignStatsData {
   per_session: { name: string; created_at: string | null; duration_seconds: number; words: number; lines: number; speakers: number }[]
   people: { person: string; characters: string[]; words: number; seconds: number; sessions: number; share: number }[]
   mentions: { name: string; count: number; sessions: number }[]
+  records: Records
+  profiles: Profile[]
 }
 
-/** The campaign as a whole: totals, who talks, how long sessions run, and what comes up most. */
+const at = (session: string | number, ts: string | number) => (
+  <Link to={`/sessions/${encodeURIComponent(String(session))}#t=${ts}`}>{session}, {ts}</Link>
+)
+
+/** Each record as a ledger entry: label, headline value, where it happened. */
+function recordEntries(r: Records): { key: string; label: string; value: string; detail: ReactNode; excerpt?: string }[] {
+  const out = []
+  if (r.longest_monologue) out.push({
+    key: 'longest_monologue', label: 'Longest speech',
+    value: `${formatDuration(Number(r.longest_monologue.seconds))} from ${r.longest_monologue.person}`,
+    detail: <>{Number(r.longest_monologue.words).toLocaleString()} words without a break, {at(r.longest_monologue.session, r.longest_monologue.ts)}</>,
+    excerpt: String(r.longest_monologue.excerpt),
+  })
+  if (r.biggest_night) out.push({
+    key: 'biggest_night', label: 'Biggest night',
+    value: `${r.biggest_night.person}, ${formatDuration(Number(r.biggest_night.seconds))}`,
+    detail: <>{Number(r.biggest_night.words).toLocaleString()} words in {String(r.biggest_night.session)}</>,
+  })
+  if (r.chattiest_session) out.push({
+    key: 'chattiest_session', label: 'Chattiest session',
+    value: `${r.chattiest_session.words_per_minute} words a minute`,
+    detail: <>{String(r.chattiest_session.session)}</>,
+  })
+  if (r.liveliest_exchange) out.push({
+    key: 'liveliest_exchange', label: 'Liveliest exchange',
+    value: `${r.liveliest_exchange.turns} turns in one minute`,
+    detail: <>{r.liveliest_exchange.speakers} people talking over each other, {at(r.liveliest_exchange.session, r.liveliest_exchange.ts)}</>,
+  })
+  if (r.longest_silence) out.push({
+    key: 'longest_silence', label: 'Longest silence',
+    value: `${r.longest_silence.seconds} seconds`,
+    detail: <>broken by {String(r.longest_silence.broken_by)}, {at(r.longest_silence.session, r.longest_silence.ts)}</>,
+  })
+  if (r.quiet_ones_best_night) out.push({
+    key: 'quiet_ones_best_night', label: "The quiet one's best night",
+    value: `${r.quiet_ones_best_night.person}, ${percent(Number(r.quiet_ones_best_night.share))} of the talk`,
+    detail: <>usually {percent(Number(r.quiet_ones_best_night.usual_share))}; in {String(r.quiet_ones_best_night.session)}</>,
+  })
+  if (r.most_curious) out.push({
+    key: 'most_curious', label: 'Most curious',
+    value: String(r.most_curious.person),
+    detail: <>{Number(r.most_curious.questions).toLocaleString()} questions asked</>,
+  })
+  if (r.most_quoted) out.push({
+    key: 'most_quoted', label: 'Most quoted',
+    value: String(r.most_quoted.person),
+    detail: <>{r.most_quoted.quoted} line{Number(r.most_quoted.quoted) !== 1 ? 's' : ''} saved to Quotes</>,
+  })
+  return out
+}
+
+const list = (xs: string[]) => xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`
+
+/** The campaign as a whole: totals, records, who talks, each player's profile, and what comes up most. */
 export default function CampaignStats({ slug }: { slug: string }) {
+  const { toast } = useToast()
   const [data, setData] = useState<CampaignStatsData | null>(null)
   const [failed, setFailed] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [version, setVersion] = useState(0)
 
+  // Stats are computed from the transcripts on every request, so a refresh
+  // (or a new PDF) always reflects the latest corrections and sessions.
   useEffect(() => {
     fetch(`/campaigns/${slug}/stats`)
       .then(r => (r.ok ? r.json() : Promise.reject()))
-      .then(setData)
+      .then(d => { setData(d); setFailed(false) })
       .catch(() => setFailed(true))
-  }, [slug])
+      .finally(() => setRefreshing(false))
+  }, [slug, version])
+
+  const refresh = () => { setRefreshing(true); setVersion(v => v + 1) }
+
+  /** Build a fresh PDF on the server and save it. */
+  const generatePdf = async () => {
+    setGenerating(true)
+    try {
+      const r = await fetch(`/campaigns/${slug}/stats.pdf`)
+      if (!r.ok) { toast('Could not generate the PDF', 'error'); return }
+      const name = r.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ?? `${slug}-stats.pdf`
+      const url = URL.createObjectURL(await r.blob())
+      const a = document.createElement('a')
+      a.href = url; a.download = name
+      document.body.append(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      toast('Stats PDF downloaded', 'success')
+    } catch {
+      toast('Could not generate the PDF', 'error')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   if (failed) return <p style={{ color: 'var(--ink-soft)' }}>Stats couldn't be loaded. Try reloading the page.</p>
   if (!data) return <div className="skeleton" style={{ height: 240, maxWidth: 820 }} />
@@ -30,16 +136,47 @@ export default function CampaignStats({ slug }: { slug: string }) {
   }
 
   const longest = data.per_session.reduce((a, b) => (b.duration_seconds > a.duration_seconds ? b : a))
+  const shareMax = Math.max(0.05, ...data.profiles.flatMap(p => p.share_by_session.map(s => s.share ?? 0)))
+  const records = recordEntries(data.records)
 
   return (
-    <div style={{ maxWidth: '820px' }}>
-      <p className="stats-sentence">
-        {data.sessions} session{data.sessions !== 1 ? 's' : ''} recorded, {formatDuration(data.duration_seconds)} at the table
-        and {data.words.toLocaleString()} words spoken. The longest was {longest.name}, at {formatDuration(longest.duration_seconds)}.
-      </p>
+    <div style={{ maxWidth: '860px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
+        <p className="stats-sentence" style={{ flex: '1 1 420px' }}>
+          {data.sessions} session{data.sessions !== 1 ? 's' : ''} recorded, {formatDuration(data.duration_seconds)} at the table
+          and {data.words.toLocaleString()} words spoken. The longest was {longest.name}, at {formatDuration(longest.duration_seconds)}.
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <button type="button" className="btn-ghost" onClick={refresh} disabled={refreshing}
+            title="Recount everything from the current transcripts">
+            {refreshing ? 'Refreshing…' : 'Refresh stats'}
+          </button>
+          <button type="button" className="btn-primary" onClick={generatePdf} disabled={generating}
+            title="Build a fresh PDF of these stats from the current transcripts and download it"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {generating ? <><SpinnerIcon /> Generating PDF…</> : <><DownloadIcon /> Generate PDF</>}
+          </button>
+        </div>
+      </div>
       <p style={{ margin: '0 0 28px', fontSize: 15, color: 'var(--ink-faint)' }}>
         Talk time is estimated from words spoken, at about 160 words a minute.
       </p>
+
+      {records.length > 0 && (
+        <section aria-label="Records">
+          <div className="barlist-head"><h3 className="sc">Records</h3></div>
+          <div className="records">
+            {records.map(r => (
+              <div key={r.key} className="record">
+                <div className="record-label">{r.label}</div>
+                <div className="record-value">{r.value}</div>
+                <div className="record-detail">{r.detail}</div>
+                {r.excerpt && <div className="record-excerpt">“{r.excerpt}”</div>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <BarList
         title="Who talks most"
@@ -53,6 +190,45 @@ export default function CampaignStats({ slug }: { slug: string }) {
           details: [`${p.words.toLocaleString()} words`, `in ${p.sessions} session${p.sessions !== 1 ? 's' : ''}`],
         }))}
       />
+
+      <section aria-label="Players" style={{ marginBottom: 36 }}>
+        <div className="barlist-head"><h3 className="sc">Players</h3></div>
+        <p className="barlist-note">Share of the table's talk, session by session, on the same scale for everyone.</p>
+        {data.profiles.map(p => (
+          <div key={p.person} className="profile">
+            <div>
+              <div className="profile-name">
+                {p.person}
+                {p.characters.length > 0 && <span className="speaker-name" style={{ marginLeft: 10, fontSize: 18 }}>{p.characters.join(', ')}</span>}
+              </div>
+              <p className="profile-line">
+                <b>{p.sessions}</b> session{p.sessions !== 1 ? 's' : ''}, <b>{formatDuration(p.seconds)}</b> of talk,
+                usually <b>{percent(p.average_share)}</b> of a session.
+              </p>
+              <p className="profile-line">
+                Asked <b>{p.questions.toLocaleString()}</b> questions, exclaimed <b>{p.exclamations.toLocaleString()}</b> times
+                {p.laughs > 0 && <>, laughed out loud <b>{p.laughs}</b> times</>}
+                {p.quoted > 0 && <>, quoted <b>{p.quoted}</b> time{p.quoted !== 1 ? 's' : ''}</>}.
+              </p>
+              {p.favorite_names.length > 0 && (
+                <p className="profile-line">Talks most about {list(p.favorite_names.map(n => n.name))}.</p>
+              )}
+              {p.signature_words.length > 0 && (
+                <p className="profile-line">Signature words: {list(p.signature_words.map(w => `“${w.word}”`))}.</p>
+              )}
+            </div>
+            <div>
+              <div className="profile-trend-label">Share of talk per session</div>
+              <TrendLine
+                label={`${p.person}'s share of talk per session`}
+                max={shareMax}
+                format={percent}
+                points={p.share_by_session.map(s => ({ label: s.session, value: s.share }))}
+              />
+            </div>
+          </div>
+        ))}
+      </section>
 
       <BarList
         title="Session length"
@@ -71,7 +247,7 @@ export default function CampaignStats({ slug }: { slug: string }) {
       {data.mentions.length > 0 && (
         <BarList
           title="Most mentioned"
-          note="Campaign names from the vault index and correction rules, not counting the players and their characters."
+          note="Names from the campaign wiki, not counting the players and their characters."
           valueHeader="Mentions"
           rows={data.mentions.map(m => ({
             key: m.name,

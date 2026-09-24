@@ -3123,16 +3123,13 @@ def campaign_session_stats(
     return session_stats(path.read_text(encoding="utf-8"))
 
 
-@app.get("/campaigns/{slug}/stats")
-def campaign_overall_stats(
-    slug: str,
-    _member=Depends(require_campaign_member("spectator")),
-):
-    from stats import campaign_stats
-    from unknown_words import known_terms
+def _campaign_stats_payload(slug: str) -> dict:
+    """Everything the campaign Stats page and its PDF show, computed from the transcripts."""
+    from stats import campaign_details, campaign_stats, wiki_terms
 
     config = load_config(slug)
     sessions = []
+    all_quotes = []
     sessions_dir = get_sessions_dir(slug)
     if sessions_dir.exists():
         for d in sessions_dir.iterdir():
@@ -3143,8 +3140,37 @@ def campaign_overall_stats(
                     "created_at": get_or_create_session_created_at(d),
                     "transcript": t.read_text(encoding="utf-8"),
                 })
-    terms = known_terms(config, _campaign_vault_dir(config, slug))
-    return campaign_stats(sessions, terms, config)
+                all_quotes.extend(_read_quotes(d))
+    sessions.sort(key=lambda s: s["created_at"] or "")
+    # Only the wiki's own proper nouns count as "names" (correction targets
+    # can be phrases like "Belle will").
+    terms = wiki_terms(config, _campaign_vault_dir(config, slug))
+    return {**campaign_stats(sessions, terms, config), **campaign_details(sessions, terms, config, all_quotes)}
+
+
+@app.get("/campaigns/{slug}/stats")
+def campaign_overall_stats(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+):
+    return _campaign_stats_payload(slug)
+
+
+@app.get("/campaigns/{slug}/stats.pdf")
+def campaign_stats_pdf(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+    db: Session = Depends(get_db),
+):
+    """The Stats page as a typeset PDF (see stats_pdf.py)."""
+    from stats_pdf import render_stats_pdf
+
+    campaign = crud.get_campaign_by_slug(db, slug)
+    name = campaign.name if campaign else slug
+    pdf = render_stats_pdf(_campaign_stats_payload(slug), name)
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-") or slug
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{safe}-stats.pdf"'})
 
 
 # ── Quotes: lines people saved, with an audio clip of the moment ─────────────

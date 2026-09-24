@@ -711,3 +711,28 @@ input.written-line:focus {
   margin-top: 6px;
 }
 .discord-login:hover { background: #4752c4; }
+
+/* Per-player trend lines (Charts.tsx TrendLine) */
+.trendline { position: relative; max-width: 360px; }
+.trend-baseline { stroke: var(--rule-strong); stroke-width: 1; }
+.trend-line { fill: none; stroke: var(--chart-bar); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.trend-dot { fill: var(--chart-bar); stroke: var(--page); stroke-width: 2; }   /* 2px surface ring */
+.trend-dot.hot { r: 5; }
+
+/* Records: ledger entries */
+.records { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 32px; border-top: 1px solid var(--rule); margin: 14px 0 36px; }
+.record { padding: 14px 0 12px; border-bottom: 1px solid var(--rule); }
+.record-label { font-size: 16px; font-variant: small-caps; letter-spacing: 0.05em; color: var(--rubric); font-weight: 600; }
+.record-value { font-size: 24px; line-height: 1.2; color: var(--ink); margin: 2px 0; }
+.record-detail { font-size: 15px; color: var(--ink-soft); }
+.record-detail a { color: var(--ink-soft); }
+.record-detail a:hover { color: var(--rubric); }
+.record-excerpt { font-size: 16px; color: var(--ink); margin-top: 4px; }
+
+/* Player profiles */
+.profile { padding: 18px 0 16px; border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 360px); gap: 8px 32px; }
+.profile-name { font-size: 22px; color: var(--ink); }
+.profile-line { font-size: 16px; color: var(--ink-soft); margin: 2px 0; }
+.profile-line b { color: var(--ink); font-weight: 600; }
+.profile-trend-label { font-size: 14px; color: var(--ink-faint); margin-bottom: 2px; }
+@media (max-width: 768px) { .profile { grid-template-columns: minmax(0, 1fr); } }
