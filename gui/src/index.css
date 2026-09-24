@@ -364,6 +364,22 @@ select:focus {
   color: var(--text-secondary);
   cursor: pointer;
 }
+.unknown-word-example-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.unknown-word-example-row .unknown-word-example { flex: 1; }
+.example-play {
+  flex-shrink: 0; align-self: center; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; border-radius: 3px; cursor: pointer;
+  background: none; border: 1px solid var(--rule-strong); color: var(--ink-soft);
+}
+.example-play:hover { color: var(--rubric); border-color: var(--rubric); }
+.example-play:focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
+.line-editor {
+  flex: 1; min-width: 0; resize: none; overflow: hidden; display: block;
+  font: inherit; font-size: 18px; line-height: 1.55; color: var(--ink);
+  background: var(--page); border: 1px solid color-mix(in srgb, var(--ochre) 45%, transparent);
+  border-radius: 3px; padding: 4px 8px; outline: none;
+}
+.line-editor:focus { border-color: var(--ochre); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ochre) 18%, transparent); }
 .unknown-word-example:hover {
   color: var(--text-primary);
 }

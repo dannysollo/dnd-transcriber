@@ -271,7 +271,7 @@ export default function SessionView() {
   const [targetTimestamp, setTargetTimestamp] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
   const sessionContentRef = useRef<HTMLDivElement | null>(null)
-  const anchorLineIdxRef = useRef<number | null>(null)
+  const anchorLineRef = useRef<{ idx: number; offset: number } | null>(null)
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [shareToken, setShareToken] = useState<string | null>(null)
   const [shareCreating, setShareCreating] = useState(false)
@@ -495,15 +495,22 @@ export default function SessionView() {
     if (sessionContentRef.current && !targetTimestamp) sessionContentRef.current.scrollTop = 0
   }, [tab])
 
-  // After toggling edit mode, scroll the anchor line into view
+  // After toggling edit mode, put the line you were reading back where it
+  // was on screen. Once now, and once more after late content (suggestion
+  // bars, fonts) has settled, unless you've started scrolling yourself.
   useEffect(() => {
-    const idx = anchorLineIdxRef.current
-    if (idx === null) return
-    const frame = requestAnimationFrame(() => {
-      const el = sessionContentRef.current?.querySelector(`[data-line-idx="${idx}"]`) as HTMLElement | null
-      if (el) el.scrollIntoView({ block: 'start', behavior: 'instant' })
-    })
-    return () => cancelAnimationFrame(frame)
+    const anchor = anchorLineRef.current
+    const container = sessionContentRef.current
+    if (!anchor || !container) return
+    const place = () => {
+      const el = container.querySelector(`[data-line-idx="${anchor.idx}"]`) as HTMLElement | null
+      if (!el) return
+      container.scrollTop += el.getBoundingClientRect().top - container.getBoundingClientRect().top - anchor.offset
+    }
+    let placedAt = -1
+    const frame = requestAnimationFrame(() => { place(); placedAt = container.scrollTop })
+    const settle = window.setTimeout(() => { if (container.scrollTop === placedAt) place() }, 300)
+    return () => { cancelAnimationFrame(frame); window.clearTimeout(settle) }
   }, [editMode])
 
   // Window-level drag-and-drop
@@ -716,6 +723,13 @@ export default function SessionView() {
     } else {
       seekTo(seconds)
     }
+  }
+
+  /** Play one transcript line in place: from its start to the next line's (at most 20 s). */
+  const playLine = (timestamp: string) => {
+    const from = parseTimestampToSeconds(timestamp)
+    const next = lineStarts.find(l => l.seconds > from)?.seconds ?? from + 8
+    playMoment(Math.max(0, from - 0.5), Math.min(next + 0.8, from + 20))
   }
 
   const goToHallucination = (timestamp: string) => {
@@ -1284,19 +1298,21 @@ export default function SessionView() {
             {transcript && (
               <button
                 onClick={() => {
-                  if (!editMode && sessionContentRef.current) {
+                  // Remember the line a third of the way down (where you're likely reading)
+                  // and its place on screen, in both directions.
+                  if (sessionContentRef.current) {
                     const container = sessionContentRef.current
-                    const containerTop = container.getBoundingClientRect().top
-                    const lineEls = container.querySelectorAll('[data-line-idx]')
-                    let bestIdx: number | null = null
-                    for (const el of Array.from(lineEls)) {
+                    const box = container.getBoundingClientRect()
+                    const readAt = box.top + box.height / 3
+                    let best: { idx: number; offset: number } | null = null
+                    for (const el of Array.from(container.querySelectorAll<HTMLElement>('[data-line-idx]'))) {
                       const rect = el.getBoundingClientRect()
-                      if (rect.bottom > containerTop + 4) {
-                        bestIdx = parseInt((el as HTMLElement).dataset.lineIdx ?? '-1', 10)
+                      if (rect.bottom > readAt) {
+                        best = { idx: parseInt(el.dataset.lineIdx ?? '-1', 10), offset: rect.top - box.top }
                         break
                       }
                     }
-                    anchorLineIdxRef.current = bestIdx
+                    anchorLineRef.current = best
                   }
                   setEditMode(m => !m)
                 }}
@@ -1483,6 +1499,9 @@ export default function SessionView() {
               sessionName={name!}
               canEdit={!authEnabled || activeCampaign?.role === 'dm'}
               onJump={goToHallucination}
+              onPlay={audioFiles.length > 0 ? playLine : undefined}
+              onStop={stopMoment}
+              audioPlaying={audioPlaying}
               onRuleAdded={() => { load({ silent: true }); setChangesLoaded(false); setChangesReport(null) }}
             />
           ) : (
@@ -1951,27 +1970,21 @@ function TranscriptView({
               </span>
 
               {isEditing ? (
-                <input
+                <textarea
                   autoFocus
+                  rows={1}
                   value={editingValue}
-                  onChange={e => setEditingValue(e.target.value)}
+                  ref={el => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight + 2}px` } }}
+                  onFocus={e => { const n = e.currentTarget.value.length; e.currentTarget.setSelectionRange(n, n) }}
+                  onChange={e => setEditingValue(e.target.value.replace(/\n/g, ' '))}
                   onKeyDown={e => {
-                    if (e.key === 'Enter') { saveLine(lineIdx, editingValue) }
+                    // One transcript line is one line of text: Enter saves instead of breaking it.
+                    if (e.key === 'Enter') { e.preventDefault(); saveLine(lineIdx, editingValue) }
                     else if (e.key === 'Escape') { setEditingLineIdx(null) }
                   }}
                   onBlur={() => { if (!savingLine) saveLine(lineIdx, editingValue) }}
                   disabled={savingLine}
-                  style={{
-                    flex: 1,
-                    background: 'var(--bg-surface)',
-                    border: '1px solid color-mix(in srgb, var(--ochre) 40%, transparent)',
-                    borderRadius: '4px',
-                    color: 'var(--ink)',
-                    padding: '2px 8px',
-                    fontSize: '15px',
-                    fontFamily: 'monospace',
-                    outline: 'none',
-                  }}
+                  className="line-editor"
                 />
               ) : m ? (
                 <div
@@ -4126,12 +4139,20 @@ function UnknownWordsPanel({
   canEdit,
   onJump,
   onRuleAdded,
+  onPlay,
+  onStop,
+  audioPlaying = false,
 }: {
   sessionName: string
   canEdit: boolean
   onJump: (timestamp: string) => void
   onRuleAdded: () => void
+  /** Play the line at this timestamp in place (absent when the session has no audio). */
+  onPlay?: (timestamp: string) => void
+  onStop?: () => void
+  audioPlaying?: boolean
 }) {
+  const [playingKey, setPlayingKey] = useState<string | null>(null)
   const apiUrl = useApiUrl()
   const { activeCampaign } = useCampaign()
   const { toast } = useToast()
@@ -4299,8 +4320,20 @@ function UnknownWordsPanel({
           </>
         )}
       </div>
-      {w.examples.map(ex => (
-        <button key={ex.line} onClick={() => onJump(ex.ts)} className="unknown-word-example"
+      {w.examples.map(ex => {
+        const key = `${w.word}|${ex.line}`
+        const playing = playingKey === key && audioPlaying
+        return (
+        <div key={ex.line} className="unknown-word-example-row">
+        {onPlay && (
+          <button type="button" className="example-play"
+            onClick={() => { if (playing) { onStop?.(); setPlayingKey(null) } else { setPlayingKey(key); onPlay(ex.ts) } }}
+            aria-label={playing ? `Stop the audio at ${ex.ts}` : `Play the audio at ${ex.ts}`}
+            title={playing ? 'Stop' : 'Play this line'}>
+            {playing ? <PauseIcon size={14} /> : <PlayIcon size={14} />}
+          </button>
+        )}
+        <button onClick={() => onJump(ex.ts)} className="unknown-word-example"
           title="Show in transcript">
           <span style={{ fontVariantNumeric: 'lining-nums tabular-nums', color: 'var(--text-muted)', flexShrink: 0 }}>{ex.ts}</span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -4310,7 +4343,9 @@ function UnknownWordsPanel({
             })())}
           </span>
         </button>
-      ))}
+        </div>
+        )
+      })}
     </div>
   )
 
