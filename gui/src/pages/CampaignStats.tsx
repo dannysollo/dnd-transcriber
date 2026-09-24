@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { BarList, TrendLine } from '../Charts'
+import { BarList, PaceChart, TrendLine } from '../Charts'
 import { formatDuration, percent } from '../chartFormat'
 import { DownloadIcon, SpinnerIcon } from '../Icons'
 import { useToast } from '../Toast'
@@ -28,12 +28,16 @@ interface CampaignStatsData {
   sessions: number
   duration_seconds: number
   words: number
-  per_session: { name: string; created_at: string | null; duration_seconds: number; words: number; lines: number; speakers: number }[]
+  per_session: { name: string; created_at: string | null; duration_seconds: number; words: number; lines: number; speakers: number; new_names?: number }[]
   people: { person: string; characters: string[]; words: number; seconds: number; sessions: number; share: number }[]
-  mentions: { name: string; count: number; sessions: number }[]
+  mentions: { name: string; count: number; sessions: number; first_session?: string }[]
   records: Records
   profiles: Profile[]
+  exchanges?: { a: string; b: string; count: number }[]
+  pace?: { start: number; sessions: number; wpm: number }[]
 }
+
+const clock = (seconds: number) => `${Math.floor(seconds / 3600)}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}`
 
 const at = (session: string | number, ts: string | number) => (
   <Link to={`/sessions/${encodeURIComponent(String(session))}#t=${ts}`}>{session}, {ts}</Link>
@@ -77,6 +81,16 @@ function recordEntries(r: Records): { key: string; label: string; value: string;
     key: 'most_curious', label: 'Most curious',
     value: String(r.most_curious.person),
     detail: <>{Number(r.most_curious.questions).toLocaleString()} questions asked</>,
+  })
+  if (r.funniest_night) out.push({
+    key: 'funniest_night', label: 'Funniest night',
+    value: String(r.funniest_night.session),
+    detail: <>{Number(r.funniest_night.laughs)} laughs written into the transcript</>,
+  })
+  if (r.name_dropper) out.push({
+    key: 'name_dropper', label: 'Name-dropper',
+    value: String(r.name_dropper.person),
+    detail: <>{Number(r.name_dropper.names)} different names from the wiki, the most of any player</>,
   })
   if (r.most_quoted) out.push({
     key: 'most_quoted', label: 'Most quoted',
@@ -230,6 +244,32 @@ export default function CampaignStats({ slug }: { slug: string }) {
         ))}
       </section>
 
+      {data.sessions > 1 && <Attendance profiles={data.profiles} sessions={data.per_session.map(s => s.name)} />}
+
+      <PaceChart
+        title="Pace through the night"
+        note="Words a minute in each half hour, averaged over every session that ran that long."
+        points={(data.pace ?? []).map(p => ({
+          label: `${clock(p.start)}–${clock(p.start + 1800)}`,
+          value: p.wpm,
+        }))}
+      />
+
+      {(data.exchanges ?? []).length > 0 && (
+        <BarList
+          title="Who talks to whom"
+          note="How often the conversation passed directly between two people, across every session."
+          valueHeader="Exchanges"
+          rows={data.exchanges!.map(e => ({
+            key: `${e.a}|${e.b}`,
+            label: `${e.a} and ${e.b}`,
+            labelText: `${e.a} and ${e.b}`,
+            value: e.count,
+            display: e.count.toLocaleString(),
+          }))}
+        />
+      )}
+
       <BarList
         title="Session length"
         note="In the order sessions were added."
@@ -240,7 +280,8 @@ export default function CampaignStats({ slug }: { slug: string }) {
           labelText: s.name,
           value: s.duration_seconds,
           display: formatDuration(s.duration_seconds),
-          details: [`${s.words.toLocaleString()} words`, `${s.speakers} speakers`],
+          details: [`${s.words.toLocaleString()} words`, `${s.speakers} speakers`,
+            ...(s.new_names ? [`${s.new_names} name${s.new_names !== 1 ? 's' : ''} mentioned for the first time`] : [])],
         }))}
       />
 
@@ -255,10 +296,50 @@ export default function CampaignStats({ slug }: { slug: string }) {
             labelText: m.name,
             value: m.count,
             display: m.count.toLocaleString(),
-            details: [`in ${m.sessions} session${m.sessions !== 1 ? 's' : ''}`],
+            details: [`in ${m.sessions} session${m.sessions !== 1 ? 's' : ''}`, ...(m.first_session ? [`first in ${m.first_session}`] : [])],
           }))}
         />
       )}
     </div>
+  )
+}
+
+/** Who was at which session: one row per person, one column per session in order. */
+function Attendance({ profiles, sessions }: { profiles: Profile[]; sessions: string[] }) {
+  const everyone = profiles.every(p => p.share_by_session.every(s => s.share !== null))
+  return (
+    <section aria-label="Attendance" style={{ marginBottom: 36 }}>
+      <div className="barlist-head"><h3 className="sc">Attendance</h3></div>
+      {everyone ? (
+        <p className="barlist-note">Everyone has been at every session.</p>
+      ) : (
+        <>
+          <p className="barlist-note">Sessions numbered in the order they were added. Hover a number for its name.</p>
+          <div className="attendance-wrap">
+            <table className="attendance">
+              <thead>
+                <tr><td />{sessions.map((s, i) => <th key={s} scope="col" title={s}>{i + 1}</th>)}<th scope="col">Missed</th></tr>
+              </thead>
+              <tbody>
+                {profiles.map(p => {
+                  const missed = p.share_by_session.filter(s => s.share === null).length
+                  return (
+                    <tr key={p.person}>
+                      <th scope="row">{p.person}</th>
+                      {p.share_by_session.map(s => (
+                        <td key={s.session} title={`${s.session}: ${s.share === null ? 'absent' : 'present'}`}>
+                          <span className={s.share === null ? 'gap' : 'mark'} aria-label={s.share === null ? 'absent' : 'present'} />
+                        </td>
+                      ))}
+                      <td>{missed}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
   )
 }

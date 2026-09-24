@@ -714,6 +714,21 @@ input.written-line:focus {
 
 /* Per-player trend lines (Charts.tsx TrendLine) */
 .trendline { position: relative; max-width: 360px; }
+.trendline.wide { max-width: none; margin-top: 10px; }
+.trendline.wide svg { display: block; height: auto; }
+.pace-caption { margin: 10px 0 0; font-size: 16px; color: var(--ink-soft); }
+.pace-caption b { color: var(--ink); font-weight: 600; }
+.pace-axis { display: flex; justify-content: space-between; font-size: 14px; color: var(--ink-faint); font-variant-numeric: lining-nums tabular-nums; margin-top: 2px; }
+.jump-link { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; cursor: pointer; }
+.jump-link:hover { color: var(--rubric); text-decoration-color: currentColor; }
+.jump-link:focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
+.attendance { border-collapse: collapse; margin-top: 12px; font-size: 16px; }
+.attendance th, .attendance td { padding: 4px 6px; text-align: center; border-bottom: 1px solid var(--rule); }
+.attendance th[scope="row"] { text-align: right; font-weight: 400; padding-right: 14px; white-space: nowrap; }
+.attendance thead th { font-weight: 600; color: var(--ink-faint); font-size: 14px; font-variant-numeric: lining-nums tabular-nums; }
+.attendance .mark { display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: var(--chart-bar); vertical-align: middle; }
+.attendance .gap { display: inline-block; width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--rule-strong); vertical-align: middle; }
+.attendance-wrap { overflow-x: auto; }
 .trend-baseline { stroke: var(--rule-strong); stroke-width: 1; }
 .trend-line { fill: none; stroke: var(--chart-bar); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .trend-dot { fill: var(--chart-bar); stroke: var(--page); stroke-width: 2; }   /* 2px surface ring */

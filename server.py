@@ -3131,21 +3131,24 @@ def campaign_session_stats(
     name: str,
     _member=Depends(require_campaign_member("spectator")),
 ):
-    from stats import session_stats
+    from stats import campaign_stats, session_details, session_stats, wiki_terms
 
     path = get_sessions_dir(slug) / name / "transcript.md"
     if not path.exists():
         raise HTTPException(404, "Transcript not found")
-    return session_stats(path.read_text(encoding="utf-8"))
-
-
-def _campaign_stats_payload(slug: str) -> dict:
-    """Everything the campaign Stats page and its PDF show, computed from the transcripts."""
-    from stats import campaign_details, campaign_stats, wiki_terms
-
+    transcript = path.read_text(encoding="utf-8")
     config = load_config(slug)
+    sessions = _campaign_transcripts(slug)
+    here = next((i for i, s in enumerate(sessions) if s["name"] == name), len(sessions))
+    rows = campaign_stats(sessions, [], config)["per_session"]
+    terms = wiki_terms(config, _campaign_vault_dir(config, slug))
+    earlier = [s["transcript"] for s in sessions[:here]]
+    return {**session_stats(transcript), **session_details(transcript, terms, config, earlier, rows)}
+
+
+def _campaign_transcripts(slug: str) -> list[dict]:
+    """Every session with a transcript, oldest first."""
     sessions = []
-    all_quotes = []
     sessions_dir = get_sessions_dir(slug)
     if sessions_dir.exists():
         for d in sessions_dir.iterdir():
@@ -3156,8 +3159,18 @@ def _campaign_stats_payload(slug: str) -> dict:
                     "created_at": get_or_create_session_created_at(d),
                     "transcript": t.read_text(encoding="utf-8"),
                 })
-                all_quotes.extend(_read_quotes(d))
     sessions.sort(key=lambda s: s["created_at"] or "")
+    return sessions
+
+
+def _campaign_stats_payload(slug: str) -> dict:
+    """Everything the campaign Stats page and its PDF show, computed from the transcripts."""
+    from stats import campaign_details, campaign_stats, wiki_terms
+
+    config = load_config(slug)
+    sessions = _campaign_transcripts(slug)
+    sessions_dir = get_sessions_dir(slug)
+    all_quotes = [q for s in sessions for q in _read_quotes(sessions_dir / s["name"])]
     # Only the wiki's own proper nouns count as "names" (correction targets
     # can be phrases like "Belle will").
     terms = wiki_terms(config, _campaign_vault_dir(config, slug))

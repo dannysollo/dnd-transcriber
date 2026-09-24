@@ -70,6 +70,40 @@ def _trend(points: list[float | None], max_share: float) -> str:
             f'{"".join(dots)}</svg>')
 
 
+def _clock(seconds: int) -> str:
+    return f"{seconds // 3600}:{seconds % 3600 // 60:02d}"
+
+
+def _pace(rows: list[dict]) -> str:
+    """Words a minute per half hour, full width, with the busiest and quietest named."""
+    W, H, P = 600, 70, 7
+    vals = [r["wpm"] for r in rows]
+    top = max(vals) * 1.1 or 1
+    n = len(vals)
+    x = lambda i: P + i * (W - 2 * P) / (n - 1)
+    y = lambda v: H - P - v / top * (H - 2 * P)
+    d = " ".join(f"{'L' if i else 'M'}{x(i):.1f} {y(v):.1f}" for i, v in enumerate(vals))
+    dots = "".join(f'<circle cx="{x(i):.1f}" cy="{y(v):.1f}" r="3.2" fill="#9E2B25" stroke="#F5F0E6" stroke-width="1.6"/>' for i, v in enumerate(vals))
+    hi = max(rows, key=lambda r: r["wpm"])
+    lo = min(rows, key=lambda r: r["wpm"])
+    span = lambda r: f"{_clock(r['start'])}–{_clock(r['start'] + 1800)}"
+    return (f'<p class="note">Busiest at {span(hi)} ({hi["wpm"]} words a minute), quietest at {span(lo)} ({lo["wpm"]}).</p>'
+            f'<svg viewBox="0 0 {W} {H}" width="170mm" height="{170 * H / W:.1f}mm">'
+            f'<line x1="0" x2="{W}" y1="{H - P}" y2="{H - P}" stroke="#BFAF93" stroke-width="0.8"/>'
+            f'<path d="{d}" fill="none" stroke="#9E2B25" stroke-width="1.8" stroke-linejoin="round"/>{dots}</svg>'
+            f'<div class="axis"><span>{_clock(rows[0]["start"])}</span><span>{_clock(rows[-1]["start"] + 1800)}</span></div>')
+
+
+def _attendance(profiles: list[dict], sessions: int) -> str:
+    head = "".join(f"<th>{i + 1}</th>" for i in range(sessions))
+    rows = []
+    for p in profiles:
+        cells = "".join(f'<td><span class="{"gap" if s["share"] is None else "mark"}"></span></td>' for s in p["share_by_session"])
+        missed = sum(1 for s in p["share_by_session"] if s["share"] is None)
+        rows.append(f'<tr><th class="who">{escape(p["person"])}</th>{cells}<td>{missed}</td></tr>')
+    return f'<table class="attendance"><tr><th></th>{head}<th>Missed</th></tr>{"".join(rows)}</table>'
+
+
 def _latest(profile: dict) -> str:
     last = next((s["share"] for s in reversed(profile["share_by_session"]) if s["share"] is not None), None)
     return f", latest {_pct(last)}" if last is not None else ""
@@ -94,6 +128,10 @@ def _records(r: dict) -> list[tuple[str, str, str, str | None]]:
                     f"usually {_pct(x['usual_share'])}; in {x['session']}", None))
     if (x := r.get("most_curious")):
         out.append(("Most curious", x["person"], f"{x['questions']:,} questions asked", None))
+    if (x := r.get("funniest_night")):
+        out.append(("Funniest night", x["session"], f"{x['laughs']} laughs written into the transcript", None))
+    if (x := r.get("name_dropper")):
+        out.append(("Name-dropper", x["person"], f"{x['names']} different names from the wiki, the most of any player", None))
     if (x := r.get("most_quoted")):
         out.append(("Most quoted", x["person"], f"{x['quoted']} line{'s' if x['quoted'] != 1 else ''} saved to Quotes", None))
     return out
@@ -142,6 +180,13 @@ h2:first-child { margin-top: 0; }
 .profile p { margin: .6mm 0; font-size: 10pt; color: #5E5347; }
 .profile b { color: #2B2622; font-weight: 600; }
 .trend-cap { font-size: 8.5pt; color: #716250; }
+.axis { display: flex; justify-content: space-between; width: 170mm; font-size: 8.5pt; color: #716250; }
+.attendance { border-collapse: collapse; font-size: 9.5pt; margin-top: 2mm; }
+.attendance th, .attendance td { padding: .8mm 1.4mm; text-align: center; border-bottom: 0.25mm solid #D8CCB6; font-weight: 400; }
+.attendance th.who { text-align: right; padding-right: 3mm; white-space: nowrap; }
+.attendance .mark, .attendance .gap { display: inline-block; width: 2.6mm; height: 2.6mm; border-radius: .4mm; }
+.attendance .mark { background: #9E2B25; }
+.attendance .gap { border: 0.25mm solid #BFAF93; }
 .trend-end { font-family: 'Journal'; font-size: 11px; fill: #716250; }
 """
 
@@ -210,6 +255,24 @@ def render_stats_pdf(data: dict, campaign_name: str) -> bytes:
 </div><div><div class="trend-cap">Share of talk per session{_latest(p)}</div>{_trend([s['share'] for s in p['share_by_session']], max_share)}</div></div>"""
             # The section heading travels with the first profile, never alone at a page foot.
             parts.append(f'<div class="keep">{head}{block}</div>' if i == 0 else block)
+
+    if len(per) > 1 and profiles:
+        if any(s["share"] is None for p in profiles for s in p["share_by_session"]):
+            parts.append('<div class="keep"><h2>Attendance</h2><p class="note">Sessions numbered in the order they were added.</p>'
+                         + _attendance(profiles, len(per)) + "</div>")
+        else:
+            parts.append('<h2>Attendance</h2><p class="note">Everyone has been at every session.</p>')
+
+    pace = data.get("pace", [])
+    if len(pace) > 1:
+        parts.append('<div class="keep"><h2>Pace through the night</h2>'
+                     '<p class="note">Words a minute in each half hour, averaged over every session that ran that long.</p>'
+                     + _pace(pace) + "</div>")
+
+    pairs = data.get("exchanges", [])
+    if pairs:
+        parts.append('<h2>Who talks to whom</h2><p class="note">How often the conversation passed directly between two people.</p>')
+        parts.append(_bars([(f"{e['a']} and {e['b']}", e["count"], f"{e['count']:,}") for e in pairs]))
 
     if per:
         parts.append('<h2>Session length</h2><p class="note">In the order sessions were added.</p>')

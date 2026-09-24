@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Chevron, CloseIcon, CopyIcon, PauseIcon, PlayIcon, QuoteIcon, SpinnerIcon } from '../Icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
@@ -6,7 +6,7 @@ import { useAuth } from '../AuthContext'
 import { useToast } from '../Toast'
 import { RuleSuggestionBar, type SessionRuleSuggestion, addCorrectionRule } from '../RuleSuggestions'
 import ReactMarkdown from 'react-markdown'
-import { BarList } from '../Charts'
+import { BarList, PaceChart } from '../Charts'
 import { formatDuration, percent } from '../chartFormat'
 
 
@@ -1417,6 +1417,11 @@ export default function SessionView() {
               sessionName={name!}
               editMode={editMode}
               onTranscriptChange={() => { load(); setChangesLoaded(false); setChangesReport(null); setNamesKey(k => k + 1) }}
+              onEditsSaved={text => {
+                setTranscript(text)
+                load({ silent: true })
+                setChangesLoaded(false); setChangesReport(null); setNamesKey(k => k + 1)
+              }}
               confidence={confidence}
               showConfidence={showConfidence && !editMode}
             />
@@ -1468,7 +1473,7 @@ export default function SessionView() {
             onCancelAnalysis={cancelAnalysis}
           />
         ) : tab === 'stats' ? (
-          transcript ? <SessionStatsPanel sessionName={name!} /> : (
+          transcript ? <SessionStatsPanel sessionName={name!} onJump={jumpToTime} /> : (
             <EmptyTabState title="No transcript yet" message="Talk time is counted once there's a transcript." />
           )
         ) : tab === 'names' ? (
@@ -1597,6 +1602,7 @@ function TranscriptView({
   sessionName,
   editMode,
   onTranscriptChange,
+  onEditsSaved,
   confidence,
   showConfidence,
 }: {
@@ -1609,6 +1615,8 @@ function TranscriptView({
   sessionName?: string
   editMode?: boolean
   onTranscriptChange?: () => void
+  /** Called on leaving edit mode after line saves, with the text as saved, so the read view shows it at once. */
+  onEditsSaved?: (text: string) => void
   confidence?: ConfidenceMap | null
   showConfidence?: boolean
 }) {
@@ -1728,6 +1736,18 @@ function TranscriptView({
     el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [activeIdx, editMode])
 
+  // Line saves only update editedLines, so hand the saved text up when
+  // editing ends; otherwise the read view shows the transcript as first loaded.
+  const savedEditsRef = useRef(false)
+  const editModeRef = useRef(editMode)
+  editModeRef.current = editMode
+  useEffect(() => {
+    if (!editMode && savedEditsRef.current) {
+      savedEditsRef.current = false
+      onEditsSaved?.(editedLines.join('\n'))
+    }
+  }, [editMode])
+
   // Initialize editedLines when entering edit mode
   useEffect(() => {
     if (editMode && content) {
@@ -1770,7 +1790,13 @@ function TranscriptView({
         // Pending approval — mark line as pending, don't update local text
         setPendingLines(prev => new Set([...prev, lineIdx]))
       } else {
-        setEditedLines(prev => { const next = [...prev]; next[lineIdx] = value; return next })
+        setEditedLines(prev => {
+          const next = [...prev]; next[lineIdx] = value
+          // Blur-save from clicking "Done editing": edit mode has already ended, so pass it up here.
+          if (r.ok && !editModeRef.current) queueMicrotask(() => onEditsSaved?.(next.join('\n')))
+          return next
+        })
+        if (r.ok && editModeRef.current) savedEditsRef.current = true
         const data = await r.json().catch(() => null)
         const fresh: SessionRuleSuggestion[] = (data?.rule_suggestions ?? []).map(
           (s: Omit<SessionRuleSuggestion, 'session'>) => ({ ...s, session: sessionName }))
@@ -3891,10 +3917,24 @@ interface SessionStats {
   duration_seconds: number
   lines: number
   words: number
-  speakers: { label: string; name: string; player: string; lines: number; words: number; seconds: number; share: number }[]
+  speakers: {
+    label: string; name: string; player: string; lines: number; words: number; seconds: number; share: number
+    questions: number; exclamations: number; laughs: number; longest: number
+  }[]
+  moments?: Record<string, Record<string, string | number>>
+  pace?: { start: number; words: number; wpm: number }[]
+  breaks?: { ts: string; resumed_at: string; seconds: number; resumed_by: string }[]
+  exchanges?: { a: string; b: string; count: number }[]
+  names?: { name: string; count: number; first_ts: string; first_by: string; new: boolean }[]
+  new_names?: { name: string; first_ts: string; first_by: string }[]
+  comparison?: { rank: number; of: number; average_duration_seconds: number; wpm: number; average_wpm: number } | null
 }
 
-function SessionStatsPanel({ sessionName }: { sessionName: string }) {
+const clock = (seconds: number) => `${Math.floor(seconds / 3600)}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}`
+const ordinal = (n: number) => n === 1 ? '' : `${n}${['th', 'st', 'nd', 'rd'][(n % 100 >= 11 && n % 100 <= 13) || n % 10 > 3 ? 0 : n % 10]}-`
+const joinList = (xs: ReactNode[]) => xs.flatMap((x, i) => i === 0 ? [x] : [i === xs.length - 1 ? ' and ' : ', ', x])
+
+function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJump: (seconds: number) => void }) {
   const apiUrl = useApiUrl()
   const [stats, setStats] = useState<SessionStats | null>(null)
   const [failed, setFailed] = useState(false)
@@ -3908,15 +3948,90 @@ function SessionStatsPanel({ sessionName }: { sessionName: string }) {
   if (failed) return <EmptyTabState title="Stats unavailable" message="The transcript couldn't be counted. Try reloading." />
   if (!stats) return <div className="skeleton" style={{ height: 200, maxWidth: 820 }} />
 
+  const at = (ts: string | number) => (
+    <button type="button" className="jump-link" onClick={() => onJump(parseTimestampToSeconds(String(ts)))}
+      title="Open the transcript here">{ts}</button>
+  )
+  const m = stats.moments ?? {}
+  const moments: { key: string; label: string; value: ReactNode; detail: ReactNode; excerpt?: string }[] = []
+  if (m.longest_speech) moments.push({
+    key: 'longest_speech', label: 'Longest speech',
+    value: `${formatDuration(Number(m.longest_speech.seconds))} from ${m.longest_speech.person}`,
+    detail: <>{Number(m.longest_speech.words).toLocaleString()} words without a break, at {at(m.longest_speech.ts)}</>,
+    excerpt: String(m.longest_speech.excerpt),
+  })
+  if (m.liveliest_exchange) moments.push({
+    key: 'liveliest_exchange', label: 'Liveliest exchange',
+    value: `${m.liveliest_exchange.turns} turns in one minute`,
+    detail: <>{m.liveliest_exchange.speakers} people in it, at {at(m.liveliest_exchange.ts)}</>,
+  })
+  if (m.laughiest_minute) moments.push({
+    key: 'laughiest_minute', label: 'Biggest laugh',
+    value: `${m.laughiest_minute.laughs} laughs in a minute`,
+    detail: <>at {at(m.laughiest_minute.ts)}</>,
+  })
+  if (m.longest_silence) moments.push({
+    key: 'longest_silence', label: 'Longest silence',
+    value: `${m.longest_silence.seconds} seconds`,
+    detail: <>broken by {String(m.longest_silence.broken_by)}, at {at(m.longest_silence.resumed_at)}</>,
+  })
+  if (m.most_curious) moments.push({
+    key: 'most_curious', label: 'Most curious',
+    value: String(m.most_curious.person),
+    detail: <>{Number(m.most_curious.questions).toLocaleString()} questions asked</>,
+  })
+  if (m.opening_line) moments.push({
+    key: 'opening_line', label: 'Opening line',
+    value: String(m.opening_line.character || m.opening_line.person),
+    detail: <>at {at(m.opening_line.ts)}</>,
+    excerpt: String(m.opening_line.excerpt),
+  })
+  if (m.closing_line) moments.push({
+    key: 'closing_line', label: 'Last word',
+    value: String(m.closing_line.character || m.closing_line.person),
+    detail: <>at {at(m.closing_line.ts)}</>,
+    excerpt: String(m.closing_line.excerpt),
+  })
+
+  const c = stats.comparison
+  const paceDiff = c && c.average_wpm ? (c.wpm - c.average_wpm) / c.average_wpm : 0
+  const pace = (stats.pace ?? []).map(p => ({ label: `${clock(p.start)}–${clock(Math.min(p.start + 600, stats.duration_seconds))}`, value: p.wpm }))
+  const newNames = stats.new_names ?? []
+  const names = stats.names ?? []
+  const breaks = stats.breaks ?? []
+
   return (
     <div style={{ maxWidth: '820px' }}>
       <p className="stats-sentence">
         {formatDuration(stats.duration_seconds)} at the table, {stats.words.toLocaleString()} words
         across {stats.lines.toLocaleString()} lines from {stats.speakers.length} speaker{stats.speakers.length !== 1 ? 's' : ''}.
+        {c && <>
+          {' '}The {ordinal(c.rank)}longest of {c.of} sessions
+          {Math.abs(paceDiff) < 0.05
+            ? <>, at a usual pace of {c.wpm} words a minute.</>
+            : <>, and {paceDiff > 0 ? 'livelier' : 'slower'} than usual: {c.wpm} words a minute against an average of {c.average_wpm}.</>}
+        </>}
       </p>
       <p style={{ margin: '0 0 28px', fontSize: 15, color: 'var(--ink-faint)' }}>
-        Talk time is estimated from words spoken, at about 160 words a minute.
+        Talk time is estimated from words spoken, at about 160 words a minute. Times link to the transcript.
       </p>
+
+      {moments.length > 0 && (
+        <section aria-label="Moments">
+          <div className="barlist-head"><h3 className="sc">Moments</h3></div>
+          <div className="records">
+            {moments.map(r => (
+              <div key={r.key} className="record">
+                <div className="record-label">{r.label}</div>
+                <div className="record-value">{r.value}</div>
+                <div className="record-detail">{r.detail}</div>
+                {r.excerpt && <div className="record-excerpt">“{r.excerpt}”</div>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <BarList
         title="Talk time"
         valueHeader="Talk time"
@@ -3926,9 +4041,64 @@ function SessionStatsPanel({ sessionName }: { sessionName: string }) {
           labelText: sp.player ? `${sp.name} (${sp.player})` : sp.name,
           value: sp.seconds,
           display: `${formatDuration(sp.seconds)}, ${percent(sp.share)}`,
-          details: [`${sp.words.toLocaleString()} words`, `${sp.lines.toLocaleString()} lines`],
+          details: [
+            `${sp.words.toLocaleString()} words in ${sp.lines.toLocaleString()} lines`,
+            `${sp.questions ?? 0} questions, ${sp.exclamations ?? 0} exclamations`,
+            ...(sp.laughs ? [`${sp.laughs} laughs`] : []),
+            `longest line ${sp.longest ?? 0} words`,
+          ],
         }))}
       />
+
+      <PaceChart
+        title="Pace"
+        note="Words a minute, ten minutes at a time."
+        points={pace}
+      />
+      {breaks.length > 0 && (
+        <p style={{ margin: '-24px 0 36px', fontSize: 16, color: 'var(--ink-soft)' }}>
+          {breaks.length === 1 ? 'One break' : `${breaks.length} breaks`}:{' '}
+          {joinList(breaks.map(b => <span key={b.ts}>{at(b.ts)} for {formatDuration(b.seconds)}</span>))}.
+        </p>
+      )}
+
+      {(stats.exchanges ?? []).length > 0 && (
+        <BarList
+          title="Who talks to whom"
+          note="How often the conversation passed directly between two people."
+          valueHeader="Exchanges"
+          rows={stats.exchanges!.map(e => ({
+            key: `${e.a}|${e.b}`,
+            label: `${e.a} and ${e.b}`,
+            labelText: `${e.a} and ${e.b}`,
+            value: e.count,
+            display: e.count.toLocaleString(),
+          }))}
+        />
+      )}
+
+      {names.length > 0 && (
+        <>
+          <BarList
+            title="Names mentioned"
+            note="Names from the campaign wiki, not counting the players and their characters."
+            valueHeader="Mentions"
+            rows={names.map(n => ({
+              key: n.name,
+              label: n.name,
+              labelText: n.name,
+              value: n.count,
+              display: n.count.toLocaleString(),
+              details: [`first at ${n.first_ts}, by ${n.first_by}`, ...(n.new ? ['first time in the campaign'] : [])],
+            }))}
+          />
+          {newNames.length > 0 && (
+            <p style={{ margin: '-24px 0 36px', fontSize: 16, color: 'var(--ink-soft)' }}>
+              First time in the campaign: {joinList(newNames.map(n => <span key={n.name}>{n.name} ({at(n.first_ts)})</span>))}.
+            </p>
+          )}
+        </>
+      )}
     </div>
   )
 }

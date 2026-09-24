@@ -86,14 +86,18 @@ export function BarList({ title, note, rows, valueHeader = 'Value' }: {
  * `max` is shared across the multiples so their heights compare honestly.
  * Missing values (not at that session) break the line.
  */
-export function TrendLine({ points, max, format, label }: {
+export function TrendLine({ points, max, format, label, width = 320, height = 64, wide = false }: {
   points: { label: string; value: number | null }[]
   max: number
   format: (v: number) => string
   label: string
+  width?: number
+  height?: number
+  /** Scale uniformly to the container (a full-width chart) instead of stretching a sparkline. */
+  wide?: boolean
 }) {
   const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null)
-  const W = 320, H = 64, PAD = 8
+  const W = width, H = height, PAD = 8
   const n = points.length
   const x = (i: number) => (n <= 1 ? W / 2 : PAD + (i * (W - PAD * 2)) / (n - 1))
   const y = (v: number) => H - PAD - (Math.min(v, max) / (max || 1)) * (H - PAD * 2)
@@ -107,8 +111,8 @@ export function TrendLine({ points, max, format, label }: {
   })
   const hp = hover ? points[hover.i] : null
   return (
-    <div className="trendline" aria-label={label}>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" role="img" aria-label={label}
+    <div className={'trendline' + (wide ? ' wide' : '')} aria-label={label}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={wide ? undefined : H} preserveAspectRatio={wide ? 'xMidYMid meet' : 'none'} role="img" aria-label={label}
         onPointerLeave={() => setHover(null)}>
         <line x1={0} x2={W} y1={H - PAD} y2={H - PAD} className="trend-baseline" vectorEffect="non-scaling-stroke" />
         <path d={d} className="trend-line" vectorEffect="non-scaling-stroke" />
@@ -116,7 +120,7 @@ export function TrendLine({ points, max, format, label }: {
           <g key={p.label}>
             <circle cx={x(i)} cy={y(p.value)} r={4} className={'trend-dot' + (hover?.i === i ? ' hot' : '')} vectorEffect="non-scaling-stroke" />
             {/* 24px hit target, bigger than the mark */}
-            <rect x={x(i) - 12} y={0} width={24} height={H} fill="transparent" tabIndex={0}
+            <rect x={x(i) - Math.min(12, (W - PAD * 2) / Math.max(1, n - 1) / 2)} y={0} width={Math.min(24, (W - PAD * 2) / Math.max(1, n - 1))} height={H} fill="transparent" tabIndex={0}
               aria-label={`${p.label}: ${format(p.value)}`}
               onPointerMove={e => setHover({ i, x: e.clientX, y: e.clientY })}
               onFocus={e => { const b = e.currentTarget.getBoundingClientRect(); setHover({ i, x: b.left + b.width / 2, y: b.top }) }}
@@ -131,5 +135,48 @@ export function TrendLine({ points, max, format, label }: {
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Words a minute through a session (or the average night), as a full-width
+ * line: the start and end times under it, and the busiest stretch named in
+ * words so the chart never needs hover to be read.
+ */
+export function PaceChart({ title, note, points, format = (v: number) => `${v} words a minute` }: {
+  title: string
+  note?: string
+  points: { label: string; value: number }[]
+  format?: (v: number) => string
+}) {
+  const [asTable, setAsTable] = useState(false)
+  if (points.length < 2) return null
+  const peak = points.reduce((a, b) => (b.value > a.value ? b : a))
+  const low = points.reduce((a, b) => (b.value < a.value ? b : a))
+  return (
+    <section className="barlist" aria-label={title}>
+      <div className="barlist-head">
+        <h3 className="sc">{title}</h3>
+        <button type="button" className="index-link" aria-pressed={asTable} onClick={() => setAsTable(v => !v)}>
+          {asTable ? 'show as chart' : 'show as table'}
+        </button>
+      </div>
+      {note && <p className="barlist-note">{note}</p>}
+      {asTable ? (
+        <table className="barlist-table">
+          <thead><tr><th scope="col">Stretch</th><th scope="col">Pace</th></tr></thead>
+          <tbody>{points.map(p => <tr key={p.label}><td>{p.label}</td><td>{format(p.value)}</td></tr>)}</tbody>
+        </table>
+      ) : (
+        <>
+          <p className="pace-caption">
+            Busiest at <b>{peak.label}</b> ({format(peak.value)}), quietest at <b>{low.label}</b> ({format(low.value)}).
+          </p>
+          <TrendLine wide width={720} height={96} label={title} max={Math.max(...points.map(p => p.value)) * 1.1}
+            format={format} points={points} />
+          <div className="pace-axis"><span>{points[0].label.split('–')[0]}</span><span>{points[points.length - 1].label.split('–').pop()}</span></div>
+        </>
+      )}
+    </section>
   )
 }
