@@ -240,11 +240,11 @@ Legacy aliases (`--bg-*`, `--text-*`, `--accent*`, `--success`, `--error`, `--wa
 
 ## Typography
 
-**Display Font:** EB Garamond Variable, self-hosted through `@fontsource-variable/eb-garamond` upright (the italic cut is loaded only for emphasis inside rendered markdown, such as summaries), falling back to EB Garamond, Garamond and Times New Roman.
+**Display Font:** EB Garamond Variable, self-hosted through `@fontsource-variable/eb-garamond` upright, plus the italic cut for two uses only: a session's subtitle (its one-line description) and emphasis inside rendered markdown such as summaries, falling back to EB Garamond, Garamond and Times New Roman.
 **Body Font:** the same face.
 **Label/Mono Font:** there is no display or label face. A system monospace appears only for machine strings (regex rules, worker keys, share URLs, raw markdown editors).
 
-**Character:** one old-style book face doing every job. Small caps give the label voice, faint ink gives the marginal-note voice (italic is not used for UI chrome), and the two figure styles separate prose from data.
+**Character:** one old-style book face doing every job. Small caps give the label voice, faint ink gives the marginal-note voice, and italic is kept for the session subtitle (never for UI chrome), and the two figure styles separate prose from data.
 
 ### Hierarchy
 - **Display** (500, 34px, 1.15): the page title, used for the session name as a chapter heading, "Sessions" and "Preferences". It shrinks to 28px on phones. A count in faint ink at 20px can sit beside it ("5 entries").
@@ -317,7 +317,7 @@ The session view's tabs, read as a book's index.
 
 ### Journal entries (session index)
 - **Corner style:** none. Each entry is a block closed by a hairline bottom rule.
-- **Content:** a 23px ink title, an optional one-line description in ink-soft, and an "Added …" date line in faint ink. Sessions carry no content or review-status tags; that feature was removed on request (the list only shows a Craig link icon and live job status).
+- **Content:** a 23px ink title, an optional one-line description (the session subtitle) in italic ink-soft, and an "Added …" date line in faint ink. Sessions carry no content or review-status tags; that feature was removed on request (the list only shows a Craig link icon and live job status).
 - **Hover:** a 7% gilt wash. Row actions are 16px stroke icons (`entry-action`) at 55% opacity that rise to full opacity when you hover or focus the entry. Danger actions turn rubric on hover.
 - **Order by:** `index-link` text links (name, date added, last changed), 17px ink-soft. When pressed (`aria-pressed`) they turn rubric with a 1px underline at a 4px offset. There is no status filter row.
 
@@ -363,7 +363,7 @@ Custom inline SVG stroke icons (`Icons.tsx`) on a 24px grid with a 2px stroke, r
 
 ### Don't:
 - **Don't** wrap content in cards, panels or bordered boxes with rounded corners. Entries are ruled, not boxed.
-- **Don't** use colored pills, per-speaker color chips, or italic for UI labels. Speakers are rubric small caps, and states are a plain word in moss, ochre or ink.
+- **Don't** use colored pills, per-speaker color chips, or italic for UI labels (italic is only for session subtitles and content emphasis). Speakers are rubric small caps, and states are a plain word in moss, ochre or ink.
 - **Don't** add drop shadows to page content. Only the cover and objects lying on the page (ribbon, menus, floating player) cast.
 - **Don't** introduce a second typeface for display or UI. A system monospace is allowed only for machine strings (regex, keys, URLs, raw markdown).
 - **Don't** set labels in uppercase with wide tracking. Use small caps.

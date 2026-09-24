@@ -248,7 +248,7 @@
       },
       "label": {
         "displayName": "Marginal Note",
-        "purpose": "Upright faint labels, placeholders, meta (no italic in UI chrome)."
+        "purpose": "Upright faint labels, placeholders, meta (no italic in UI chrome; italic only for the session subtitle and content emphasis)."
       },
       "figures": {
         "displayName": "Tabular Figures",
@@ -486,7 +486,7 @@
     ],
     "donts": [
       "**Don't** wrap content in cards, panels or bordered boxes with rounded corners. Entries are ruled, not boxed.",
-      "**Don't** use colored pills, per-speaker color chips, or italic for UI labels. Speakers are rubric small caps, and states are a plain word in moss, ochre or ink.",
+      "**Don't** use colored pills, per-speaker color chips, or italic for UI labels (italic is only for session subtitles and content emphasis). Speakers are rubric small caps, and states are a plain word in moss, ochre or ink.",
       "**Don't** add drop shadows to page content. Only the cover and objects lying on the page (ribbon, menus, floating player) cast.",
       "**Don't** introduce a second typeface for display or UI. A system monospace is allowed only for machine strings (regex, keys, URLs, raw markdown).",
       "**Don't** set labels in uppercase with wide tracking. Use small caps.",

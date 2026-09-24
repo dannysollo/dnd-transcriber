@@ -871,6 +871,7 @@ export default function SessionView() {
                   margin: 0,
                   fontSize: '16px',
                   color: 'var(--text-muted)',
+                  fontStyle: 'italic',  // the session's subtitle
                   lineHeight: 1.6,
                   flex: 1,
                 }}>

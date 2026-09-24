@@ -567,6 +567,7 @@ export default function SessionsPage() {
                           margin: '0 0 8px 0',
                           fontSize: '16px',
                           color: 'var(--text-secondary)',
+                          fontStyle: 'italic',  // the session's subtitle
                           lineHeight: 1.55,
                           cursor: 'pointer',
                           // Clamp to 2 lines
