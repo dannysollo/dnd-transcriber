@@ -5,7 +5,7 @@ primary_target: "gui/src/App.tsx"
 related_targets: ["gui/src/pages/SessionView.tsx","gui/src/pages/SessionsPage.tsx","gui/src/index.css"]
 ---
 
-# Surface brief: DnD Transcriber web app (all routes)
+# Surface brief: Co-DM web app (all routes)
 
 Scope: the whole React app in gui/src (app shell, Sessions, Session view with all tabs, Corrections, Edit Queue, Search, Campaigns, Campaign settings, Preferences, Login/Invite/Share). Mode: Operate (the transcript tab is Operate + Read). Desktop first; phones must still work.
 

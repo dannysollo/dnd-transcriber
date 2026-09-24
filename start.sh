@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# start.sh — Launch the DnD Transcriber (dev mode)
+# start.sh — Launch the Co-DM (dev mode)
 # Backend: port 8766  |  Frontend (Vite): port 5174
 set -e
 
@@ -17,7 +17,7 @@ if ! python -c "import fastapi" 2>/dev/null; then
   exit 1
 fi
 
-echo "Starting DnD Transcriber (dev)..."
+echo "Starting Co-DM (dev)..."
 echo ""
 
 # Start backend — load .env if present, then override FRONTEND_URL for dev

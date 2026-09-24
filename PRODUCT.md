@@ -42,7 +42,7 @@ Per-speaker transcription of Craig's separate tracks (not one mixed file), run o
 
 ## Brand Commitments
 
-- Product name as currently shown: "DnD Transcriber".
+- Product name: "Co-DM" (renamed from "Co-DM" on 2026-09-23). Internal identifiers keep the old name on purpose: the Fly app and URL (`dnd-transcriber`), the GitHub repo, the desktop exe (`dnd-transcriber-worker.exe`), its `%LOCALAPPDATA%\DnDTranscriberWorker` data folder and the installer AppId, so existing installs and links keep working.
 - No other binding brand assets, logos, or voice guidelines exist.
 
 ## Evidence on Hand

@@ -1,5 +1,5 @@
 """
-worker/main.py — DnD Transcriber worker daemon.
+worker/main.py — Co-DM worker daemon.
 
 Runs the transcription poll loop and the analysis poll loop as background
 threads, blocking the main thread until stopped.
@@ -485,7 +485,7 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
 # ─── Entry point ─────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="DnD Transcriber Worker")
+    parser = argparse.ArgumentParser(description="Co-DM Worker")
     parser.add_argument(
         "--config",
         default=str(Path(__file__).parent / "worker.yaml"),
@@ -548,7 +548,7 @@ def main():
         os.environ.setdefault("HF_TOKEN", config["hf_token"])
 
     print("=" * 60)
-    print(f"DnD Transcriber Worker  v{WORKER_VERSION}")
+    print(f"Co-DM Worker  v{WORKER_VERSION}")
     print(f"  Server:   {config['server_url']}")
     print(f"  Campaign: {config['campaign_slug']}")
     print(f"  Audio:    {config['audio_dir']}")

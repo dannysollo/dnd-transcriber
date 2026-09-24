@@ -1,5 +1,5 @@
 """
-desktop/app.py — pywebview entry point for the DnD Transcriber desktop app.
+desktop/app.py — pywebview entry point for the Co-DM desktop app.
 
 Flow:
   1. If no valid worker.yaml exists yet, the single main window loads the
@@ -274,7 +274,7 @@ def _on_closing() -> bool:
         main_window.hide()
         if tray_icon:
             tray_icon.notify(
-                "DnD Transcriber Worker",
+                "Co-DM Worker",
                 "Still transcribing in the background. Right-click the tray icon to reopen or quit.",
             )
         return False
@@ -359,14 +359,14 @@ def main() -> None:
 
     if onboarding.needs_onboarding():
         main_window = webview.create_window(
-            "DnD Transcriber — Setup",
+            "Co-DM — Setup",
             url=str(paths.onboarding_html_path()),
             js_api=Api(),
             width=720, height=680,
         )
     else:
         main_window = webview.create_window(
-            "DnD Transcriber", url=_site_url(), js_api=Api(),
+            "Co-DM", url=_site_url(), js_api=Api(),
             width=1200, height=800,
         )
 

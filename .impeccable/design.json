@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-09-23T20:47:02.278067+00:00",
-  "title": "Design System: DnD Transcriber",
+  "title": "Design System: Co-DM",
   "extensions": {
     "colorMeta": {
       "cover-leather": {
@@ -388,7 +388,7 @@
       "kind": "nav",
       "refersTo": "cover-link",
       "description": "Nav on the leather cover; the active link carries a gilt inset rule.",
-      "html": "<nav class=\"ds-cover\"><div class=\"ds-brand\">DnD Transcriber</div><a class=\"ds-cover-link active\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 4h16v16H4z\"/><path d=\"M8 9h8M8 13h8\"/></svg>Sessions</a><a class=\"ds-cover-link\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"m20 20-3.5-3.5\"/></svg>Search</a></nav>",
+      "html": "<nav class=\"ds-cover\"><div class=\"ds-brand\">Co-DM</div><a class=\"ds-cover-link active\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 4h16v16H4z\"/><path d=\"M8 9h8M8 13h8\"/></svg>Sessions</a><a class=\"ds-cover-link\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"m20 20-3.5-3.5\"/></svg>Search</a></nav>",
       "css": ".ds-cover{font-family:var(--font-journal,'EB Garamond',Garamond,serif);width:232px;padding:20px 0;background-color:var(--cover,#2A1E17);background-image:radial-gradient(rgba(255,255,255,.035) 1px,transparent 1px);background-size:3px 3px;color:var(--cover-ink,#E7D5B3);box-shadow:inset -10px 0 16px -8px rgba(0,0,0,.45),6px 0 18px -8px rgba(0,0,0,.35);border-right:1px solid var(--cover-edge,#120C09)}.ds-brand{font-variant:small-caps;letter-spacing:.06em;font-size:22px;padding:0 24px 16px}.ds-cover-link{display:flex;align-items:center;gap:12px;padding:7px 24px;font-size:18px;color:var(--cover-ink-soft,#A89170);text-decoration:none;transition:color .15s ease,background-color .15s ease}.ds-cover-link svg{opacity:.75}.ds-cover-link:hover{color:var(--cover-ink,#E7D5B3);background:var(--cover-hover,rgba(176,141,87,.13))}.ds-cover-link.active{color:var(--cover-ink,#E7D5B3);background:var(--cover-hover,rgba(176,141,87,.13));box-shadow:inset 3px 0 0 var(--gilt,#B08D57)}.ds-cover-link.active svg{opacity:1}.ds-cover-link:focus-visible{outline:2px solid var(--gilt,#B08D57);outline-offset:-2px}"
     },
     {

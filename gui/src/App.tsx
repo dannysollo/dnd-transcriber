@@ -180,7 +180,7 @@ export default function App() {
         {/* Title, as stamped on the cover */}
         <div className="sidebar-logo" style={{ padding: '28px 24px 18px' }}>
           <div className="sc" style={{ fontSize: '22px', lineHeight: 1.15, color: 'var(--cover-ink)', letterSpacing: '0.06em' }}>
-            DnD Transcriber
+            Co-DM
           </div>
           {!authEnabled && (
             <div style={{ marginTop: '6px', fontSize: '14px', color: 'var(--cover-ink-soft)' }}>

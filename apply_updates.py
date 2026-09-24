@@ -420,7 +420,7 @@ def run(session_dir: str, apply_ids: list[int] | None, skip_ids: list[int],
         commit_msg = f"Session notes ({session_name}): applied wiki updates {applied}"
         # Ensure git identity is set (required in containerised environments)
         subprocess.run(["git", "config", "user.email", "deploy@dnd-transcriber"], cwd=vault_path, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "DnD Transcriber"], cwd=vault_path, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Co-DM"], cwd=vault_path, capture_output=True)
         subprocess.run(["git", "add", "-A"], cwd=vault_path, capture_output=True)
         result = subprocess.run(
             ["git", "commit", "-m", commit_msg],

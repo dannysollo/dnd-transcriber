@@ -1,5 +1,5 @@
 """
-server.py — FastAPI backend for the DnD Transcriber GUI
+server.py — FastAPI backend for the Co-DM GUI
 """
 import asyncio
 from datetime import datetime
@@ -40,7 +40,7 @@ DATA_DIR = Path(os.getenv("DATA_DIR", str(APP_DIR)))
 # Defaults to APP_DIR (dev), override to /data (production/fly.io)
 BASE_DIR = Path(os.getenv("DATA_DIR", str(APP_DIR)))
 
-app = FastAPI(title="DnD Transcriber", version="1.0.0")
+app = FastAPI(title="Co-DM", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -2247,7 +2247,7 @@ def campaign_apply_wiki(
     if vault_repo_url and vault_dir and (vault_dir / ".git").exists() and github_token:
         # Configure git identity (required for commits in container)
         subprocess.run(["git", "config", "user.email", "deploy@dnd-transcriber"], cwd=vault_dir, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "DnD Transcriber"], cwd=vault_dir, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Co-DM"], cwd=vault_dir, capture_output=True)
         # Stage and commit any changes
         subprocess.run(["git", "add", "-A"], cwd=vault_dir, capture_output=True)
         commit = subprocess.run(

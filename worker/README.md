@@ -1,4 +1,4 @@
-# DnD Transcriber — Worker
+# Co-DM — Worker
 
 The worker runs on your local machine and uses your GPU to transcribe Craig recordings. It polls the campaign site for pending jobs, processes audio locally, and pushes the transcript + merged audio back to the server.
 
@@ -11,7 +11,7 @@ The worker runs on your local machine and uses your GPU to transcribe Craig reco
 - Python 3.10+
 - ffmpeg
 - An NVIDIA GPU with CUDA (strongly recommended — CPU transcription is very slow)
-- A DnD Transcriber account and campaign membership
+- A Co-DM account and campaign membership
 
 ---
 

@@ -1,9 +1,9 @@
 @echo off
-REM setup.bat — DnD Transcriber Worker setup (Windows)
+REM setup.bat — Co-DM Worker setup (Windows)
 setlocal enabledelayedexpansion
 
 echo.
-echo  DnD Transcriber -- Worker Setup
+echo  Co-DM -- Worker Setup
 echo ==========================================
 echo.
 

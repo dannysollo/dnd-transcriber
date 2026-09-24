@@ -1,5 +1,5 @@
 """
-worker/gui_server.py — Local web dashboard for the DnD Transcriber worker.
+worker/gui_server.py — Local web dashboard for the Co-DM worker.
 
 Runs on http://localhost:8788 as a daemon thread inside the worker process.
 """
@@ -52,7 +52,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light dark">
-<title>DnD Transcriber Worker</title>
+<title>Co-DM Worker</title>
 <style>
   /* The site's journal look (see DESIGN.md): laid paper and ink by day, the
      same page by lamplight when the system is in dark mode. */
@@ -147,7 +147,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <body>
 <header>
   <span class="dot" title="Worker running"></span>
-  <h1>DnD Transcriber Worker</h1>
+  <h1>Co-DM Worker</h1>
   <div class="meta">
     <div>Running for <span id="uptime">…</span></div>
     <div id="server-url">…</div>

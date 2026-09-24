@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# setup.sh — DnD Transcriber Worker setup (Linux/macOS)
+# setup.sh — Co-DM Worker setup (Linux/macOS)
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "╔══════════════════════════════════════════╗"
-echo "║   DnD Transcriber — Worker Setup         ║"
+echo "║   Co-DM — Worker Setup                   ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 

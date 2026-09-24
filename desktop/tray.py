@@ -46,7 +46,7 @@ class TrayIcon:
         self._icon = pystray.Icon(
             "dnd_transcriber_worker",
             icon=_load_icon_image(),
-            title="DnD Transcriber Worker",
+            title="Co-DM Worker",
             menu=pystray.Menu(
                 pystray.MenuItem("Open Site", on_open_site, default=True),
                 pystray.MenuItem("Open Worker Dashboard", on_open_dashboard),

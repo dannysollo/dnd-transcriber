@@ -1,5 +1,5 @@
 ---
-name: DnD Transcriber
+name: Co-DM
 description: The campaign kept as a bound journal, with a leather cover, laid-paper pages, sepia ink and rubricated speakers, read by daylight or by lamplight.
 colors:
   cover-leather: "#2A1E17"
@@ -184,7 +184,7 @@ components:
     padding: "6px"
 ---
 
-# Design System: DnD Transcriber
+# Design System: Co-DM
 
 ## Overview
 
@@ -254,7 +254,7 @@ Legacy aliases (`--bg-*`, `--text-*`, `--accent*`, `--success`, `--error`, `--wa
 - **Body** (400, 17px): UI prose, the base size of `body`, with old-style proportional figures by default.
 - **Label** (400, 14–16px, upright, ink-faint or ink-soft): marginal notes such as "Order by", "Campaign", placeholders, the "a few moments pass" note and secondary hints. Never italic: an earlier pass set these in italic, and it read as overdone.
 - **Figures** (15–16px, lining tabular): timestamps, audio time and counts. Apply them with `.tnum`, `<time>` or `data-tnum`.
-- **Brand** (22px small caps, 0.06em tracking, cover ink): "DnD Transcriber" on the cover.
+- **Brand** (22px small caps, 0.06em tracking, cover ink): "Co-DM" on the cover.
 
 ### Named Rules
 **The Small Caps, Never Shouting Rule.** Labels are real small caps (`font-variant: small-caps`, 0.04–0.06em tracking), never uppercase text with wide tracking.

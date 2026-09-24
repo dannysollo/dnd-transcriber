@@ -1,4 +1,4 @@
-# DnD Session Transcriber
+# Co-DM
 
 Turns Craig bot Discord recordings into speaker-labeled transcripts, session summaries, and Obsidian wiki update suggestions — with a full web GUI for review and editing.
 

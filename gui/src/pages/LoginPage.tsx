@@ -17,7 +17,7 @@ export default function LoginPage() {
     }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: '34px', fontWeight: 700, color: 'var(--ink)', marginBottom: '8px' }}>
-          DnD Transcriber
+          Co-DM
         </div>
         <div style={{ fontSize: '17px', color: 'var(--ink-faint)' }}>
           Sign in to access your campaigns

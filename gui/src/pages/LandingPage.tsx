@@ -23,7 +23,7 @@ export default function LandingPage() {
         color: 'var(--accent)',
         letterSpacing: '-0.5px',
       }}>
-        DnD Transcriber
+        Co-DM
       </h1>
 
       {/* Subtitle */}
