@@ -2441,6 +2441,58 @@ def campaign_rename_speaker(
     return {"replacements": count}
 
 
+RULE_TARGET_FILES = ("transcript.md", "summary.md", "wiki_suggestions.md", "wiki.md")
+
+
+def _apply_rules_text(text: str, corrections: dict, patterns: list) -> tuple[str, int]:
+    """
+    Apply word rules (whole-word, case-insensitive) then regex patterns.
+    Returns (new text, number of actual changes). A rule matching text that
+    already reads correctly (e.g. "aziah" -> "Aziah" on "Aziah") isn't counted.
+    """
+    changes = 0
+
+    def sub_counting(pattern, repl, text, flags=0):
+        nonlocal changes
+        def one(m):
+            nonlocal changes
+            out = m.expand(repl) if isinstance(repl, str) else repl(m)
+            if out != m.group(0):
+                changes += 1
+            return out
+        return re.sub(pattern, one, text, flags=flags)
+
+    for wrong, right in (corrections or {}).items():
+        text = sub_counting(r"\b" + re.escape(wrong) + r"\b", lambda m, r=right: r, text, re.IGNORECASE)
+    for entry in patterns or []:
+        try:
+            text = sub_counting(entry["match"], entry["replace"], text)
+        except re.error:
+            continue  # a broken pattern shouldn't block the rest
+    return text, changes
+
+
+def _apply_rules_to_session(session_dir: Path, config: dict) -> dict:
+    """
+    Apply the campaign's correction rules in place to a session's transcript,
+    summary and wiki suggestions. Never rebuilds from raw Whisper output, so
+    hand edits survive. Returns {"changes": total, "files": {name: n}}.
+    """
+    corrections = config.get("corrections") or {}
+    patterns = config.get("patterns") or []
+    files = {}
+    for filename in RULE_TARGET_FILES:
+        path = session_dir / filename
+        if not path.exists():
+            continue
+        before = path.read_text(encoding="utf-8")
+        after, n = _apply_rules_text(before, corrections, patterns)
+        if n and after != before:
+            path.write_text(after, encoding="utf-8")
+            files[filename] = n
+    return {"changes": sum(files.values()), "files": files}
+
+
 @app.post("/campaigns/{slug}/sessions/{name}/merge")
 def campaign_merge_session(
     slug: str,
@@ -2448,55 +2500,34 @@ def campaign_merge_session(
     _member=Depends(require_campaign_member("dm")),
 ):
     """
-    Re-apply corrections/patterns to the existing transcript.
-    NOTE: Does NOT re-merge from speaker JSONs (those live on the worker machine).
-    If speaker JSONs exist locally, merges from them; otherwise re-applies corrections to
-    the existing transcript.md in place.
+    Apply the current correction rules to this session, in place. (Kept at
+    /merge for compatibility; it no longer rebuilds the transcript from
+    speaker JSONs, which used to wipe manual edits.)
     """
     session_dir = get_sessions_dir(slug) / name
-    if not session_dir.exists():
-        raise HTTPException(404, "Session not found")
+    if not (session_dir / "transcript.md").exists():
+        raise HTTPException(404, "No transcript to apply corrections to")
+    return _apply_rules_to_session(session_dir, load_config(slug))
+
+
+@app.post("/campaigns/{slug}/corrections/apply-all")
+def campaign_apply_corrections_all(
+    slug: str,
+    _member=Depends(require_campaign_member("dm")),
+):
+    """Apply the current correction rules to every session that has a transcript, in place."""
     config = load_config(slug)
-    speakers_dir = session_dir / "speakers"
-    transcript_path = session_dir / "transcript.md"
-
-    try:
-        from merge import apply_corrections, apply_patterns
-
-        if speakers_dir.exists() and any(speakers_dir.glob("*.json")):
-            # Speaker JSONs present — full merge
-            from merge import save_transcript
-            result = save_transcript(
-                str(session_dir),
-                corrections=config.get("corrections"),
-                patterns=config.get("patterns"),
-            )
-        elif transcript_path.exists():
-            # No speaker JSONs (transcript came from worker) — re-apply corrections only
-            result = transcript_path.read_text(encoding="utf-8")
-            if config.get("corrections"):
-                result = apply_corrections(result, config["corrections"])
-            if config.get("patterns"):
-                result = apply_patterns(result, config["patterns"])
-            transcript_path.write_text(result, encoding="utf-8")
-        else:
-            raise HTTPException(404, "No transcript or speaker data found to merge")
-
-        for filename in ("summary.md", "wiki_suggestions.md", "wiki.md"):
-            path = session_dir / filename
-            if path.exists():
-                text = path.read_text(encoding="utf-8")
-                if config.get("corrections"):
-                    text = apply_corrections(text, config["corrections"])
-                if config.get("patterns"):
-                    text = apply_patterns(text, config["patterns"])
-                path.write_text(text, encoding="utf-8")
-
-        return {"lines": result.count("\n"), "chars": len(result)}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, str(e))
+    results = []
+    sessions_dir = get_sessions_dir(slug)
+    if sessions_dir.exists():
+        for d in sorted(sessions_dir.iterdir()):
+            if d.is_dir() and not d.name.startswith(".") and (d / "transcript.md").exists():
+                results.append({"session": d.name, **_apply_rules_to_session(d, config)})
+    return {
+        "sessions": results,
+        "total_changes": sum(r["changes"] for r in results),
+        "sessions_changed": sum(1 for r in results if r["changes"]),
+    }
 
 
 @app.post("/campaigns/{slug}/sessions/{name}/transcript/import")
@@ -2808,21 +2839,6 @@ def campaign_pipeline_run(
 
 
 # ── Merge all ─────────────────────────────────────────────────────────────────
-
-@app.post("/campaigns/{slug}/merge/all")
-def campaign_merge_all(
-    slug: str,
-    _member=Depends(require_campaign_member("dm")),
-):
-    if pipeline_state["running"]:
-        raise HTTPException(409, "Pipeline already running")
-    pipeline_state["running"] = True
-    pipeline_state["session"] = None
-    pipeline_state["log"] = []
-    t = threading.Thread(target=_merge_all_thread, args=(slug,), daemon=True)
-    t.start()
-    return {"ok": True}
-
 
 # ── Edit approval queue ───────────────────────────────────────────────────────
 

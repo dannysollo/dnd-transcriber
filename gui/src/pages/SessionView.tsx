@@ -573,13 +573,16 @@ export default function SessionView() {
     try {
       const r = await fetch(apiUrl(`/sessions/${name}/merge`), { method: 'POST' })
       if (r.ok) {
-        load()
+        const res = await r.json().catch(() => null)
+        const n = res?.changes ?? 0
+        toast(n ? `Applied corrections: ${n} fix${n !== 1 ? 'es' : ''}` : 'Already matches the correction rules', n ? 'success' : 'info')
+        load({ silent: true })
         // Invalidate changes report so it reloads next time
         setChangesLoaded(false)
         setChangesReport(null)
       } else {
         const err = await r.json()
-        toast(err.detail || 'Merge failed', 'error')
+        toast(err.detail || 'Could not apply corrections', 'error')
       }
     } finally {
       setMerging(false)
@@ -876,8 +879,8 @@ export default function SessionView() {
             {!(editMode && tab === 'transcript') && (
               <>
                 <button className="btn-ghost" onClick={doMerge} disabled={merging}
-                  title="Re-apply correction rules to this session">
-                  {merging ? 'Re-merging…' : 'Re-merge'}
+                  title="Apply the campaign's correction rules to this session (your manual edits are kept)">
+                  {merging ? 'Applying…' : 'Apply corrections'}
                 </button>
                 <button
                   className={pipelineRunning ? 'btn-secondary' : 'btn-primary'}
@@ -1854,7 +1857,7 @@ function TranscriptView({
           <span>
             {activeCampaign && activeCampaign.role !== 'dm' && activeCampaign.settings?.require_edit_approval
               ? 'Edit mode — changes will be submitted for DM review before being applied.'
-              : 'Edit mode — changes write directly to transcript.md. Re-merging will overwrite manual edits.'}
+              : 'Editing: changes save straight to the transcript, and applying corrections later keeps them. Only re-transcribing the audio would replace them.'}
           </span>
           <button
             onClick={saveAll}
@@ -2878,7 +2881,7 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
       {open && (
         <div style={{ padding: '0 48px 12px 68px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <p style={{ margin: '0 0 4px', fontSize: '15px', color: 'var(--ochre)' }}>
-            Renaming edits this transcript directly. Re-merging from the original audio would bring the old names back.
+            Renaming edits this transcript directly. Re-transcribing the audio would bring the old names back.
           </p>
           {speakers.map(s => (
             <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -3243,13 +3246,9 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
         {importResult && importResult.imported.length > 0 && onRemerge && (
           <button
             onClick={onRemerge}
-            style={{
-              background: 'color-mix(in srgb, var(--moss) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--moss) 20%, transparent)',
-              borderRadius: '3px', color: 'var(--moss)', padding: '5px 10px',
-              fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-            }}
+            className="btn-ghost"
           >
-            Re-merge
+            Apply corrections
           </button>
         )}
 

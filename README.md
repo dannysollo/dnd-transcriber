@@ -174,5 +174,5 @@ dnd-transcriber/
 
 - **Speed:** `turbo` model is ~3x faster than `large-v3` with minor quality tradeoff. On a 4060 Ti, a 4hr session takes ~20 min with turbo.
 - **Proper nouns:** If a name is being mangled, add its page to your Obsidian vault — `vocab_extractor.py` picks it up automatically next run.
-- **Corrections:** Use the GUI corrections editor to add/test fixes. Hit "Re-merge All" to apply across all sessions at once.
+- **Corrections:** Use the GUI corrections editor to add/test fixes. "Apply corrections to all sessions" runs the rules over every transcript, summary and wiki suggestion in place (manual edits are kept; nothing is re-transcribed).
 - **Wiki review:** Always read `wiki_suggestions.md` before hitting Apply All — suggestions are additions only, never rewrites.
