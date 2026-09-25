@@ -775,7 +775,10 @@ input.written-line:focus {
 @media (max-width: 768px) { .profile { grid-template-columns: minmax(0, 1fr); } }
 
 /* Reconstructed sessions (rebuilt from one mixed recording): a quiet ochre warning mark */
-.reconstructed-mark { display: inline-flex; align-items: center; color: var(--ochre); flex-shrink: 0; cursor: help; }
+.reconstructed-mark { position: relative; display: inline-flex; align-items: center; color: var(--ochre); flex-shrink: 0; cursor: help; }
+/* Absolutely positioned bits (like .sr-only labels) must stay inside the scrolling
+   main column; otherwise they stretch the page and the sidebar scrolls away. */
+.app-main { position: relative; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* Transcript edit mode. Plain classes, not per-row inline styles, and
