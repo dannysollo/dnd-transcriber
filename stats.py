@@ -59,14 +59,17 @@ def session_stats(transcript: str) -> dict:
         s["exclamations"] += text.count("!")
         s["laughs"] += laugh_count(text)
         s["longest"] = max(s["longest"], words)
+    duration = last_ts + round(last_words / SPEECH_RATE)
     for s in speakers.values():
         s["seconds"] = round(s["words"] / SPEECH_RATE)
         s["share"] = round(s["words"] / total_words, 4) if total_words else 0
-    duration = last_ts + round(last_words / SPEECH_RATE)
+        # words per minute of the session: how much they contribute over the night
+        s["words_per_minute"] = round(s["words"] / (duration / 60), 1) if duration > 60 else 0
     return {
         "duration_seconds": duration,
         "lines": lines,
         "words": total_words,
+        "words_per_minute": round(total_words / (duration / 60), 1) if duration > 60 else 0,
         "speakers": sorted(speakers.values(), key=lambda s: -s["words"]),
     }
 
@@ -123,12 +126,15 @@ def campaign_stats(sessions: list[dict], terms: list[str], config: dict) -> dict
         for sp in st["speakers"]:
             # Group by the person at the table when the label names one.
             key = sp["player"] or sp["name"]
-            p = people.setdefault(key, {"person": key, "characters": set(), "words": 0, "seconds": 0, "sessions": 0})
+            p = people.setdefault(key, {"person": key, "characters": set(), "words": 0, "seconds": 0, "sessions": 0, "session_seconds": 0})
             if sp["player"] and sp["name"]:
                 p["characters"].add(sp["name"])
             p["words"] += sp["words"]
             p["seconds"] += sp["seconds"]
-            p["sessions"] += 1
+            if sess["name"] not in p.setdefault("_seen", set()):
+                p["_seen"].add(sess["name"])
+                p["sessions"] += 1
+                p["session_seconds"] += st["duration_seconds"]
         for term, n in count_mentions(sess["transcript"], terms, exclude).items():
             e = mentions.setdefault(term, {"name": term, "count": 0, "sessions": 0, "first_session": sess["name"]})
             e["count"] += n
@@ -143,14 +149,17 @@ def campaign_stats(sessions: list[dict], terms: list[str], config: dict) -> dict
     total_words = sum(r["words"] for r in rows)
     people_list = []
     for p in people.values():
+        p.pop("_seen", None)
         people_list.append({**p, "characters": sorted(p["characters"]),
-                            "share": round(p["words"] / total_words, 4) if total_words else 0})
+                            "share": round(p["words"] / total_words, 4) if total_words else 0,
+                            "words_per_minute": round(p["words"] / (p["session_seconds"] / 60), 1) if p["session_seconds"] > 60 else 0})
     people_list.sort(key=lambda p: -p["words"])
     rows.sort(key=lambda r: r.get("created_at") or "")
     return {
         "sessions": len(rows),
         "duration_seconds": sum(r["duration_seconds"] for r in rows),
         "words": total_words,
+        "words_per_minute": round(total_words / (sum(r["duration_seconds"] for r in rows) / 60), 1) if sum(r["duration_seconds"] for r in rows) > 60 else 0,
         "per_session": rows,
         "people": people_list,
         "mentions": sorted(mentions.values(), key=lambda e: -e["count"])[:15],

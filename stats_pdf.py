@@ -219,8 +219,9 @@ def render_stats_pdf(data: dict, campaign_name: str) -> bytes:
 </div></section>""")
 
     parts.append("<h2>At the table</h2>")
+    wpm = f" ({round(data['words_per_minute'])} a minute)" if data.get("words_per_minute") else ""
     lead = (f"{data['sessions']} session{'s' if data['sessions'] != 1 else ''} recorded, {_dur(data['duration_seconds'])} "
-            f"at the table and {data['words']:,} words spoken.")
+            f"at the table and {data['words']:,} words spoken{wpm}.")
     if longest:
         lead += f" The longest was {escape(longest['name'])}, at {_dur(longest['duration_seconds'])}."
     parts.append(f'<p class="lead">{lead}</p><p class="note">Talk time is estimated from words spoken, at about {SPEECH_WPM} words a minute.</p>')
@@ -239,6 +240,10 @@ def render_stats_pdf(data: dict, campaign_name: str) -> bytes:
         parts.append("<h2>Who talks most</h2>")
         parts.append(_bars([(p["person"] + (f" ({', '.join(p['characters'])})" if p["characters"] else ""), p["seconds"],
                              f"{_dur(p['seconds'])}, {_pct(p['share'])}") for p in people]))
+
+    if people:
+        parts.append('<h2>Words spoken</h2><p class="note">Words a minute is each person\'s words over every session they were at, so it shows how much they contribute, not how fast they talk.</p>')
+        parts.append(_bars([(p["person"], p["words"], f"{p['words']:,}, {round(p.get('words_per_minute') or 0)} a minute") for p in people]))
 
     profiles = data.get("profiles", [])
     if profiles:

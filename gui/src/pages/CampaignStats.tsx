@@ -30,7 +30,8 @@ interface CampaignStatsData {
   duration_seconds: number
   words: number
   per_session: { name: string; created_at: string | null; duration_seconds: number; words: number; lines: number; speakers: number; new_names?: number }[]
-  people: { person: string; characters: string[]; words: number; seconds: number; sessions: number; share: number }[]
+  people: { person: string; characters: string[]; words: number; seconds: number; sessions: number; share: number; words_per_minute?: number }[]
+  words_per_minute?: number
   mentions: { name: string; count: number; sessions: number; first_session?: string }[]
   records: Records
   profiles: Profile[]
@@ -176,7 +177,7 @@ export default function CampaignStats({ slug }: { slug: string }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
         <p className="stats-sentence" style={{ flex: '1 1 420px' }}>
           {data.sessions} session{data.sessions !== 1 ? 's' : ''} recorded, {formatDuration(data.duration_seconds)} at the table
-          and {data.words.toLocaleString()} words spoken. The longest was {longest.name}, at {formatDuration(longest.duration_seconds)}.
+          and {data.words.toLocaleString()} words spoken{data.words_per_minute ? <> ({Math.round(data.words_per_minute)} a minute)</> : null}. The longest was {longest.name}, at {formatDuration(longest.duration_seconds)}.
         </p>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button type="button" className="btn-ghost" onClick={refresh} disabled={refreshing}
@@ -220,6 +221,20 @@ export default function CampaignStats({ slug }: { slug: string }) {
           value: p.seconds,
           display: `${formatDuration(p.seconds)}, ${percent(p.share)}`,
           details: [`${p.words.toLocaleString()} words`, `in ${p.sessions} session${p.sessions !== 1 ? 's' : ''}`],
+        }))}
+      />
+
+      <BarList
+        title="Words spoken"
+        note="Words a minute is each person's words over every session they were at, so it shows how much they contribute to the table, not how fast they talk."
+        valueHeader="Words"
+        rows={data.people.map(p => ({
+          key: p.person,
+          label: <>{p.person}{p.characters.length > 0 && <span className="speaker-player" style={{ marginLeft: 6 }}>{p.characters.join(', ')}</span>}</>,
+          labelText: p.characters.length ? `${p.person} (${p.characters.join(', ')})` : p.person,
+          value: p.words,
+          display: `${p.words.toLocaleString()}, ${Math.round(p.words_per_minute ?? 0)} a minute`,
+          details: [`about ${Math.round(p.words / Math.max(1, p.sessions)).toLocaleString()} words a session`, `in ${p.sessions} session${p.sessions !== 1 ? 's' : ''}`],
         }))}
       />
 

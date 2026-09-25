@@ -3932,8 +3932,9 @@ interface SessionStats {
   words: number
   speakers: {
     label: string; name: string; player: string; lines: number; words: number; seconds: number; share: number
-    questions: number; exclamations: number; laughs: number; longest: number
+    questions: number; exclamations: number; laughs: number; longest: number; words_per_minute?: number
   }[]
+  words_per_minute?: number
   moments?: Record<string, Record<string, string | number>>
   pace?: { start: number; words: number; wpm: number }[]
   breaks?: { ts: string; resumed_at: string; seconds: number; resumed_by: string }[]
@@ -4032,7 +4033,8 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
     <div style={{ maxWidth: '820px' }}>
       <p className="stats-sentence">
         {formatDuration(stats.duration_seconds)} at the table, {stats.words.toLocaleString()} words
-        across {stats.lines.toLocaleString()} lines from {stats.speakers.length} speaker{stats.speakers.length !== 1 ? 's' : ''}.
+        {stats.words_per_minute && !stats.comparison ? <> ({Math.round(stats.words_per_minute)} a minute)</> : null} across {stats.lines.toLocaleString()} lines
+        from {stats.speakers.length} speaker{stats.speakers.length !== 1 ? 's' : ''}.
         {c && <>
           {' '}The {ordinal(c.rank)}longest of {c.of} sessions
           {Math.abs(paceDiff) < 0.05
@@ -4076,6 +4078,20 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
             `longest line ${sp.longest ?? 0} words`,
             ...(stats.rules?.by_person[sp.player || sp.name] ? [`${percent(stats.rules.by_person[sp.player || sp.name])} rules and dice`] : []),
           ],
+        }))}
+      />
+
+      <BarList
+        title="Words spoken"
+        note="Words a minute is each person's words over the whole session, so it shows how much they contribute to the night, not how fast they talk."
+        valueHeader="Words"
+        rows={stats.speakers.map(sp => ({
+          key: sp.label,
+          label: <><span className="speaker-name">{sp.name}</span>{sp.player && <span className="speaker-player" style={{ marginLeft: 6 }}>{sp.player}</span>}</>,
+          labelText: sp.player ? `${sp.name} (${sp.player})` : sp.name,
+          value: sp.words,
+          display: `${sp.words.toLocaleString()}, ${Math.round(sp.words_per_minute ?? 0)} a minute`,
+          details: [`${sp.lines.toLocaleString()} lines`, `about ${Math.round(sp.words / Math.max(1, sp.lines))} words a line`],
         }))}
       />
 
