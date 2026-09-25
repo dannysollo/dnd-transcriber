@@ -492,6 +492,13 @@ export default function SessionView() {
   }, [selectedAudio])
 
   useEffect(() => {
+    // Leaving the transcript ends editing (a line being typed saves on blur as
+    // the tab is clicked). Otherwise coming back via a Names example or a
+    // citation lands in the editor, which can't jump to a line, at 00:00.
+    if (tab !== 'transcript' && editMode) {
+      anchorLineRef.current = null
+      setEditMode(false)
+    }
     if (tab === 'changes') {
       loadChanges()
     }
@@ -1808,6 +1815,12 @@ function TranscriptView({
   const savedEditsRef = useRef(false)
   const editModeRef = useRef(editMode)
   editModeRef.current = editMode
+  // Latest edited lines and whether this view is still on screen, for saves
+  // that finish after edit mode ended or the tab changed (a blur-save).
+  const editedLinesRef = useRef<string[]>([])
+  editedLinesRef.current = editedLines
+  const mountedRef = useRef(true)
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false } }, [])
   useEffect(() => {
     if (!editMode && savedEditsRef.current) {
       savedEditsRef.current = false
@@ -1857,13 +1870,13 @@ function TranscriptView({
         // Pending approval — mark line as pending, don't update local text
         setPendingLines(prev => new Set([...prev, lineIdx]))
       } else {
-        setEditedLines(prev => {
-          const next = [...prev]; next[lineIdx] = value
-          // Blur-save from clicking "Done editing": edit mode has already ended, so pass it up here.
-          if (r.ok && !editModeRef.current) queueMicrotask(() => onEditsSaved?.(next.join('\n')))
-          return next
-        })
-        if (r.ok && editModeRef.current) savedEditsRef.current = true
+        const next = [...editedLinesRef.current]; next[lineIdx] = value
+        editedLinesRef.current = next
+        if (mountedRef.current) setEditedLines(next)
+        // A blur-save that finishes after "Done editing" or after switching tabs:
+        // edit mode (or this view) is already gone, so hand the text up directly.
+        if (r.ok && (!editModeRef.current || !mountedRef.current)) onEditsSaved?.(next.join('\n'))
+        else if (r.ok) savedEditsRef.current = true
         const data = await r.json().catch(() => null)
         const fresh: SessionRuleSuggestion[] = (data?.rule_suggestions ?? []).map(
           (s: Omit<SessionRuleSuggestion, 'session'>) => ({ ...s, session: sessionName }))

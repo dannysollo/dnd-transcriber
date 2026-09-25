@@ -815,10 +815,11 @@ input.written-line:focus {
   .edit-num { width: 28px; font-size: 12px; }
 }
 
-/* Reading mode lines (were per-line inline styles). content-visibility lets the
-   browser skip off-screen lines; a 4-hour session has thousands. */
+/* Reading mode lines (were per-line inline styles). No content-visibility here:
+   its estimated heights made jumps to a line (Names examples, citations, quotes)
+   land tens of thousands of pixels off as lines rendered mid-scroll. */
 .transcript-line { display: grid; grid-template-columns: var(--ts-col, 78px) minmax(0, 1fr); column-gap: var(--ts-gap, 18px);
-  padding: 4px 0; transition: background 0.4s; content-visibility: auto; contain-intrinsic-size: auto 60px; }
+  padding: 4px 0; transition: background 0.4s; }
 .transcript-line.active { background: linear-gradient(90deg, color-mix(in srgb, var(--gilt) 16%, transparent), transparent 70%);
   box-shadow: inset 2px 0 0 var(--gilt); }
 .transcript-line.active .transcript-ts { color: var(--gilt-ink); }
