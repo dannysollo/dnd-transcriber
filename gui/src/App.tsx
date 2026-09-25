@@ -73,7 +73,7 @@ const navItems = [
   { to: '/', label: 'Sessions', Icon: ScrollIcon },
   { to: '/quotes', label: 'Quotes', Icon: QuotesNavIcon },
   { to: '/search', label: 'Search', Icon: SearchIcon },
-  { to: '/campaigns', label: 'Campaigns', Icon: ShieldIcon },
+  { to: '/campaigns', label: 'Campaign', Icon: ShieldIcon },   // points at the active campaign's settings, see campaignHref
   { to: '/corrections', label: 'Corrections', Icon: PencilIcon },
 ]
 
@@ -87,6 +87,7 @@ export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
   const isSessionView = location.pathname.startsWith('/sessions/')
+  const campaignHref = activeCampaign ? `/campaigns/${activeCampaign.slug}/settings` : '/campaigns'
 
   // Fetch worker heartbeat for DMs
   useEffect(() => {
@@ -194,15 +195,15 @@ export default function App() {
           <div className="sidebar-campaign" style={{ margin: '0 16px 18px', position: 'relative' }}>
             <button
               type="button"
-              onClick={() => campaigns.length > 1 && setCampaignDropdownOpen(o => !o)}
-              aria-haspopup={campaigns.length > 1 ? 'listbox' : undefined}
-              aria-expanded={campaigns.length > 1 ? campaignDropdownOpen : undefined}
+              onClick={() => setCampaignDropdownOpen(o => !o)}
+              aria-haspopup="listbox"
+              aria-expanded={campaignDropdownOpen}
               style={{
                 display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px',
                 width: '100%', textAlign: 'left', padding: '10px 8px',
                 background: 'none', border: 'none',
                 borderTop: '1px solid var(--gilt)', borderBottom: '1px solid var(--gilt)',
-                cursor: campaigns.length > 1 ? 'pointer' : 'default',
+                cursor: 'pointer',
               }}
             >
               <span style={{ minWidth: 0 }}>
@@ -226,7 +227,7 @@ export default function App() {
                   )
                 })()}
               </span>
-              {campaigns.length > 1 && (
+              {(
                 <svg aria-hidden width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                   style={{ marginTop: 22, color: 'var(--cover-ink-soft)', transform: campaignDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
                   <path d="m6 9 6 6 6-6" />
@@ -234,7 +235,7 @@ export default function App() {
               )}
             </button>
 
-            {campaignDropdownOpen && campaigns.length > 1 && (
+            {campaignDropdownOpen && (
               <div role="listbox" style={{
                 position: 'absolute', left: 0, right: 0, top: 'calc(100% + 4px)',
                 background: 'var(--page-raised)', color: 'var(--ink)',
@@ -249,7 +250,11 @@ export default function App() {
                       type="button"
                       role="option"
                       aria-selected={on}
-                      onClick={() => { setActiveCampaign(c); setCampaignDropdownOpen(false) }}
+                      onClick={() => {
+                        setActiveCampaign(c); setCampaignDropdownOpen(false)
+                        // On a campaign's settings page, switching follows to the new campaign's.
+                        if (/^\/campaigns\/[^/]+/.test(location.pathname)) navigate(`/campaigns/${c.slug}/settings`)
+                      }}
                       style={{
                         display: 'block', width: '100%', textAlign: 'left',
                         padding: '8px 12px', fontSize: '16px', cursor: 'pointer', border: 'none',
@@ -262,6 +267,17 @@ export default function App() {
                     </button>
                   )
                 })}
+                <button
+                  type="button"
+                  onClick={() => { setCampaignDropdownOpen(false); navigate('/campaigns') }}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: '15px',
+                    cursor: 'pointer', border: 'none', borderTop: '1px solid var(--rule)',
+                    color: 'var(--ink-soft)', background: 'transparent',
+                  }}
+                >
+                  All campaigns, or start one
+                </button>
               </div>
             )}
           </div>
@@ -272,10 +288,11 @@ export default function App() {
           {navItems.map(({ to, label, Icon }) => (
             <NavLink
               key={to}
-              to={to}
+              // "Campaign" opens the active campaign's settings (the list lives in the selector above).
+              to={to === '/campaigns' ? campaignHref : to}
               end={to === '/'}
-              // A session page is still inside "Sessions".
-              className={({ isActive }) => 'cover-link' + (isActive || (to === '/' && isSessionView) ? ' active' : '')}
+              // A session page is still inside "Sessions"; any /campaigns page is inside "Campaign".
+              className={({ isActive }) => 'cover-link' + (isActive || (to === '/' && isSessionView) || (to === '/campaigns' && location.pathname.startsWith('/campaigns')) ? ' active' : '')}
             >
               <Icon />
               <span style={{ flex: 1 }}>{label}</span>

@@ -337,7 +337,13 @@ export default function CampaignSettingsPage() {
       <h1 style={{ margin: '0 0 4px', fontSize: '34px', fontWeight: 500, color: 'var(--ink)' }}>
         {campaign.name}
       </h1>
-      <div style={{ fontSize: '15px', color: 'var(--ink-faint)', marginBottom: '24px' }}>/{campaign.slug}</div>
+      <div style={{ fontSize: '15px', color: 'var(--ink-faint)', marginBottom: '24px', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <span>/{campaign.slug}</span>
+        {/* Phones hide the sidebar's campaign selector, so switching lives here too. */}
+        <button type="button" className="index-link" onClick={() => navigate('/campaigns')} style={{ fontSize: '15px' }}>
+          Switch campaign
+        </button>
+      </div>
 
       {/* Tabs */}
       <div role="tablist" style={{ display: 'flex', gap: '28px', marginBottom: '28px', borderBottom: '1px solid var(--rule)' }}>
