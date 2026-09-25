@@ -4006,10 +4006,15 @@ def worker_list_analysis_jobs(slug: str, db: Session = Depends(get_db), request:
                 # Read wiki_only flag from file if present (JSON) or default to False
                 flag_path = session_dir / ANALYSIS_FLAG
                 wiki_only = False
+                extra_notes = ""
                 try:
                     flag_content = flag_path.read_text(encoding="utf-8").strip()
                     if flag_content:
-                        wiki_only = json.loads(flag_content).get("wiki_only", False)
+                        flag = json.loads(flag_content)
+                        wiki_only = flag.get("wiki_only", False)
+                        # One-off instructions for this run only (e.g. "keep it brief"),
+                        # kept out of the session's own analysis notes.
+                        extra_notes = (flag.get("extra_notes") or "").strip()
                 except Exception:
                     pass
                 # Apply corrections and patterns so Claude sees the cleaned-up text
@@ -4022,7 +4027,10 @@ def worker_list_analysis_jobs(slug: str, db: Session = Depends(get_db), request:
                 pending.append({
                     "session_name": session_dir.name,
                     "transcript": transcript_text,
-                    "notes": notes_path.read_text(encoding="utf-8") if notes_path.exists() else "",
+                    "notes": "\n\n".join(x for x in (
+                        notes_path.read_text(encoding="utf-8").strip() if notes_path.exists() else "",
+                        extra_notes,
+                    ) if x),
                     "wiki_only": wiki_only,
                 })
     return pending
