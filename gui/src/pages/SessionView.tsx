@@ -3982,10 +3982,19 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
   const m = stats.moments ?? {}
   const moments: { key: string; label: string; value: ReactNode; detail: ReactNode; excerpt?: string }[] = []
   if (m.longest_speech) moments.push({
-    key: 'longest_speech', label: 'Longest speech',
+    key: 'longest_speech', label: 'Longest unbroken dialogue',
     value: `${formatDuration(Number(m.longest_speech.seconds))} from ${m.longest_speech.person}`,
     detail: <>{Number(m.longest_speech.words).toLocaleString()} words without a break, at {at(m.longest_speech.ts)}</>,
     excerpt: String(m.longest_speech.excerpt),
+  })
+  if (m.longest_overall_speech) moments.push({
+    key: 'longest_overall_speech', label: 'Longest overall speech',
+    value: `${formatDuration(Number(m.longest_overall_speech.seconds))} from ${m.longest_overall_speech.person}`,
+    detail: <>{Number(m.longest_overall_speech.words).toLocaleString()} words
+      {Number(m.longest_overall_speech.interjections) > 0
+        ? <>, through {m.longest_overall_speech.interjections} short interjection{Number(m.longest_overall_speech.interjections) !== 1 ? 's' : ''}</>
+        : <>, through short pauses</>}, at {at(m.longest_overall_speech.ts)}</>,
+    excerpt: String(m.longest_overall_speech.excerpt),
   })
   if (m.liveliest_exchange) moments.push({
     key: 'liveliest_exchange', label: 'Liveliest exchange',

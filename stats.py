@@ -320,6 +320,11 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
                                                   "broken_by": l["person"]}
             prev = l
 
+        overall = longest_overall_speech(lines)
+        r = records.get("longest_overall_speech")
+        if overall and (not r or overall["words"] > r["words"]):
+            records["longest_overall_speech"] = {"session": sess["name"], **overall}
+
         live = liveliest_exchange(lines)
         r = records.get("liveliest_exchange")
         if live and (not r or live["turns"] > r["turns"]):
@@ -470,6 +475,9 @@ def session_details(transcript: str, terms: list[str], config: dict,
     top = max(lines, key=lambda l: l["words"])
     moments["longest_speech"] = {"person": top["person"], "character": top["name"], "ts": top["ts"], "words": top["words"],
                                  "seconds": round(top["words"] / SPEECH_RATE), "excerpt": _excerpt(top["text"])}
+    overall = longest_overall_speech(lines)
+    if overall and overall["words"] > top["words"]:
+        moments["longest_overall_speech"] = overall
     live = liveliest_exchange(lines)
     if live:
         moments["liveliest_exchange"] = live
@@ -627,6 +635,43 @@ def distinctive_words(lines: list[dict], others: list[list[dict]], skip: set[str
         scored.append((c * math.log(total / df + 1), c, w))
     scored.sort(reverse=True)
     return [{"word": w, "count": c} for _, c, w in scored[:n]]
+
+
+INTERJECTION_WORDS = 3     # another person's line this short doesn't end a speech...
+INTERJECTION_LINES = 2     # ...nor do two of them in a row...
+RESUME_GAP = 6.0           # ...as long as the speaker picks up again within this many seconds
+
+
+def longest_overall_speech(lines: list[dict]) -> dict | None:
+    """
+    The longest stretch one person held the floor: their consecutive lines,
+    carrying on through short interjections ("yeah", "wait what") and short
+    pauses. Seconds are the real span, from the first line's start to the
+    estimated end of the last.
+    """
+    best = None
+    i = 0
+    while i < len(lines):
+        first = lines[i]
+        who = first["person"]
+        words, texts, heard = first["words"], [first["text"]], 0
+        end = first["start"] + first["words"] / SPEECH_RATE
+        j = i + 1
+        while j < len(lines):
+            k, skipped = j, 0
+            while k < len(lines) and lines[k]["person"] != who and lines[k]["words"] <= INTERJECTION_WORDS and skipped < INTERJECTION_LINES:
+                k += 1; skipped += 1
+            if k < len(lines) and lines[k]["person"] == who and lines[k]["start"] - end <= RESUME_GAP:
+                words += lines[k]["words"]; texts.append(lines[k]["text"]); heard += skipped
+                end = max(end, lines[k]["start"] + lines[k]["words"] / SPEECH_RATE)
+                j = k + 1
+            else:
+                break
+        if not best or words > best["words"]:
+            best = {"person": who, "character": first["name"], "ts": first["ts"], "words": words,
+                    "seconds": round(end - first["start"]), "interjections": heard, "excerpt": _excerpt(" ".join(texts))}
+        i = j if j > i + 1 else i + 1
+    return best
 
 
 def laugh_count(text: str) -> int:

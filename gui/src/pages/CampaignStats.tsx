@@ -51,10 +51,18 @@ const at = (session: string | number, ts: string | number) => (
 function recordEntries(r: Records): { key: string; label: string; value: string; detail: ReactNode; excerpt?: string }[] {
   const out = []
   if (r.longest_monologue) out.push({
-    key: 'longest_monologue', label: 'Longest speech',
+    key: 'longest_monologue', label: 'Longest unbroken dialogue',
     value: `${formatDuration(Number(r.longest_monologue.seconds))} from ${r.longest_monologue.person}`,
     detail: <>{Number(r.longest_monologue.words).toLocaleString()} words without a break, {at(r.longest_monologue.session, r.longest_monologue.ts)}</>,
     excerpt: String(r.longest_monologue.excerpt),
+  })
+  if (r.longest_overall_speech && Number(r.longest_overall_speech.words) > Number(r.longest_monologue?.words ?? 0)) out.push({
+    key: 'longest_overall_speech', label: 'Longest overall speech',
+    value: `${formatDuration(Number(r.longest_overall_speech.seconds))} from ${r.longest_overall_speech.person}`,
+    detail: <>{Number(r.longest_overall_speech.words).toLocaleString()} words
+      {Number(r.longest_overall_speech.interjections) > 0 ? <> through {r.longest_overall_speech.interjections} short interjection{Number(r.longest_overall_speech.interjections) !== 1 ? 's' : ''}</> : <> through short pauses</>},
+      {' '}{at(r.longest_overall_speech.session, r.longest_overall_speech.ts)}</>,
+    excerpt: String(r.longest_overall_speech.excerpt),
   })
   if (r.biggest_night) out.push({
     key: 'biggest_night', label: 'Biggest night',
