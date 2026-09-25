@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CloseIcon, PencilIcon, TrashIcon } from '../Icons'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
@@ -6,6 +6,17 @@ import { useAuth } from '../AuthContext'
 interface Pattern {
   match: string
   replace: string
+}
+
+interface ApplyAllStatus {
+  state: 'idle' | 'running' | 'done' | 'failed'
+  done: number
+  total: number
+  current?: string | null
+  error?: string | null
+  total_changes: number
+  sessions_changed: number
+  sessions: { session: string; changes: number }[]
 }
 
 export default function CorrectionsPage() {
@@ -39,7 +50,7 @@ export default function CorrectionsPage() {
 
   // Apply corrections to every session, in place
   const [applyAllState, setApplyAllState] = useState<'idle' | 'confirm' | 'running'>('idle')
-  const [applyAllResult, setApplyAllResult] = useState<{ total_changes: number; sessions_changed: number; sessions: { session: string; changes: number }[] } | null>(null)
+  const [applyAllResult, setApplyAllResult] = useState<ApplyAllStatus | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -57,6 +68,26 @@ export default function CorrectionsPage() {
     load()
   }, [apiUrl, campaignLoading])
 
+  // Runs on the server in the background; this polls its progress. Also picks
+  // up a run that's still going if you left the page and came back.
+  const pollApplyAll = useCallback(async () => {
+    for (;;) {
+      const r = await fetch(apiUrl('/corrections/apply-all'))
+      if (!r.ok) throw new Error()
+      const st: ApplyAllStatus = await r.json()
+      if (st.state === 'idle') { setApplyAllState('idle'); return }
+      setApplyAllResult(st)
+      if (st.state !== 'running') { setApplyAllState('idle'); return }
+      setApplyAllState('running')
+      await new Promise(res => setTimeout(res, 1500))
+    }
+  }, [apiUrl])
+
+  useEffect(() => {
+    if (campaignLoading) return
+    pollApplyAll().catch(() => setApplyAllState('idle'))
+  }, [campaignLoading, pollApplyAll])
+
   const applyToAll = async () => {
     setApplyAllState('running')
     setApplyAllResult(null)
@@ -64,9 +95,9 @@ export default function CorrectionsPage() {
       const r = await fetch(apiUrl('/corrections/apply-all'), { method: 'POST' })
       if (!r.ok) throw new Error()
       setApplyAllResult(await r.json())
+      await pollApplyAll()
     } catch {
-      setApplyAllResult({ total_changes: -1, sessions_changed: 0, sessions: [] })
-    } finally {
+      setApplyAllResult({ state: 'failed', done: 0, total: 0, total_changes: 0, sessions_changed: 0, sessions: [] })
       setApplyAllState('idle')
     }
   }
@@ -348,16 +379,26 @@ export default function CorrectionsPage() {
             <div>
               <button className="btn-ghost" onClick={() => setApplyAllState('confirm')} disabled={applyAllState === 'running'}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                {applyAllState === 'running' ? 'Applying corrections…' : 'Apply corrections to all sessions'}
+                {applyAllState === 'running'
+                  ? `Applying corrections… ${applyAllResult?.done ?? 0} of ${applyAllResult?.total ?? '?'} sessions`
+                  : 'Apply corrections to all sessions'}
               </button>
               <div style={{ fontSize: '15px', color: 'var(--ink-faint)', marginTop: '6px' }}>
                 New rules only fix future transcripts until you apply them here (or per session).
               </div>
             </div>
           )}
-          {applyAllResult && (
-            applyAllResult.total_changes < 0 ? (
-              <div style={{ fontSize: '16px', color: 'var(--rubric)' }}>Couldn't apply the corrections. Try again.</div>
+          {applyAllState === 'running' && applyAllResult?.current && (
+            <div style={{ fontSize: '15px', color: 'var(--ink-faint)' }}>
+              Working on {applyAllResult.current}. This runs on the server, so you can leave this page.
+            </div>
+          )}
+          {applyAllResult && applyAllResult.state !== 'running' && (
+            applyAllResult.state === 'failed' ? (
+              <div style={{ fontSize: '16px', color: 'var(--rubric)' }}>
+                Couldn't finish applying the corrections{applyAllResult.error ? ` (${applyAllResult.error})` : ''}.
+                {applyAllResult.done > 0 && <> The first {applyAllResult.done} sessions were done.</>} Try again.
+              </div>
             ) : (
               <div style={{ fontSize: '16px', color: 'var(--ink)' }}>
                 {applyAllResult.total_changes === 0

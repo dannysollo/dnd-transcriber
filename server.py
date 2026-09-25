@@ -2446,49 +2446,71 @@ def campaign_rename_speaker(
 RULE_TARGET_FILES = ("transcript.md", "summary.md", "wiki_suggestions.md", "wiki.md")
 
 
-def _apply_rules_text(text: str, corrections: dict, patterns: list) -> tuple[str, int]:
+class RuleSet:
     """
-    Apply word rules (whole-word, case-insensitive) then regex patterns.
-    Returns (new text, number of actual changes). A rule matching text that
-    already reads correctly (e.g. "aziah" -> "Aziah" on "Aziah") isn't counted.
-    """
-    changes = 0
+    A campaign's correction rules, compiled once for a run.
 
-    def sub_counting(pattern, repl, text, flags=0):
-        nonlocal changes
-        def one(m):
+    Word rules (whole-word, case-insensitive) become one alternation matched in
+    a single pass per file, instead of one pass per rule (625 rules x 4 files x
+    45 sessions timed out). The pass repeats until nothing changes (at most 3
+    times), so a rule whose output another rule corrects still chains, as the
+    old one-rule-at-a-time loop did. Regex patterns are compiled here once:
+    Python's regex cache holds 512 and there are more rules than that.
+    """
+    def __init__(self, corrections: dict, patterns: list):
+        self.words: dict[str, str] = {}
+        for wrong, right in (corrections or {}).items():
+            k = str(wrong).lower()
+            if k and k not in self.words:          # first rule wins, as before
+                self.words[k] = str(right)
+        alts = sorted(self.words, key=len, reverse=True)
+        self.word_re = re.compile(r"\b(?:" + "|".join(re.escape(a) for a in alts) + r")\b", re.IGNORECASE) if alts else None
+        self.patterns = []
+        for entry in patterns or []:
+            try:
+                self.patterns.append((re.compile(entry["match"]), entry["replace"]))
+            except (re.error, KeyError, TypeError):
+                continue  # a broken pattern shouldn't block the rest
+
+    def apply(self, text: str) -> tuple[str, int]:
+        """(new text, number of actual changes); a match already reading correctly isn't counted."""
+        changes = 0
+
+        def counted(m, out):
             nonlocal changes
-            out = m.expand(repl) if isinstance(repl, str) else repl(m)
             if out != m.group(0):
                 changes += 1
             return out
-        return re.sub(pattern, one, text, flags=flags)
 
-    for wrong, right in (corrections or {}).items():
-        text = sub_counting(r"\b" + re.escape(wrong) + r"\b", lambda m, r=right: r, text, re.IGNORECASE)
-    for entry in patterns or []:
-        try:
-            text = sub_counting(entry["match"], entry["replace"], text)
-        except re.error:
-            continue  # a broken pattern shouldn't block the rest
-    return text, changes
+        if self.word_re:
+            for _ in range(3):
+                before = changes
+                text = self.word_re.sub(lambda m: counted(m, self.words[m.group(0).lower()]), text)
+                if changes == before:
+                    break
+        for rx, repl in self.patterns:
+            text = rx.sub(lambda m, r=repl: counted(m, m.expand(r)), text)
+        return text, changes
 
 
-def _apply_rules_to_session(session_dir: Path, config: dict) -> dict:
+def _apply_rules_text(text: str, corrections: dict, patterns: list) -> tuple[str, int]:
+    return RuleSet(corrections, patterns).apply(text)
+
+
+def _apply_rules_to_session(session_dir: Path, config: dict, rules: "RuleSet | None" = None) -> dict:
     """
     Apply the campaign's correction rules in place to a session's transcript,
     summary and wiki suggestions. Never rebuilds from raw Whisper output, so
     hand edits survive. Returns {"changes": total, "files": {name: n}}.
     """
-    corrections = config.get("corrections") or {}
-    patterns = config.get("patterns") or []
+    rules = rules or RuleSet(config.get("corrections") or {}, config.get("patterns") or [])
     files = {}
     for filename in RULE_TARGET_FILES:
         path = session_dir / filename
         if not path.exists():
             continue
         before = path.read_text(encoding="utf-8")
-        after, n = _apply_rules_text(before, corrections, patterns)
+        after, n = rules.apply(before)
         if n and after != before:
             path.write_text(after, encoding="utf-8")
             files[filename] = n
@@ -2512,24 +2534,70 @@ def campaign_merge_session(
     return _apply_rules_to_session(session_dir, load_config(slug))
 
 
+# Applying every rule to every session takes a while (hundreds of rules, dozens
+# of multi-hour transcripts, a small shared CPU), so it runs in a background
+# thread; the page starts it and polls for progress.
+_apply_all_jobs: dict[str, dict] = {}
+_apply_all_lock = threading.Lock()
+
+
+def _run_apply_all(slug: str, job: dict) -> None:
+    try:
+        config = load_config(slug)
+        rules = RuleSet(config.get("corrections") or {}, config.get("patterns") or [])
+        for name in job["queue"]:
+            job["current"] = name
+            d = get_sessions_dir(slug) / name
+            if (d / "transcript.md").exists():
+                job["sessions"].append({"session": name, **_apply_rules_to_session(d, config, rules)})
+            job["done"] += 1
+        job["state"] = "done"
+    except Exception as e:  # report it instead of dying silently
+        job["state"] = "failed"
+        job["error"] = str(e)
+    finally:
+        job["current"] = None
+        job["finished"] = datetime.utcnow().isoformat()
+
+
+def _apply_all_status(job: dict | None) -> dict:
+    if not job:
+        return {"state": "idle"}
+    sessions = job["sessions"]
+    return {
+        "state": job["state"], "done": job["done"], "total": len(job["queue"]), "current": job["current"],
+        "error": job.get("error"), "sessions": sessions,
+        "total_changes": sum(r["changes"] for r in sessions),
+        "sessions_changed": sum(1 for r in sessions if r["changes"]),
+    }
+
+
 @app.post("/campaigns/{slug}/corrections/apply-all")
 def campaign_apply_corrections_all(
     slug: str,
     _member=Depends(require_campaign_member("dm")),
 ):
-    """Apply the current correction rules to every session that has a transcript, in place."""
-    config = load_config(slug)
-    results = []
-    sessions_dir = get_sessions_dir(slug)
-    if sessions_dir.exists():
-        for d in sorted(sessions_dir.iterdir()):
-            if d.is_dir() and not d.name.startswith(".") and (d / "transcript.md").exists():
-                results.append({"session": d.name, **_apply_rules_to_session(d, config)})
-    return {
-        "sessions": results,
-        "total_changes": sum(r["changes"] for r in results),
-        "sessions_changed": sum(1 for r in results if r["changes"]),
-    }
+    """Start applying the current correction rules to every session, in place. Poll GET for progress."""
+    with _apply_all_lock:
+        job = _apply_all_jobs.get(slug)
+        if job and job["state"] == "running":
+            return _apply_all_status(job)
+        sessions_dir = get_sessions_dir(slug)
+        queue = sorted(d.name for d in sessions_dir.iterdir()
+                       if d.is_dir() and not d.name.startswith(".") and (d / "transcript.md").exists()) if sessions_dir.exists() else []
+        job = {"state": "running", "queue": queue, "done": 0, "current": None, "sessions": [],
+               "started": datetime.utcnow().isoformat()}
+        _apply_all_jobs[slug] = job
+        threading.Thread(target=_run_apply_all, args=(slug, job), daemon=True).start()
+    return _apply_all_status(job)
+
+
+@app.get("/campaigns/{slug}/corrections/apply-all")
+def campaign_apply_corrections_all_status(
+    slug: str,
+    _member=Depends(require_campaign_member("dm")),
+):
+    return _apply_all_status(_apply_all_jobs.get(slug))
 
 
 @app.post("/campaigns/{slug}/sessions/{name}/transcript/import")
