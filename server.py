@@ -9,6 +9,7 @@ import os
 import queue
 import difflib
 import re
+from collections import OrderedDict
 import shutil
 import subprocess
 import sys
@@ -3023,16 +3024,18 @@ def campaign_unknown_words(
     if not transcript_path.exists():
         raise HTTPException(404, "Transcript not found")
     config = load_config(slug)
+    vault = _campaign_vault_dir(config, slug)
     confidence_path = session_dir / CONFIDENCE_FILE
-    confidence = json.loads(confidence_path.read_text(encoding="utf-8")) if confidence_path.exists() else None
-    ignored = config.get("ignored_words") or []
-    words = find_unknown_words(
-        transcript_path.read_text(encoding="utf-8"),
-        known_terms(config, _campaign_vault_dir(config, slug)),
-        ignored=ignored,
-        confidence=confidence,
-    )
-    return {"words": words, "ignored": sorted(ignored)}
+    key = ("unknown-words", slug, name, _stamp(transcript_path), _stamp(confidence_path),
+           _stamp(BASE_DIR / "campaigns" / slug / "config.yaml"), _stamp(vault / "Index.md" if vault else None))
+
+    def compute():
+        confidence = json.loads(confidence_path.read_text(encoding="utf-8")) if confidence_path.exists() else None
+        ignored = config.get("ignored_words") or []
+        words = find_unknown_words(_read_text_cached(transcript_path), known_terms(config, vault),
+                                   ignored=ignored, confidence=confidence)
+        return {"words": words, "ignored": sorted(ignored)}
+    return _cached(key, compute)
 
 
 class IgnoreWordBody(BaseModel):
@@ -3128,6 +3131,60 @@ def _rule_suggestions(slug: str, old_line: str, new_line: str) -> list[dict]:
 
 
 # ── Stats: talk time per session, and the campaign as a whole ────────────────
+# Stats, the campaign PDF and the Names list recompute from every transcript
+# (45 sessions of up to ~400 KB), which the 1-CPU Fly machine felt on every
+# page view. Transcripts are kept in memory until their file changes, and
+# finished results are reused until anything they depend on changes: any
+# session's transcript, quotes or date, the campaign config, or the wiki index.
+
+_text_cache: dict[str, tuple[tuple[int, int], str]] = {}
+_result_cache: "OrderedDict[tuple, object]" = OrderedDict()
+_RESULT_CACHE_MAX = 200
+
+
+def _read_text_cached(path: Path) -> str:
+    st = path.stat()
+    key = (st.st_mtime_ns, st.st_size)
+    hit = _text_cache.get(str(path))
+    if hit and hit[0] == key:
+        return hit[1]
+    text = path.read_text(encoding="utf-8")
+    _text_cache[str(path)] = (key, text)
+    return text
+
+
+def _stamp(path: Optional[Path]) -> tuple:
+    try:
+        st = path.stat()
+        return (st.st_mtime_ns, st.st_size)
+    except (OSError, AttributeError, TypeError):
+        return (0, 0)
+
+
+def _campaign_fingerprint(slug: str) -> tuple:
+    """Changes whenever anything the stats or Names results depend on changes."""
+    config_path = BASE_DIR / "campaigns" / slug / "config.yaml"
+    vault = _campaign_vault_dir(load_config(slug), slug)
+    parts = [_stamp(config_path), _stamp(vault / "Index.md" if vault else None)]
+    sessions_dir = get_sessions_dir(slug)
+    if sessions_dir.exists():
+        for d in sorted(sessions_dir.iterdir()):
+            if d.is_dir() and not d.name.startswith("."):
+                parts.append((d.name, _stamp(d / "transcript.md"), _stamp(d / QUOTES_FILE),
+                              _stamp(d / "created_at.txt"), _stamp(d / CONFIDENCE_FILE)))
+    return tuple(parts)
+
+
+def _cached(key: tuple, compute):
+    if key in _result_cache:
+        _result_cache.move_to_end(key)
+        return _result_cache[key]
+    value = compute()
+    _result_cache[key] = value
+    while len(_result_cache) > _RESULT_CACHE_MAX:
+        _result_cache.popitem(last=False)
+    return value
+
 
 @app.get("/campaigns/{slug}/sessions/{name}/stats")
 def campaign_session_stats(
@@ -3140,7 +3197,14 @@ def campaign_session_stats(
     path = get_sessions_dir(slug) / name / "transcript.md"
     if not path.exists():
         raise HTTPException(404, "Transcript not found")
-    transcript = path.read_text(encoding="utf-8")
+    return _cached(("session-stats", slug, name, _campaign_fingerprint(slug)),
+                   lambda: _session_stats_payload(slug, name, path))
+
+
+def _session_stats_payload(slug: str, name: str, path: Path) -> dict:
+    from stats import campaign_stats, session_details, session_stats, wiki_terms
+
+    transcript = _read_text_cached(path)
     config = load_config(slug)
     sessions = _campaign_transcripts(slug)
     here = next((i for i, s in enumerate(sessions) if s["name"] == name), len(sessions))
@@ -3162,14 +3226,18 @@ def _campaign_transcripts(slug: str) -> list[dict]:
                 sessions.append({
                     "name": d.name,
                     "created_at": get_or_create_session_created_at(d),
-                    "transcript": t.read_text(encoding="utf-8"),
+                    "transcript": _read_text_cached(t),
                 })
     sessions.sort(key=lambda s: s["created_at"] or "")
     return sessions
 
 
 def _campaign_stats_payload(slug: str) -> dict:
-    """Everything the campaign Stats page and its PDF show, computed from the transcripts."""
+    """Everything the campaign Stats page and its PDF show (cached until anything changes)."""
+    return _cached(("campaign-stats", slug, _campaign_fingerprint(slug)), lambda: _compute_campaign_stats(slug))
+
+
+def _compute_campaign_stats(slug: str) -> dict:
     from stats import campaign_details, campaign_stats, wiki_terms
 
     config = load_config(slug)
