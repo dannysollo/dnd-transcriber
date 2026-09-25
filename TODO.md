@@ -25,6 +25,26 @@ Open work, roughly in priority order. Move items to the commit log when done.
     (listen to a few clips, pick a player).
   - Mark these transcripts as reconstructed.
 
+## Mobile
+
+- **Mobile UI redesign.** Reported as very cluttered. The session header
+  stacks the title, action buttons, tabs, search, the unsure-words
+  controls, speakers and the audio bar before any transcript shows, and
+  reading/scrolling through speaker names in the transcript is hard. Likely
+  needs a proper mobile layout, not tweaks: collapse secondary controls, a
+  compact header that hides on scroll, and a transcript line layout made for
+  narrow screens.
+
+## Corrections
+
+- **"Apply corrections to all sessions" is very slow and often fails.** It
+  runs every rule over every session's transcript, summary and wiki
+  suggestions in one synchronous request (45 sessions now, including the
+  big reconstructed ones), which can outlast the request timeout on the small
+  Fly machine. Make it a background job with progress (like the old
+  WebSocket merge log), precompile the rules into one pass per file, and
+  report which sessions changed as they finish.
+
 ## Review
 
 - Keyboard shortcuts in the transcript: j/k between lines, space to
