@@ -114,10 +114,15 @@ def _records(r: dict) -> list[tuple[str, str, str, str | None]]:
     if (x := r.get("longest_monologue")):
         out.append(("Longest unbroken dialogue", f"{_dur(x['seconds'])} from {x['person']}",
                     f"{x['words']:,} words without a break, {x['session']} at {x['ts']}", x.get("excerpt")))
-    if (x := r.get("longest_overall_speech")) and x["words"] > (r.get("longest_monologue") or {}).get("words", 0):
-        how = f"through {x['interjections']} short interjection{'s' if x['interjections'] != 1 else ''}" if x["interjections"] else "through short pauses"
-        out.append(("Longest overall speech", f"{_dur(x['seconds'])} from {x['person']}",
-                    f"{x['words']:,} words {how}, {x['session']} at {x['ts']}", x.get("excerpt")))
+    if (x := r.get("longest_overall_speech")):
+        mono = r.get("longest_monologue") or {}
+        if (mono.get("session"), mono.get("ts"), mono.get("words")) == (x["session"], x["ts"], x["words"]):
+            detail = f"the same speech as the longest unbroken one: nobody cut in, {x['session']} at {x['ts']}"
+            excerpt = None
+        else:
+            how = f"through {x['interjections']} short interjection{'s' if x['interjections'] != 1 else ''}" if x["interjections"] else "through short pauses"
+            detail, excerpt = f"{x['words']:,} words {how}, {x['session']} at {x['ts']}", x.get("excerpt")
+        out.append(("Longest overall speech", f"{_dur(x['seconds'])} from {x['person']}", detail, excerpt))
     if (x := r.get("biggest_night")):
         out.append(("Biggest night", f"{x['person']}, {_dur(x['seconds'])}", f"{x['words']:,} words in {x['session']}", None))
     if (x := r.get("chattiest_session")):

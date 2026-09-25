@@ -3856,7 +3856,9 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
   if (m.longest_overall_speech) moments.push({
     key: 'longest_overall_speech', label: 'Longest overall speech',
     value: `${formatDuration(Number(m.longest_overall_speech.seconds))} from ${m.longest_overall_speech.person}`,
-    detail: <>{Number(m.longest_overall_speech.words).toLocaleString()} words
+    detail: m.longest_speech && m.longest_speech.ts === m.longest_overall_speech.ts && Number(m.longest_speech.words) === Number(m.longest_overall_speech.words)
+      ? <>the same speech as the longest unbroken one: nobody cut in, at {at(m.longest_overall_speech.ts)}</>
+      : <>{Number(m.longest_overall_speech.words).toLocaleString()} words
       {Number(m.longest_overall_speech.interjections) > 0
         ? <>, through {m.longest_overall_speech.interjections} short interjection{Number(m.longest_overall_speech.interjections) !== 1 ? 's' : ''}</>
         : <>, through short pauses</>}, at {at(m.longest_overall_speech.ts)}</>,

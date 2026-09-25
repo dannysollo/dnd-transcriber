@@ -47,6 +47,11 @@ const at = (session: string | number, ts: string | number) => (
   <Link to={`/sessions/${encodeURIComponent(String(session))}#t=${ts}`}>{session}, {ts}</Link>
 )
 
+/** The overall speech is just the unbroken one when nobody interrupted it. */
+const sameSpeech = (r: Records) => !!r.longest_monologue && !!r.longest_overall_speech &&
+  r.longest_monologue.session === r.longest_overall_speech.session && r.longest_monologue.ts === r.longest_overall_speech.ts &&
+  Number(r.longest_monologue.words) === Number(r.longest_overall_speech.words)
+
 /** Each record as a ledger entry: label, headline value, where it happened. */
 function recordEntries(r: Records): { key: string; label: string; value: string; detail: ReactNode; excerpt?: string }[] {
   const out = []
@@ -56,10 +61,12 @@ function recordEntries(r: Records): { key: string; label: string; value: string;
     detail: <>{Number(r.longest_monologue.words).toLocaleString()} words without a break, {at(r.longest_monologue.session, r.longest_monologue.ts)}</>,
     excerpt: String(r.longest_monologue.excerpt),
   })
-  if (r.longest_overall_speech && Number(r.longest_overall_speech.words) > Number(r.longest_monologue?.words ?? 0)) out.push({
+  if (r.longest_overall_speech) out.push({
     key: 'longest_overall_speech', label: 'Longest overall speech',
     value: `${formatDuration(Number(r.longest_overall_speech.seconds))} from ${r.longest_overall_speech.person}`,
-    detail: <>{Number(r.longest_overall_speech.words).toLocaleString()} words
+    detail: sameSpeech(r)
+      ? <>the same speech as the longest unbroken one: nobody cut in, {at(r.longest_overall_speech.session, r.longest_overall_speech.ts)}</>
+      : <>{Number(r.longest_overall_speech.words).toLocaleString()} words
       {Number(r.longest_overall_speech.interjections) > 0 ? <> through {r.longest_overall_speech.interjections} short interjection{Number(r.longest_overall_speech.interjections) !== 1 ? 's' : ''}</> : <> through short pauses</>},
       {' '}{at(r.longest_overall_speech.session, r.longest_overall_speech.ts)}</>,
     excerpt: String(r.longest_overall_speech.excerpt),

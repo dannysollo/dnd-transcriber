@@ -478,7 +478,7 @@ def session_details(transcript: str, terms: list[str], config: dict,
     moments["longest_speech"] = {"person": top["person"], "character": top["name"], "ts": top["ts"], "words": top["words"],
                                  "seconds": round(top["words"] / SPEECH_RATE), "excerpt": _excerpt(top["text"])}
     overall = longest_overall_speech(after_recap)
-    if overall and overall["words"] > top["words"]:
+    if overall:
         moments["longest_overall_speech"] = overall
     live = liveliest_exchange(lines)
     if live:
