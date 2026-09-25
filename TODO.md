@@ -37,7 +37,7 @@ Open work, roughly in priority order. Move items to the commit log when done.
 
 ## Corrections
 
-- **"Apply corrections to all sessions" is very slow and often fails.** It
+- ~~**"Apply corrections to all sessions" is very slow and often fails.**~~ Done 2026-09-25 (one pass per file, background job). It
   runs every rule over every session's transcript, summary and wiki
   suggestions in one synchronous request (45 sessions now, including the
   big reconstructed ones), which can outlast the request timeout on the small
