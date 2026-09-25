@@ -3929,7 +3929,7 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
         </>}
       </p>
       <p style={{ margin: '0 0 28px', fontSize: 15, color: 'var(--ink-faint)' }}>
-        Talk time is estimated from words spoken, at about 160 words a minute. Times link to the transcript.
+        Talk time is estimated from words spoken, at about 160 words a minute. Speeches in the first 10 minutes (usually the recap) don't count as records. Times link to the transcript.
       </p>
 
       {moments.length > 0 && (

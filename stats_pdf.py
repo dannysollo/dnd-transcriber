@@ -228,7 +228,7 @@ def render_stats_pdf(data: dict, campaign_name: str) -> bytes:
             f"at the table and {data['words']:,} words spoken{wpm}.")
     if longest:
         lead += f" The longest was {escape(longest['name'])}, at {_dur(longest['duration_seconds'])}."
-    parts.append(f'<p class="lead">{lead}</p><p class="note">Talk time is estimated from words spoken, at about {SPEECH_WPM} words a minute.</p>')
+    parts.append(f'<p class="lead">{lead}</p><p class="note">Talk time is estimated from words spoken, at about {SPEECH_WPM} words a minute. Speeches in each session\'s first 10 minutes (usually the recap) don\'t count as records.</p>')
 
     recs = _records(data.get("records", {}))
     if recs:

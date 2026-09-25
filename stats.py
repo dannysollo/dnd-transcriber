@@ -13,6 +13,7 @@ from pathlib import Path
 from unknown_words import LINE_RE, VOCAB_MARKER, _english
 
 SPEECH_RATE = 2.7  # words per second (~160 wpm)
+RECAP_SECONDS = 600  # speeches starting in the first 10 minutes don't count as records: that's usually the recap
 WORD_RE = re.compile(r"[A-Za-z0-9']+")
 
 
@@ -307,7 +308,7 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
 
             # Longest single line
             r = records.get("longest_monologue")
-            if not r or l["words"] > r["words"]:
+            if l["start"] >= RECAP_SECONDS and (not r or l["words"] > r["words"]):
                 records["longest_monologue"] = {"person": l["person"], "character": l["name"], "session": sess["name"],
                                                 "ts": l["ts"], "words": l["words"], "seconds": round(l["words"] / SPEECH_RATE),
                                                 "excerpt": _excerpt(l["text"])}
@@ -320,7 +321,7 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
                                                   "broken_by": l["person"]}
             prev = l
 
-        overall = longest_overall_speech(lines)
+        overall = longest_overall_speech([l for l in lines if l["start"] >= RECAP_SECONDS])
         r = records.get("longest_overall_speech")
         if overall and (not r or overall["words"] > r["words"]):
             records["longest_overall_speech"] = {"session": sess["name"], **overall}
@@ -472,10 +473,11 @@ def session_details(transcript: str, terms: list[str], config: dict,
     total_words = sum(l["words"] for l in lines)
     moments: dict[str, dict] = {}
 
-    top = max(lines, key=lambda l: l["words"])
+    after_recap = [l for l in lines if l["start"] >= RECAP_SECONDS] or lines
+    top = max(after_recap, key=lambda l: l["words"])
     moments["longest_speech"] = {"person": top["person"], "character": top["name"], "ts": top["ts"], "words": top["words"],
                                  "seconds": round(top["words"] / SPEECH_RATE), "excerpt": _excerpt(top["text"])}
-    overall = longest_overall_speech(lines)
+    overall = longest_overall_speech(after_recap)
     if overall and overall["words"] > top["words"]:
         moments["longest_overall_speech"] = overall
     live = liveliest_exchange(lines)

@@ -200,7 +200,7 @@ export default function CampaignStats({ slug }: { slug: string }) {
         </div>
       </div>
       <p style={{ margin: '0 0 28px', fontSize: 15, color: 'var(--ink-faint)' }}>
-        Talk time is estimated from words spoken, at about 160 words a minute.
+        Talk time is estimated from words spoken, at about 160 words a minute. Speeches in each session's first 10 minutes (usually the recap) don't count as records.
       </p>
 
       {records.length > 0 && (
