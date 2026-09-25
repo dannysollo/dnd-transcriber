@@ -110,6 +110,28 @@ python apply_updates.py sessions/session-01 --skip 2
 3. Download the **FLAC** zip (not the mixed track)
 4. Drag-and-drop the zip onto the session card in the GUI — it auto-extracts
 
+### Shared mics
+
+If two people talk into one mic (e.g. both DMs in one room), Craig records them
+as one track. Mark it on the player who has no track of their own:
+
+```yaml
+players:
+  thatscinerd:
+    name: Juno
+    role: dm
+    shares_mic_with: dannysollo
+```
+
+Right after Whisper runs, the worker sorts the shared track's segments by voice
+and gives the other person's segments their own label before building the
+transcript. Transcript text is never changed. Voices are matched against the
+campaign's voice library (`voices.json`, numbers only, no audio, readable only
+by the worker). The worker learns it from every track that has one person on
+it, so a sharer needs a profile first: either one session on their own mic, or
+a seed from an earlier hand-checked split. The voice model is WeSpeaker's
+ResNet34 (VoxCeleb, CC-BY-4.0), downloaded once by the worker.
+
 ---
 
 ## Configuration

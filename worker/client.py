@@ -89,3 +89,13 @@ class WorkerClient:
             timeout=60,
         )
         r.raise_for_status()
+
+    def get_voice_library(self) -> dict:
+        """The campaign's voice profiles (worker/voices.py)."""
+        r = requests.get(self._url("/worker/voices"), headers=self.headers, timeout=30)
+        r.raise_for_status()
+        return r.json()
+
+    def put_voice_library(self, library: dict) -> None:
+        r = requests.put(self._url("/worker/voices"), headers=self.headers, json=library, timeout=60)
+        r.raise_for_status()

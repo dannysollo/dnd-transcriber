@@ -166,7 +166,17 @@ def poll_loop(config: dict, stop_event: threading.Event):
                         whisper_model = load_whisper_model(model_name)
                     whisper_model._model_name = model_name
 
+                # Voice library for splitting shared mics; optional, never blocks a transcript.
+                try:
+                    job_config["voice_library"] = client.get_voice_library()
+                except Exception as e:
+                    print(f"[worker]   (voice library unavailable: {e})")
                 transcript, confidence = transcribe_session(session_dir, whisper_model, job_config)
+                if job_config.get("voice_library_changed"):
+                    try:
+                        client.put_voice_library(job_config["voice_library"])
+                    except Exception as e:
+                        print(f"[worker]   (couldn't save the voice library: {e})")
 
                 print(f"[worker]   Pushing transcript...")
                 client.push_transcript(session_name, transcript, confidence)

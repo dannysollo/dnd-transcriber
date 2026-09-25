@@ -3668,6 +3668,35 @@ def worker_get_config(slug: str, db: Session = Depends(get_db), request: Request
     }
 
 
+# ─── Voice library (worker only; see worker/voices.py) ──────────────────────
+# One speaker-embedding profile per player, learned by the worker from tracks
+# with one person on them, used to split shared mics. It's numbers only (no
+# audio), but it's still personal data, so only the worker can read it.
+
+def _voices_path(slug: str) -> Path:
+    return BASE_DIR / "campaigns" / slug / "voices.json"
+
+
+@app.get("/campaigns/{slug}/worker/voices")
+def worker_get_voices(slug: str, db: Session = Depends(get_db), request: Request = None):
+    require_worker_key(slug)(request, db)
+    path = _voices_path(slug)
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"people": {}}
+
+
+@app.put("/campaigns/{slug}/worker/voices")
+async def worker_put_voices(slug: str, db: Session = Depends(get_db), request: Request = None):
+    require_worker_key(slug)(request, db)
+    body = await request.json()
+    if not isinstance(body, dict) or not isinstance(body.get("people", {}), dict):
+        raise HTTPException(400, "Expected {\"people\": {...}}")
+    path = _voices_path(slug)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(body), encoding="utf-8")
+    tmp.replace(path)
+    return {"ok": True, "people": len(body.get("people", {}))}
+
+
 # ─── Vault connection test ────────────────────────────────────────────────────
 
 @app.post("/campaigns/{slug}/vault/test")

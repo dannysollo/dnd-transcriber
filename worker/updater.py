@@ -94,15 +94,29 @@ def _stage(sha: str) -> dict[str, bytes]:
     return files
 
 
-def _install_requirements(new_reqs: bytes) -> None:
-    with tempfile.NamedTemporaryFile("wb", suffix="-requirements.txt", delete=False) as f:
-        f.write(new_reqs)
-        path = f.name
-    try:
-        _log("requirements.txt changed; installing new dependencies…")
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", path], check=True)
-    finally:
-        os.unlink(path)
+def _requirement_lines(data: bytes) -> list[str]:
+    """Requirement specs with inline comments stripped (pip -r chokes on none, but we compare lines)."""
+    out = []
+    for raw in data.decode("utf-8", "replace").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line:
+            out.append(line)
+    return out
+
+
+def _install_requirements(old_reqs: bytes, new_reqs: bytes) -> None:
+    """
+    Install only the requirement lines that are new or changed, never the whole
+    file: `pip install -r` of everything would also try nemo_toolkit[asr]
+    (~2 GB, optional, skipped by onboarding) and could swap the CUDA build of
+    torch for a PyPI one. Same exclusion as desktop/onboarding.py.
+    """
+    old = set(_requirement_lines(old_reqs))
+    todo = [l for l in _requirement_lines(new_reqs) if l not in old and not l.startswith("nemo_toolkit")]
+    if not todo:
+        return
+    _log(f"requirements.txt changed; installing {', '.join(todo)}")
+    subprocess.run([sys.executable, "-m", "pip", "install", *todo], check=True)
 
 
 def _swap_in(files: dict[str, bytes]) -> None:
@@ -128,7 +142,7 @@ def update_if_needed() -> bool:
     old_reqs = (WORKER_DIR / "requirements.txt").read_bytes() if (WORKER_DIR / "requirements.txt").exists() else b""
     new_reqs = files.get("worker/requirements.txt", b"")
     if new_reqs and new_reqs.replace(b"\r", b"") != old_reqs.replace(b"\r", b""):
-        _install_requirements(new_reqs)
+        _install_requirements(old_reqs, new_reqs)
     _swap_in(files)
     VERSION_FILE.write_text(sha + "\n")
     _log(f"updated {len(files)} files")

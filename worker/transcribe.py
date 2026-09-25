@@ -388,7 +388,38 @@ def transcribe_session(session_dir: Path, model, config: dict) -> tuple[str, dic
             )
         print(f"    → {len(result['segments'])} segments")
 
+    split_shared_mics(session_dir, audio_files, speakers_dir, players, config)
     return merge_speaker_jsons(speakers_dir)
+
+
+def split_shared_mics(session_dir: Path, audio_files: list, speakers_dir: Path, players: dict, config: dict) -> None:
+    """
+    Shared mics and the voice library (worker/voices.py). Runs while the
+    per-speaker tracks still exist, before merging. Best effort: any failure
+    leaves the transcript exactly as it would have been without it.
+    """
+    library = config.get("voice_library")
+    if library is None:
+        return
+    try:
+        import voices
+        tracks = []
+        for audio_file in audio_files:
+            f = speakers_dir / f"{audio_file.stem}.json"
+            if f.exists():
+                tracks.append((audio_file, json.loads(f.read_text(encoding="utf-8"))))
+        print("  Voices: checking shared mics and updating the voice library...")
+        log = voices.process_session(tracks, players, library, session_dir.name,
+                                     lambda u: get_speaker_label(u, players))
+        for audio_file, data in tracks:
+            if any("speaker" in seg for seg in data.get("segments", [])):
+                (speakers_dir / f"{audio_file.stem}.json").write_text(
+                    json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        for line in log:
+            print(f"    {line}")
+        config["voice_library_changed"] = True
+    except Exception as e:
+        print(f"  Voices: skipped ({e})")
 
 
 # ─── Merge per-speaker JSONs into markdown ────────────────────────────────────
@@ -413,8 +444,10 @@ def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 4.0) -> tuple[str, 
     for json_file in sorted(speakers_dir.glob("*.json")):
         with open(json_file, encoding="utf-8") as f:
             data = json.load(f)
-        speaker = data["speaker"]
+        track_speaker = data["speaker"]
         for seg in data["segments"]:
+            # a shared mic's segments can carry their own speaker (worker/voices.py)
+            speaker = seg.get("speaker") or track_speaker
             text = seg["text"].strip()
             if not text or len(text) < 3:
                 continue

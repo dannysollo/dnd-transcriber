@@ -4,18 +4,15 @@ Open work, roughly in priority order. Move items to the commit log when done.
 
 ## Speaker attribution
 
-- **Split shared mic.** A session action for when two people shared one Craig
-  track (e.g. both DMs on one mic). It runs speaker embeddings over that track,
-  finds the voices (ignoring Discord's gated silence), names them from the
-  campaign voice library, and relabels or splits lines at sentence boundaries.
-  A sentence moves to the second voice only on a clear similarity margin.
-  Transcript text is never changed. Keep a backup of the previous transcript
-  and show the changed lines for review before applying. Done by hand for
-  9-13-2026 (works; the backup is `transcript.pre-juno-split.md`).
-- **Campaign voice library.** Per-person speaker-embedding profiles pooled
-  across sessions (Craig tracks are the cleanest source). This is shared by
-  shared-mic splitting and legacy reconstruction. Flag voices that match no
-  profile well as Unknown rather than forcing a match.
+- **onnxruntime in requirements.txt.** Add `onnxruntime<1.24; python_version < "3.11"`
+  plus `onnxruntime; python_version >= "3.11"` once every worker has the
+  updater that installs only changed requirement lines (commit after
+  2026-09-25). Until then worker/voices.py installs it on first use. The old
+  updater `pip install -r`'d the whole file, which would pull nemo_toolkit.
+- **Voice library UI.** The library (`voices.json`) is built and used by the
+  worker; the site could show who has a profile and when it was last updated,
+  and offer a reset. Flag voices that match no profile as Unknown (needed for
+  legacy reconstruction).
 - **Legacy session reconstruction.** Transcripts for sessions recorded before
   Craig, from a single mixed audio track (plus video when it's available).
   - Whisper with word timestamps, then voice-profile labelling. This scored 97%
