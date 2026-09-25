@@ -253,7 +253,7 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
         return people.setdefault(key, {
             "person": key, "characters": set(), "sessions": 0, "words": 0, "seconds": 0,
             "shares": {}, "questions": 0, "exclamations": 0, "laughs": 0,
-            "names": {}, "word_counts": {}, "sig_total": 0, "quoted": 0, "mech_words": 0,
+            "names": {}, "word_counts": {}, "word_sessions": {}, "sig_total": 0, "quoted": 0, "mech_words": 0,
         })
 
     for sess in sessions:
@@ -297,6 +297,7 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
                 if w in everyday or w in exclude:
                     continue
                 p["word_counts"][w] = p["word_counts"].get(w, 0) + 1
+                p["word_sessions"].setdefault(w, set()).add(sess["name"])
                 p["sig_total"] += 1
                 all_word_counts[w] = all_word_counts.get(w, 0) + 1
                 total_sig_words += 1
@@ -363,8 +364,12 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
             continue
         # Signature words: said far more often than the table's baseline.
         sig = []
+        # A signature word has to recur: said in at least 3 sessions, and in at
+        # least a fifth of the sessions this person was at. One session's topic
+        # (a word said 20 times the night of the Mer tree) doesn't count.
+        min_sessions = max(3, -(-p["sessions"] // 5))
         for w, c in p["word_counts"].items():
-            if c < 6:
+            if c < 6 or len(p["word_sessions"].get(w, ())) < min_sessions:
                 continue
             rate = c / max(1, p["sig_total"])
             base = all_word_counts[w] / max(1, total_sig_words)
