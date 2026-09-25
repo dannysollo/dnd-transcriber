@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CloseIcon } from '../Icons'
+import { AlertIcon, CloseIcon } from '../Icons'
 import { useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
@@ -17,6 +17,7 @@ interface Session {
   modified_at: string | null
   description: string | null
   has_craig_link?: boolean
+  reconstructed?: boolean
 }
 
 interface TranscriptionJob {
@@ -543,6 +544,12 @@ export default function SessionsPage() {
 
                       {/* Status badges — top right */}
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {s.reconstructed && (
+                          <span title="Reconstructed from a mixed recording: who said what was matched by voice and can be wrong, especially when people talk over each other." className="reconstructed-mark">
+                            <AlertIcon size={17} />
+                            <span className="sr-only">Reconstructed</span>
+                          </span>
+                        )}
                         {s.has_craig_link && !s.has_transcript && (
                           <span title="Audio comes from a Craig link" style={{ color: 'var(--text-muted)', display: 'flex' }}>
                             <LinkIcon />

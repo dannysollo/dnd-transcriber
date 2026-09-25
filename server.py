@@ -1697,6 +1697,7 @@ def campaign_list_sessions(
                 "description": desc_path.read_text(encoding="utf-8").strip() if desc_path.exists() else None,
                 "review_status": get_session_review_status(d),
                 "has_craig_link": (d / CRAIG_SOURCE_FILE).exists(),
+                "reconstructed": (d / RECONSTRUCTED_FILE).exists(),
             })
     return sessions
 
@@ -3666,6 +3667,20 @@ def worker_get_config(slug: str, db: Session = Depends(get_db), request: Request
         "whisper_model": config.get("whisper_model", "turbo"),
         "use_hotwords": config.get("use_hotwords", False),
     }
+
+
+# ─── Reconstructed sessions ──────────────────────────────────────────────────
+# Sessions from before Craig, rebuilt from one mixed recording: Whisper for the
+# text, voice matching for who said what. Marked so the UI can say so.
+RECONSTRUCTED_FILE = "reconstructed.json"
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/reconstructed")
+def campaign_session_reconstructed(slug: str, name: str, _member=Depends(require_campaign_member("spectator"))):
+    path = get_sessions_dir(slug) / name / RECONSTRUCTED_FILE
+    if not path.exists():
+        return {"reconstructed": False}
+    return {"reconstructed": True, **json.loads(path.read_text(encoding="utf-8"))}
 
 
 # ─── Voice library (worker only; see worker/voices.py) ──────────────────────

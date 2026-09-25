@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Chevron, CloseIcon, CopyIcon, PauseIcon, PlayIcon, QuoteIcon, SpinnerIcon } from '../Icons'
+import { AlertIcon, Chevron, CloseIcon, CopyIcon, PauseIcon, PlayIcon, QuoteIcon, SpinnerIcon } from '../Icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
@@ -221,6 +221,7 @@ export default function SessionView() {
   const [summary, setSummary] = useState<string | null>(null)
   const [wiki, setWiki] = useState<string | null>(null)
   const [description, setDescription] = useState<string | null>(null)
+  const [reconstructed, setReconstructed] = useState<{ reconstructed: boolean; source?: string } | null>(null)
   const [editingDescription, setEditingDescription] = useState(false)
   const [descriptionDraft, setDescriptionDraft] = useState('')
   const [search, setSearch] = useState('')
@@ -357,6 +358,10 @@ export default function SessionView() {
       fetch(apiUrl(`/sessions/${name}/description`)).then(r => r.ok ? r.json() : null),
       fetch(apiUrl(`/sessions/${name}/analysis-pending`)).then(r => r.ok ? r.json() : null),
     ])
+    fetch(apiUrl(`/sessions/${name}/reconstructed`))
+      .then(r => (r.ok ? r.json() : null))
+      .then(setReconstructed)
+      .catch(() => setReconstructed(null))
     if (activeCampaign) {
       // Names tab badge: how many likely-misheard names are waiting for a decision.
       fetch(apiUrl(`/sessions/${name}/unknown-words`))
@@ -859,6 +864,12 @@ export default function SessionView() {
             <svg aria-hidden width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
           </button>
           <h1 style={{ margin: 0, fontSize: '34px', lineHeight: 1.15, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: '0 1 auto' }}>{name}</h1>
+          {reconstructed?.reconstructed && (
+            <span className="reconstructed-mark" title="Reconstructed from a mixed recording: who said what was matched by voice and can be wrong, especially when people talk over each other.">
+              <AlertIcon size={20} />
+              <span className="sr-only">Reconstructed</span>
+            </span>
+          )}
           {!description && !editingDescription && summary && (
             <button
               className="desc-add"
