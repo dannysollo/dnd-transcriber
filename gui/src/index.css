@@ -846,3 +846,67 @@ input.written-line:focus {
 .apply-log .n.none { color: var(--ink-faint); }
 .apply-progress-note { font-size: 14px; color: var(--ink-faint); }
 @media (prefers-reduced-motion: reduce) { .apply-bar > div { transition: none; } }
+
+/* Bottom sheet (phones): secondary actions within thumb reach */
+.sheet-root { position: fixed; inset: 0; z-index: 400; }
+.sheet-backdrop { position: absolute; inset: 0; background: color-mix(in srgb, var(--cover-edge) 38%, transparent); animation: sheet-fade 160ms ease-out; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 78dvh; overflow-y: auto;
+  background: var(--page); border-top: 1px solid var(--rule-strong); border-radius: 3px 3px 0 0;
+  box-shadow: 0 -12px 32px -18px rgba(0, 0, 0, 0.45);
+  padding: 4px 16px calc(12px + env(safe-area-inset-bottom, 0px)); animation: sheet-rise 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 0 6px; border-bottom: 1px solid var(--rule);
+  font-size: 17px; color: var(--rubric); }
+.sheet-body { display: flex; flex-direction: column; }
+.sheet-section { padding: 6px 0 2px; font-size: 14px; color: var(--ink-faint); font-variant: small-caps; letter-spacing: 0.05em; }
+.sheet-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-height: 48px; padding: 10px 2px;
+  background: none; border: none; border-bottom: 1px solid var(--rule); text-align: left; font: inherit; font-size: 18px;
+  color: var(--ink); cursor: pointer; }
+.sheet-item:active { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.sheet-item.active { color: var(--rubric); }
+.sheet-item:disabled { color: var(--ink-faint); cursor: default; }
+.sheet-item-note { font-size: 15px; color: var(--ink-faint); }
+.sheet-item:focus-visible { outline: 2px solid var(--gilt); outline-offset: -2px; }
+@keyframes sheet-rise { from { transform: translateY(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+@keyframes sheet-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sheet, .sheet-backdrop { animation: none; } }
+
+/* ── Phones: speaker-first transcript, compact session chrome ─────────────── */
+.line-head, .line-ts-inline, .session-more { display: none; }
+@media (max-width: 768px) {
+  /* Who's talking sits above the text; the same speaker's next line runs on. */
+  .transcript-line { display: block; padding: 2px 4px 2px 10px; margin-left: -10px; }
+  .transcript-line:not(.continued) { margin-top: 14px; }
+  .line-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 1px; }
+  .line-head .speaker-name { font-size: 16px; }
+  .line-head .speaker-player { font-size: 14px; }
+  .line-head-ts { margin-left: auto; padding: 4px 0 4px 12px; font-size: 13px; min-height: 32px; }
+  .transcript-line.continued .line-head { display: none; }
+  .line-col-ts, .read-text .inline-speaker { display: none; }
+  .read-text { font-size: 18px; max-width: none; }
+  .transcript-line.continued .line-ts-inline { display: inline; margin-left: 8px; font-size: 12px; padding: 0; vertical-align: baseline; }
+  .read-pause { margin-left: 0; }
+  .transcript-line.active { box-shadow: inset 2px 0 0 var(--gilt); }
+
+  /* Session header: one row (back, title, more); actions live in the sheet. */
+  .session-actions, .session-speakers, .tb-phone-hide, .desc-add { display: none !important; }
+  .session-more { display: inline-flex; padding: 10px; margin-right: -10px; }
+  .session-header h1 { font-size: 24px !important; }
+  .session-header { max-height: 240px; transition: max-height 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease-out, padding 220ms; }
+  .session-toolbar { max-height: 120px; transition: max-height 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease-out, padding 220ms; }
+  .chrome-hidden .session-header, .chrome-hidden .session-toolbar { max-height: 0; opacity: 0; overflow: hidden; padding-top: 0 !important; padding-bottom: 0 !important;
+    visibility: hidden; transition: max-height 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease-out, padding 220ms, visibility 0s 220ms; }
+  .session-toolbar { gap: 10px !important; flex-wrap: nowrap !important; }
+  .session-toolbar input.written-line { flex: 1 1 auto !important; font-size: 17px !important; }
+
+  /* Audio docks at the bottom as the mini player. */
+  .session-audio-panel { display: none !important; }
+
+  /* Edit mode: every pixel for the text. */
+  .edit-num { display: none; }
+  .edit-row { padding: 3px 0; }
+
+  .sheet-speakers { padding: 10px 0 4px; }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .session-header, .session-toolbar { transition: none; }
+}

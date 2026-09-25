@@ -385,3 +385,13 @@ Custom inline SVG stroke icons (`Icons.tsx`) on a 24px grid with a 2px stroke, r
 - **Cover** (`CoverWordmark`): a 30px mark beside the name at 27px/600, over "campaign journal" in 14px small caps (cover-ink-soft).
 - **Front cover** (`FrontCover`, used by the landing and login pages): full-bleed leather, a gilt double-tooled inset frame (1px border plus an outline at 6px offset), and centered: a 64px mark, the name at clamp(56px, 9vw, 88px)/500, "a campaign journal for the whole table" in small caps, then `GiltRule` (a double rule with a center lozenge), the tagline and the Discord button. There's one entrance: the title block rises 8px and fades in over 0.7s (skipped under reduced motion).
 - The Discord button keeps Discord's own blurple (#5865f2) with 3px corners; it's a third-party mark, not a rubric action.
+
+## Phones (2026-09-25)
+
+Phones follow the same book, laid out for one thumb and a narrow page. Everything below applies at 768px and under; desktop is unchanged.
+
+- **Speaker-first transcript.** Each speaker change opens with a head line: the small-caps rubric name, the player in faint ink, and the timestamp (tappable, plays from there) set flush right. The same speaker's next line runs on without a head, and its time sits small at the end of the text. Speaker changes get 14px of extra space above, so a scroll through the transcript reads like a script. The time column and the inline speaker names are hidden on phones.
+- **Compact session chrome.** One title row: back, the title at 24px, and a "more" control (drawn three-dot icon) that opens the session sheet with Share, Apply corrections, Run pipeline, the description, unsure words, Download and the speakers list. Below it are the tabs and a single search + Edit row. Scrolling down tucks the title and search rows away (max-height and opacity, 220ms ease-out); scrolling up brings them back. They never hide in edit mode, so Done editing stays reachable.
+- **Audio** docks at the bottom as the mini player, above the bottom bar.
+- **Bottom bar:** Sessions, Quotes, Search and More. More opens a sheet with the campaign switcher, campaign settings, Corrections, Edit Queue (with its count), Preferences and Log out.
+- **Sheets** rise from the bottom edge: paper surface, a strong top rule, 3px top corners, a soft upward shadow, 48px rows separated by hairline rules, small-caps faint section labels. Escape or a tap outside closes; focus moves in and returns to the opener.

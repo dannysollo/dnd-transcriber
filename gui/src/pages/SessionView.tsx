@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AlertIcon, Chevron, CloseIcon, CopyIcon, PauseIcon, PlayIcon, QuoteIcon, SpinnerIcon } from '../Icons'
+import { AlertIcon, Chevron, CloseIcon, CopyIcon, MoreIcon, PauseIcon, PlayIcon, QuoteIcon, SpinnerIcon } from '../Icons'
+import Sheet, { SheetItem } from '../Sheet'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
@@ -252,6 +253,28 @@ export default function SessionView() {
     audioRef.current?.pause()
   }
   const tabsRowRef = useRef<HTMLDivElement | null>(null)
+  const openShare = async () => {
+    setShareModalOpen(true); setShareToken(null); setShareCopied(false)
+    setSharesLoading(true)
+    try {
+      const r = await fetch(apiUrl(`/sessions/${name}/shares`))
+      if (r.ok) setExistingShares(await r.json())
+    } catch { /* ignore */ } finally { setSharesLoading(false) }
+  }
+  // Phones: the session's secondary actions live in a sheet, and the title and
+  // search rows tuck away while scrolling down the transcript.
+  const [actionsOpen, setActionsOpen] = useState(false)
+  const [chromeHidden, setChromeHidden] = useState(false)
+  const lastScrollRef = useRef(0)
+  const onContentScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (!window.matchMedia('(max-width: 768px)').matches) return
+    const st = e.currentTarget.scrollTop
+    const last = lastScrollRef.current
+    if (st < 40) setChromeHidden(false)
+    else if (st > last + 12) setChromeHidden(true)
+    else if (st < last - 12) setChromeHidden(false)
+    if (Math.abs(st - last) > 12 || st < 40) lastScrollRef.current = st
+  }
   // On narrow screens the tab row scrolls; keep the active tab in view.
   useEffect(() => {
     tabsRowRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')
@@ -792,7 +815,50 @@ export default function SessionView() {
   ]
 
   return (
-    <div className="session-view-root" style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minHeight: 0 }}>
+    <div className={'session-view-root' + (chromeHidden && tab === 'transcript' && !editMode ? ' chrome-hidden' : '')} style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minHeight: 0 }}>
+      <Sheet open={actionsOpen} onClose={() => setActionsOpen(false)} title="This session">
+        <SheetItem onClick={() => { setActionsOpen(false); openShare() }} note="A read-only link for anyone">Share</SheetItem>
+        {!(editMode && tab === 'transcript') && (
+          <>
+            <SheetItem onClick={() => { setActionsOpen(false); doMerge() }} disabled={merging}
+              note="Run the campaign's correction rules; your edits are kept">
+              {merging ? 'Applying corrections…' : 'Apply corrections'}
+            </SheetItem>
+            <SheetItem onClick={() => { setActionsOpen(false); setPipelinePanel(true) }}
+              note={pipelineRunning ? 'Running now' : 'Transcribe, summarize, suggest wiki updates'}>
+              Run pipeline
+            </SheetItem>
+          </>
+        )}
+        {transcript && (
+          <SheetItem onClick={() => { setActionsOpen(false); setEditingDescription(true); setDescriptionDraft(description ?? '') }}>
+            {description ? 'Edit the description' : 'Add a description'}
+          </SheetItem>
+        )}
+        {tab === 'transcript' && transcript && (
+          <>
+            <div className="sheet-section">Transcript</div>
+            {(confidence?.lines.length ?? 0) > 0 && (
+              <SheetItem onClick={() => setShowConfidence(v => {
+                try { localStorage.setItem('dnd-show-lowconf', String(!v)) } catch { /* private mode */ }
+                return !v
+              })} note="Underline words Whisper wasn't sure about">
+                {showConfidence ? 'Hide unsure words' : 'Show unsure words'}
+              </SheetItem>
+            )}
+            {canEditTranscript && unsureCount > 0 && !editMode && (
+              <SheetItem onClick={() => { setActionsOpen(false); setSearch(''); setWalkItems(buildWalkItems(transcript!, confidence)) }}
+                note="Step through each one with the audio">
+                Review {unsureCount} unsure word{unsureCount !== 1 ? 's' : ''}
+              </SheetItem>
+            )}
+            <SheetItem onClick={() => { setActionsOpen(false); handleDownloadTranscript() }}>Download the transcript</SheetItem>
+            <div className="sheet-speakers">
+              <SpeakersPanel sessionName={name!} onRename={() => { load(); setChangesLoaded(false); setChangesReport(null) }} />
+            </div>
+          </>
+        )}
+      </Sheet>
       {/* Window drag overlay */}
       {isDragOver && (
         <div style={{
@@ -894,18 +960,13 @@ export default function SessionView() {
             </span>
           )}
 
-          <div style={{ display: 'flex', gap: '8px', flexShrink: 0, paddingBottom: '4px' }}>
-            <button
-              className="btn-ghost"
-              onClick={async () => {
-                setShareModalOpen(true); setShareToken(null); setShareCopied(false)
-                setSharesLoading(true)
-                try {
-                  const r = await fetch(apiUrl(`/sessions/${name}/shares`))
-                  if (r.ok) setExistingShares(await r.json())
-                } catch { /* ignore */ } finally { setSharesLoading(false) }
-              }}
-            >
+          <button type="button" className="entry-action session-more" onClick={() => setActionsOpen(true)}
+            aria-label="Session actions" aria-haspopup="dialog" aria-expanded={actionsOpen}>
+            <MoreIcon size={22} />
+          </button>
+
+          <div className="session-actions" style={{ display: 'flex', gap: '8px', flexShrink: 0, paddingBottom: '4px' }}>
+            <button className="btn-ghost" onClick={openShare}>
               Share
             </button>
 
@@ -1247,6 +1308,7 @@ export default function SessionView() {
                 />
                 {(confidence?.lines.length ?? 0) > 0 && (
                   <button
+                    className="tb-phone-hide"
                     onClick={() => setShowConfidence(v => {
                       try { localStorage.setItem('dnd-show-lowconf', String(!v)) } catch { /* private mode */ }
                       return !v
@@ -1265,7 +1327,7 @@ export default function SessionView() {
                 {canEditTranscript && unsureCount > 0 && (
                   <button
                     type="button"
-                    className="btn-ghost"
+                    className="btn-ghost tb-phone-hide"
                     onClick={() => { setSearch(''); setWalkItems(buildWalkItems(transcript!, confidence)) }}
                     title="Step through each word Whisper wasn't sure about, with the audio"
                     style={{ flexShrink: 0 }}
@@ -1347,7 +1409,9 @@ export default function SessionView() {
 
       {/* Speakers panel — transcript tab only */}
       {tab === 'transcript' && transcript && (
-        <SpeakersPanel sessionName={name!} onRename={() => { load(); setChangesLoaded(false); setChangesReport(null) }} />
+        <div className="session-speakers">
+          <SpeakersPanel sessionName={name!} onRename={() => { load(); setChangesLoaded(false); setChangesReport(null) }} />
+        </div>
       )}
 
       {/* Audio: a hairline bar in the journal's own hand. The <audio> element
@@ -1429,7 +1493,7 @@ export default function SessionView() {
       )}
 
       {/* Content */}
-      <div ref={sessionContentRef} className="session-content" style={{ flex: 1, overflow: 'auto', padding: '18px 48px', paddingBottom: !mainAudioVisible && audioFiles.length > 0 ? '80px' : '40px' }}>
+      <div ref={sessionContentRef} className="session-content" onScroll={onContentScroll} style={{ flex: 1, overflow: 'auto', padding: '18px 48px', paddingBottom: !mainAudioVisible && audioFiles.length > 0 ? '80px' : '40px' }}>
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '820px' }}>
             {[0,1,2,3].map(i => (
@@ -1779,7 +1843,17 @@ function TranscriptView({
         prev = cur
       })
     }
-    return { nextTs, silence }
+    // Phones show the speaker above the text, only when the speaker changes.
+    // (blank lines between speech don't count; a heading or a long pause starts afresh)
+    const continued: boolean[] = new Array(visibleLines.length).fill(false)
+    let lastSpeaker: string | undefined
+    visibleLines.forEach((cur, k) => {
+      if (cur.type === 'heading') { lastSpeaker = undefined; return }
+      if (cur.type !== 'speech') return
+      continued[k] = !silence[k] && !!cur.speaker && cur.speaker === lastSpeaker
+      lastSpeaker = cur.speaker
+    })
+    return { nextTs, silence, continued }
   }, [visibleLines, search])
   // Low-confidence words per line, looked up once (a fresh [] per line on every
   // render would make every memoised line look changed on every audio tick).
@@ -2074,6 +2148,7 @@ function TranscriptView({
           isTarget={line.type === 'speech' && line.timestamp === targetTimestamp}
           isFlash={line.type === 'speech' && line.timestamp === flashTimestamp}
           silenceBefore={readDerived.silence[i]}
+          continued={readDerived.continued[i]}
           nextTs={readDerived.nextTs[i]}
           lowConf={lowConfPerLine[i]}
           search={searchLower}
@@ -4352,9 +4427,9 @@ const SESSION_TITLE_RE = /^#\s*session transcript\s*$/i
  * moves the "now playing" highlight several times a second) re-renders only
  * the lines whose highlight changes, not the whole transcript.
  */
-const ReadLine = React.memo(function ReadLine({ line, isActive, isTarget, isFlash, silenceBefore, nextTs, lowConf, search,
+const ReadLine = React.memo(function ReadLine({ line, isActive, isTarget, isFlash, silenceBefore, continued, nextTs, lowConf, search,
   canSeek, canQuote, quoteSaved, actions, activeRef, targetRef }: {
-  line: ParsedLine; isActive: boolean; isTarget: boolean; isFlash: boolean; silenceBefore: boolean; nextTs?: string
+  line: ParsedLine; isActive: boolean; isTarget: boolean; isFlash: boolean; silenceBefore: boolean; continued: boolean; nextTs?: string
   lowConf: LowConfWord[]; search: string; canSeek: boolean; canQuote: boolean; quoteSaved: boolean
   actions: ReadLineActions
   activeRef: React.MutableRefObject<HTMLDivElement | null>; targetRef: React.MutableRefObject<HTMLDivElement | null>
@@ -4379,23 +4454,38 @@ const ReadLine = React.memo(function ReadLine({ line, isActive, isTarget, isFlas
       <div
         data-line-idx={line.lineIdx}
         data-ts={line.timestamp}
-        className={'transcript-line' + (isFlash ? ' flash' : isActive ? ' active' : '')}
+        className={'transcript-line' + (isFlash ? ' flash' : isActive ? ' active' : '') + (continued ? ' continued' : '')}
         ref={el => {
           if (isActive) activeRef.current = el
           if (isTarget) targetRef.current = el
         }}
       >
+        {/* Phones: who and when above the text (hidden for the same speaker's next line). */}
+        <div className="line-head">
+          {who.name && <span className="speaker-name">{who.name}</span>}
+          {who.player && <span className="speaker-player">{who.player}</span>}
+          {canSeek && tsSeconds !== null ? (
+            <button onClick={() => actions.seek(tsSeconds, line.speaker)} title={`Play from ${line.timestamp}`} className="transcript-ts line-head-ts">
+              {line.timestamp}
+            </button>
+          ) : <span className="transcript-ts line-head-ts">{line.timestamp}</span>}
+        </div>
         {canSeek && tsSeconds !== null ? (
-          <button onClick={() => actions.seek(tsSeconds, line.speaker)} title={`Play from ${line.timestamp}`} className="transcript-ts">
+          <button onClick={() => actions.seek(tsSeconds, line.speaker)} title={`Play from ${line.timestamp}`} className="transcript-ts line-col-ts">
             {line.timestamp}
           </button>
         ) : (
-          <span className="transcript-ts">{line.timestamp}</span>
+          <span className="transcript-ts line-col-ts">{line.timestamp}</span>
         )}
         <p className="read-text">
-          {who.name && <span className="speaker-name">{who.name}</span>}
-          {who.player && <span className="speaker-player">{who.player}</span>}
+          {who.name && <span className="speaker-name inline-speaker">{who.name}</span>}
+          {who.player && <span className="speaker-player inline-speaker">{who.player}</span>}
           {renderMarked(text, marks)}
+          {canSeek && tsSeconds !== null && (
+            <button className="transcript-ts line-ts-inline" onClick={() => actions.seek(tsSeconds, line.speaker)} title={`Play from ${line.timestamp}`}>
+              {line.timestamp}
+            </button>
+          )}
           {canQuote && (
             <button
               type="button"

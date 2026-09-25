@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { CoverWordmark } from './Brand'
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
+import Sheet, { SheetItem } from './Sheet'
+import { MoreIcon } from './Icons'
 import './App.css'
 import SessionsPage from './pages/SessionsPage'
 import SessionView from './pages/SessionView'
@@ -82,6 +84,7 @@ export default function App() {
   const { user, isLoggedIn, authEnabled, loading } = useAuth()
   const { campaigns, activeCampaign, setActiveCampaign, loading: campaignLoading } = useCampaign()
   const [campaignDropdownOpen, setCampaignDropdownOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const [pendingEditCount, setPendingEditCount] = useState(0)
   const [workerLastSeen, setWorkerLastSeen] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -172,6 +175,43 @@ export default function App() {
 
   return (
     <div className="app-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
+      <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="More">
+        {campaigns.length > 0 && (
+          <>
+            <div className="sheet-section">Campaign</div>
+            {campaigns.map(c => (
+              <SheetItem key={c.slug} active={activeCampaign?.slug === c.slug}
+                onClick={() => { setActiveCampaign(c); setMoreOpen(false); navigate('/') }}
+                note={activeCampaign?.slug === c.slug ? `current, ${c.role}` : c.role}>
+                {c.name}
+              </SheetItem>
+            ))}
+            {activeCampaign && (
+              <SheetItem onClick={() => { setMoreOpen(false); navigate(`/campaigns/${activeCampaign.slug}/settings`) }}
+                note="Settings, people, stats">
+                Campaign settings
+              </SheetItem>
+            )}
+            <SheetItem onClick={() => { setMoreOpen(false); navigate('/campaigns') }}>All campaigns, or start one</SheetItem>
+          </>
+        )}
+        <div className="sheet-section">Tools</div>
+        <SheetItem onClick={() => { setMoreOpen(false); navigate('/corrections') }} note="Word rules and patterns">Corrections</SheetItem>
+        {activeCampaign?.role === 'dm' && (
+          <SheetItem onClick={() => { setMoreOpen(false); navigate('/edit-queue') }}
+            note={pendingEditCount > 0 ? `${pendingEditCount} waiting for review` : 'Nothing waiting'}>
+            Edit Queue
+          </SheetItem>
+        )}
+        <SheetItem onClick={() => { setMoreOpen(false); navigate('/settings') }} note="Reading light and more">Preferences</SheetItem>
+        {isLoggedIn && user && (
+          <>
+            <div className="sheet-section">Signed in as {user.username}</div>
+            <SheetItem onClick={() => { setMoreOpen(false); logout() }}>Log out</SheetItem>
+          </>
+        )}
+      </Sheet>
+
       {/* Sidebar */}
       <nav className="app-sidebar journal-cover" aria-label="Main" style={{
         display: 'flex',
@@ -292,7 +332,7 @@ export default function App() {
               to={to === '/campaigns' ? campaignHref : to}
               end={to === '/'}
               // A session page is still inside "Sessions"; any /campaigns page is inside "Campaign".
-              className={({ isActive }) => 'cover-link' + (isActive || (to === '/' && isSessionView) || (to === '/campaigns' && location.pathname.startsWith('/campaigns')) ? ' active' : '')}
+              className={({ isActive }) => 'cover-link' + (to === '/campaigns' || to === '/corrections' ? ' nav-secondary' : '') + (isActive || (to === '/' && isSessionView) || (to === '/campaigns' && location.pathname.startsWith('/campaigns')) ? ' active' : '')}
             >
               <Icon />
               <span style={{ flex: 1 }}>{label}</span>
@@ -302,7 +342,7 @@ export default function App() {
             </NavLink>
           ))}
           {activeCampaign?.role === 'dm' && (
-            <NavLink to="/edit-queue" className="cover-link sidebar-nav-item">
+            <NavLink to="/edit-queue" className="cover-link sidebar-nav-item nav-secondary">
               <EditQueueIcon />
               <span style={{ flex: 1 }}>Edit Queue</span>
               {pendingEditCount > 0 && (
@@ -316,10 +356,16 @@ export default function App() {
               )}
             </NavLink>
           )}
-          <NavLink to="/settings" className="cover-link sidebar-nav-item">
+          <NavLink to="/settings" className="cover-link sidebar-nav-item nav-secondary">
             <GearIcon />
             <span style={{ flex: 1 }}>Preferences</span>
           </NavLink>
+          {/* Phones: the bar keeps Sessions, Quotes and Search; the rest live under More. */}
+          <button type="button" className="cover-link sidebar-nav-item nav-more" onClick={() => setMoreOpen(true)}
+            aria-haspopup="dialog" aria-expanded={moreOpen}>
+            <MoreIcon size={18} />
+            <span style={{ flex: 1 }}>More{activeCampaign?.role === 'dm' && pendingEditCount > 0 ? ` (${pendingEditCount})` : ''}</span>
+          </button>
         </div>
 
         {/* Owner's name, inside the back cover */}

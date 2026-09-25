@@ -188,3 +188,12 @@
     left: 232px !important;  /* the journal cover's width */
   }
 }
+
+/* Bottom bar on phones: Sessions, Quotes, Search, and More (the rest). */
+.nav-more { display: none; }
+@media (max-width: 768px) {
+  .sidebar-nav .nav-secondary { display: none !important; }
+  .sidebar-nav .nav-more { display: flex !important; background: none; border: none; color: var(--cover-ink-soft); font: inherit; cursor: pointer; }
+  .sidebar-nav a, .sidebar-nav-item { min-height: 56px; }
+  .sidebar-nav a span:last-child, .sidebar-nav-item span:last-child { font-size: 12px !important; }
+}

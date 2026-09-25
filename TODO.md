@@ -27,7 +27,7 @@ Open work, roughly in priority order. Move items to the commit log when done.
 
 ## Mobile
 
-- **Mobile UI redesign.** Reported as very cluttered. The session header
+- ~~**Mobile UI redesign.**~~ First pass done 2026-09-25 (speaker-first transcript, compact header, sheets, 4-item bar). Reported as very cluttered. The session header
   stacks the title, action buttons, tabs, search, the unsure-words
   controls, speakers and the audio bar before any transcript shows, and
   reading/scrolling through speaker names in the transcript is hard. Likely
