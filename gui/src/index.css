@@ -777,3 +777,51 @@ input.written-line:focus {
 /* Reconstructed sessions (rebuilt from one mixed recording): a quiet ochre warning mark */
 .reconstructed-mark { display: inline-flex; align-items: center; color: var(--ochre); flex-shrink: 0; cursor: help; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Transcript edit mode. Plain classes, not per-row inline styles, and
+   content-visibility so the browser skips layout and paint for rows off
+   screen (a 4-hour session has thousands). */
+.edit-lines { display: flex; flex-direction: column; }
+/* Scroll position is kept by hand when blocks fill in (see EditChunk), so native anchoring stays out of it. */
+.edit-chunk, .edit-chunk-placeholder { overflow-anchor: none; display: flex; flex-direction: column; }
+.edit-row { display: flex; gap: 8px; padding: 3px 6px; align-items: flex-start; border-radius: 3px;
+  content-visibility: auto; contain-intrinsic-size: auto 34px; }
+.edit-row.editing { background: color-mix(in srgb, var(--ochre) 8%, transparent); content-visibility: visible; }
+.edit-row.pending { background: color-mix(in srgb, var(--ochre) 5%, transparent); }
+.edit-gap { height: 8px; }
+.edit-num { font-size: 13px; color: var(--rule-strong); font-variant-numeric: lining-nums tabular-nums; flex-shrink: 0;
+  width: 36px; text-align: right; padding-top: 3px; user-select: none; }
+.edit-line { flex: 1; min-width: 0; cursor: text; border-radius: 4px; padding: 2px 4px; }
+.edit-line:hover { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.edit-line:has(.edit-ts) { display: flex; gap: 8px; align-items: flex-start; }
+.edit-ts { flex-shrink: 0; width: 64px; cursor: text; }
+.edit-text { font-size: 18px; color: var(--ink); line-height: 1.55; }
+.edit-text .speaker-name { margin-right: 0.45em; }
+.edit-heading { font-size: 17px; font-weight: 700; color: var(--ink); }
+.edit-other { font-size: 15px; color: var(--ink-faint); }
+.edit-pending { flex-shrink: 0; align-self: center; font-size: 15px; color: var(--ochre); white-space: nowrap; }
+.edit-insert { flex-shrink: 0; align-self: center; width: 20px; height: 20px; padding: 0; display: flex; align-items: center;
+  justify-content: center; background: transparent; border: 1px solid color-mix(in srgb, var(--gilt) 40%, transparent);
+  border-radius: 4px; color: var(--gilt-ink); font-size: 16px; line-height: 1; cursor: pointer;
+  opacity: 0; pointer-events: none; transition: opacity 0.1s; }
+.edit-row.editing .edit-insert { opacity: 1; pointer-events: auto; }
+.line-editor { field-sizing: content; }
+@media (max-width: 768px) {
+  .edit-ts { width: 50px; }
+  .edit-text { font-size: 17px; }
+  .edit-num { width: 28px; font-size: 12px; }
+}
+
+/* Reading mode lines (were per-line inline styles). content-visibility lets the
+   browser skip off-screen lines; a 4-hour session has thousands. */
+.transcript-line { display: grid; grid-template-columns: var(--ts-col, 78px) minmax(0, 1fr); column-gap: var(--ts-gap, 18px);
+  padding: 4px 0; transition: background 0.4s; content-visibility: auto; contain-intrinsic-size: auto 60px; }
+.transcript-line.active { background: linear-gradient(90deg, color-mix(in srgb, var(--gilt) 16%, transparent), transparent 70%);
+  box-shadow: inset 2px 0 0 var(--gilt); }
+.transcript-line.active .transcript-ts { color: var(--gilt-ink); }
+.transcript-line.flash { background: var(--highlighter); }
+.read-text { margin: 0; font-size: 19px; line-height: 1.55; color: var(--ink); max-width: 70ch; }
+.read-text .speaker-name { margin-right: 0.4em; }
+.read-text .speaker-player { margin-right: 0.5em; }
+.read-heading { font-size: 20px; color: var(--rubric); margin: 24px 0 8px 96px; }
+.read-pause { margin-left: calc(var(--ts-col, 78px) + var(--ts-gap, 18px)); }

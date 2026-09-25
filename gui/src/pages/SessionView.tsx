@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AlertIcon, Chevron, CloseIcon, CopyIcon, PauseIcon, PlayIcon, QuoteIcon, SpinnerIcon } from '../Icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
@@ -1436,6 +1436,7 @@ export default function SessionView() {
           transcript ? (
             <TranscriptView
               content={transcript}
+              initialEditLine={anchorLineRef.current?.idx ?? null}
               search={search}
               currentTime={audioFiles.length > 0 ? currentTime : undefined}
               onSeek={audioFiles.length > 0 ? seekAndSwitch : undefined}
@@ -1633,6 +1634,7 @@ function TranscriptView({
   editMode,
   onTranscriptChange,
   onEditsSaved,
+  initialEditLine = null,
   confidence,
   showConfidence,
 }: {
@@ -1647,6 +1649,8 @@ function TranscriptView({
   onTranscriptChange?: () => void
   /** Called on leaving edit mode after line saves, with the text as saved, so the read view shows it at once. */
   onEditsSaved?: (text: string) => void
+  /** The line to show first when edit mode opens (its block renders immediately). */
+  initialEditLine?: number | null
   confidence?: ConfidenceMap | null
   showConfidence?: boolean
 }) {
@@ -1658,11 +1662,12 @@ function TranscriptView({
   // Edit mode state
   const [editedLines, setEditedLines] = useState<string[]>([])
   const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null)
-  const [editingValue, setEditingValue] = useState('')
+  // The line editor owns its own text (so typing re-renders one row, not
+  // thousands); this ref mirrors it for insertLineAfter.
+  const editingValueRef = useRef('')
   const [savingAll, setSavingAll] = useState(false)
   const [savingLine, setSavingLine] = useState(false)
   const [pendingLines, setPendingLines] = useState<Set<number>>(new Set())
-  const [hoveredLineIdx, setHoveredLineIdx] = useState<number | null>(null)
   const [ruleSuggestions, setRuleSuggestions] = useState<SessionRuleSuggestion[]>([])
   const confidenceIdx = useMemo(() => indexConfidence(confidence ?? null), [confidence])
   // Ribbon bookmark: remember the first visible line while reading, and on the
@@ -1745,6 +1750,37 @@ function TranscriptView({
     () => parsedLines.filter(line => !search || line.raw.toLowerCase().includes(searchLower)),
     [parsedLines, search, searchLower]
   )
+  // Everything per line that doesn't change as audio plays: computed once per
+  // transcript (and search), so the reading view doesn't redo it on every tick.
+  const readDerived = useMemo(() => {
+    const nextTs: (string | undefined)[] = new Array(visibleLines.length)
+    let next: string | undefined
+    for (let k = visibleLines.length - 1; k >= 0; k--) {
+      nextTs[k] = next
+      if (visibleLines[k].type === 'speech') next = visibleLines[k].timestamp
+    }
+    const silence: boolean[] = new Array(visibleLines.length).fill(false)
+    if (!search) {
+      let prev: ParsedLine | null = null
+      visibleLines.forEach((cur, k) => {
+        if (cur.type !== 'speech') return
+        if (prev && cur.timestamp && prev.timestamp) {
+          const spoken = (prev.text ?? '').split(/\s+/).filter(Boolean).length / 2.7
+          silence[k] = parseTimestampToSeconds(cur.timestamp) - parseTimestampToSeconds(prev.timestamp) - spoken >= SILENCE_BREAK_SECONDS
+        }
+        prev = cur
+      })
+    }
+    return { nextTs, silence }
+  }, [visibleLines, search])
+  // Low-confidence words per line, looked up once (a fresh [] per line on every
+  // render would make every memoised line look changed on every audio tick).
+  const lowConfPerLine = useMemo(() => visibleLines.map(l => {
+    if (!showConfidence || l.type !== 'speech') return NO_LOW_CONF
+    const w = lowConfWordsFor(confidenceIdx, l.timestamp, l.speaker)
+    return w.length ? w : NO_LOW_CONF
+  }), [visibleLines, confidenceIdx, showConfidence])
+
   const activeIdx = useMemo(() => {
     if (currentTime === undefined) return -1
     let idx = -1
@@ -1853,7 +1889,7 @@ function TranscriptView({
     if (editingLineIdx !== null) {
       setEditedLines(prev => {
         const next = [...prev]
-        next[editingLineIdx] = editingValue
+        next[editingLineIdx] = editingValueRef.current
         return next
       })
     }
@@ -1863,8 +1899,42 @@ function TranscriptView({
       return next
     })
     setEditingLineIdx(lineIdx + 1)
-    setEditingValue('')
+    editingValueRef.current = ''
   }
+
+  const readActionsRef = useRef<ReadLineActions>(null as unknown as ReadLineActions)
+  const readActions = useMemo<ReadLineActions>(() => ({
+    seek: (t, sp) => readActionsRef.current.seek(t, sp),
+    toggleQuote: (l, n) => readActionsRef.current.toggleQuote(l, n),
+  }), [])
+
+  // Stable callbacks for the memoised rows: they read the latest closures via a ref.
+  const rowActionsRef = useRef<EditRowActions>(null as unknown as EditRowActions)
+  rowActionsRef.current = {
+    startEdit: (i, value) => { editingValueRef.current = value; setEditingLineIdx(i) },
+    save: (i, value) => { if (!savingLine) saveLine(i, value) },
+    cancel: () => setEditingLineIdx(null),
+    insertAfter: i => insertLineAfter(i),
+    setValue: v => { editingValueRef.current = v },
+  }
+  const rowActions = useMemo<EditRowActions>(() => ({
+    startEdit: (i, v) => rowActionsRef.current.startEdit(i, v),
+    save: (i, v) => rowActionsRef.current.save(i, v),
+    cancel: () => rowActionsRef.current.cancel(),
+    insertAfter: i => rowActionsRef.current.insertAfter(i),
+    setValue: v => rowActionsRef.current.setValue(v),
+  }), [])
+  const editDisplayLines = useMemo(
+    () => (editMode ? (editedLines.length > 0 ? editedLines : (content ?? '').split('\n')) : []),
+    [editMode, editedLines, content])
+  // Rows in blocks of EDIT_CHUNK: opening a line re-renders one block, and
+  // blocks far from the screen stay a single placeholder until scrolled near.
+  const editChunks = useMemo(() => {
+    const out: string[][] = []
+    for (let i = 0; i < editDisplayLines.length; i += EDIT_CHUNK) out.push(editDisplayLines.slice(i, i + EDIT_CHUNK))
+    return out
+  }, [editDisplayLines])
+  const eagerChunk = initialEditLine != null ? Math.floor(initialEditLine / EDIT_CHUNK) : 0
 
   const saveAll = async () => {
     if (!sessionName) return
@@ -1893,7 +1963,6 @@ function TranscriptView({
 
   // ── Edit mode rendering ──────────────────────────────────────────────────
   if (editMode) {
-    const displayLines = editedLines.length > 0 ? editedLines : content.split('\n')
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0', maxWidth: '820px' }}>
         {/* Warning banner */}
@@ -1945,138 +2014,18 @@ function TranscriptView({
           />
         )}
 
-        {displayLines.map((rawLine, lineIdx) => {
-          const m = rawLine.match(/^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$/)
-          const isEditing = editingLineIdx === lineIdx
-          const isPending = pendingLines.has(lineIdx)
-
-          return (
-            <div
-              key={lineIdx}
-              data-line-idx={lineIdx}
-              onMouseEnter={() => setHoveredLineIdx(lineIdx)}
-              onMouseLeave={() => setHoveredLineIdx(null)}
-              style={{
-                display: 'flex',
-                gap: '8px',
-                padding: '3px 6px',
-                alignItems: 'flex-start',
-                borderRadius: '3px',
-                background: isEditing ? 'color-mix(in srgb, var(--ochre) 8%, transparent)' : isPending ? 'color-mix(in srgb, var(--ochre) 5%, transparent)' : 'transparent',
-                position: 'relative',
-              }}
-            >
-              {/* Line number */}
-              <span style={{
-                fontSize: '13px',
-                color: 'var(--rule-strong)',
-                fontVariantNumeric: 'lining-nums tabular-nums',
-                flexShrink: 0,
-                width: '36px',
-                textAlign: 'right',
-                paddingTop: '3px',
-                userSelect: 'none',
-              }}>
-                {lineIdx + 1}
-              </span>
-
-              {isEditing ? (
-                <textarea
-                  autoFocus
-                  rows={1}
-                  value={editingValue}
-                  ref={el => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight + 2}px` } }}
-                  onFocus={e => { const n = e.currentTarget.value.length; e.currentTarget.setSelectionRange(n, n) }}
-                  onChange={e => setEditingValue(e.target.value.replace(/\n/g, ' '))}
-                  onKeyDown={e => {
-                    // One transcript line is one line of text: Enter saves instead of breaking it.
-                    if (e.key === 'Enter') { e.preventDefault(); saveLine(lineIdx, editingValue) }
-                    else if (e.key === 'Escape') { setEditingLineIdx(null) }
-                  }}
-                  onBlur={() => { if (!savingLine) saveLine(lineIdx, editingValue) }}
-                  disabled={savingLine}
-                  className="line-editor"
-                />
-              ) : m ? (
-                <div
-                  onClick={() => { setEditingLineIdx(lineIdx); setEditingValue(rawLine) }}
-                  title="Click to edit"
-                  style={{
-                    display: 'flex',
-                    gap: '8px',
-                    alignItems: 'flex-start',
-                    flex: 1,
-                    cursor: 'text',
-                    borderRadius: '4px',
-                    padding: '2px 4px',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'color-mix(in srgb, var(--ink) 3%, transparent)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <span className="transcript-ts" style={{ flexShrink: 0, width: '64px', cursor: 'text' }}>
-                    {m[1]}
-                  </span>
-                  <span style={{ fontSize: '18px', color: 'var(--ink)', lineHeight: 1.55 }}>
-                    <span className="speaker-name" style={{ marginRight: '0.45em' }}>{m[2].trim()}</span>
-                    {m[3]}
-                  </span>
-                </div>
-              ) : rawLine.startsWith('#') ? (
-                <div
-                  onClick={() => { setEditingLineIdx(lineIdx); setEditingValue(rawLine) }}
-                  style={{ flex: 1, cursor: 'text', fontSize: '17px', fontWeight: 700, color: 'var(--ink)', paddingTop: '2px' }}
-                >
-                  {rawLine.replace(/^#+\s*/, '')}
-                </div>
-              ) : rawLine.trim() === '' ? (
-                <div style={{ flex: 1, height: '8px' }} />
-              ) : (
-                <div
-                  onClick={() => { setEditingLineIdx(lineIdx); setEditingValue(rawLine) }}
-                  style={{ flex: 1, cursor: 'text', fontSize: '15px', color: 'var(--ink-faint)', paddingTop: '2px' }}
-                >
-                  {rawLine || '\u00a0'}
-                </div>
-              )}
-              {isPending && (
-                <span style={{
-                  flexShrink: 0, alignSelf: 'center',
-                  fontSize: '15px',
-                  color: 'var(--ochre)', whiteSpace: 'nowrap',
-                }}>
-                  sent to the DM for review
-                </span>
-              )}
-              {/* Add line button — shows on hover */}
-              <button
-                onClick={() => insertLineAfter(lineIdx)}
-                title="Insert line below"
-                style={{
-                  flexShrink: 0,
-                  alignSelf: 'center',
-                  background: 'transparent',
-                  border: '1px solid color-mix(in srgb, var(--gilt) 40%, transparent)',
-                  borderRadius: '4px',
-                  color: 'var(--gilt-ink)',
-                  fontSize: '16px',
-                  lineHeight: 1,
-                  width: '20px',
-                  height: '20px',
-                  cursor: 'pointer',
-                  padding: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  opacity: hoveredLineIdx === lineIdx ? 1 : 0,
-                  transition: 'opacity 0.1s',
-                  pointerEvents: hoveredLineIdx === lineIdx ? 'auto' : 'none',
-                }}
-              >
-                +
-              </button>
-            </div>
-          )
-        })}
+        <div className="edit-lines">
+          {editChunks.map((lines, c) => {
+            const start = c * EDIT_CHUNK
+            const inChunk = editingLineIdx !== null && editingLineIdx >= start && editingLineIdx < start + lines.length
+            const pendingKey = [...pendingLines].filter(i => i >= start && i < start + lines.length).join(',')
+            return (
+              <EditChunk key={c} start={start} lines={lines} editingIdx={inChunk ? editingLineIdx! : -1}
+                pendingKey={pendingKey} saving={inChunk && savingLine} actions={rowActions}
+                eager={Math.abs(c - eagerChunk) <= 1} />
+            )
+          })}
+        </div>
       </div>
     )
   }
@@ -2085,31 +2034,10 @@ function TranscriptView({
   // (parsedLines, visibleLines, activeIdx are computed via useMemo above)
   const visible = visibleLines
 
-  const highlight = (line: ParsedLine) => {
-    const text = line.text || ''
-    const marks: Mark[] = showConfidence
-      ? lowConfRanges(text, lowConfWordsFor(confidenceIdx, line.timestamp, line.speaker))
-      : []
-    if (search) {
-      const idx = text.toLowerCase().indexOf(searchLower)
-      if (idx >= 0) marks.push({ start: idx, end: idx + search.length, search: true })
-    }
-    return renderMarked(text, marks)
-  }
-
-  // Silences: the gap between two lines' start times, minus how long the
-  // first one plausibly took to say (~2.7 words/s). Only real pauses open a
-  // "time passes" break; a long speech doesn't.
-  const silenceBefore = (i: number): boolean => {
-    if (search) return false
-    const cur = visible[i]
-    let j = i - 1
-    while (j >= 0 && visible[j].type !== 'speech') j--
-    if (j < 0 || cur.type !== 'speech' || !cur.timestamp || !visible[j].timestamp) return false
-    const prev = visible[j]
-    const spoken = (prev.text ?? '').split(/\s+/).filter(Boolean).length / 2.7
-    const gap = parseTimestampToSeconds(cur.timestamp) - parseTimestampToSeconds(prev.timestamp!) - spoken
-    return gap >= SILENCE_BREAK_SECONDS
+  // Stable callbacks for the memoised lines (they read the latest closures via a ref).
+  readActionsRef.current = {
+    seek: (t, speaker) => onSeek?.(t, speaker),
+    toggleQuote: (line, nextTs) => toggleQuote(line, nextTs),
   }
 
   return (
@@ -2124,88 +2052,25 @@ function TranscriptView({
           </button>
         </div>
       )}
-      {visible.map((line, i) => {
-        const isActive = i === activeIdx
-        const isTarget = line.type === 'speech' && line.timestamp === targetTimestamp
-        const isFlash = line.type === 'speech' && line.timestamp === flashTimestamp
-
-        if (line.type === 'heading') {
-          // The "# Session Transcript" title just repeats the entry heading above.
-          if (/^#\s*session transcript\s*$/i.test(line.raw.trim())) return null
-          return (
-            <h2 key={i} data-line-idx={line.lineIdx ?? i} className="sc" style={{ fontSize: '20px', color: 'var(--rubric)', margin: '24px 0 8px 96px' }}>
-              {line.raw.replace(/^#+\s*/, '')}
-            </h2>
-          )
-        }
-        if (line.type === 'speech') {
-          const tsSeconds = line.timestamp ? parseTimestampToSeconds(line.timestamp) : null
-          const who = splitSpeaker(line.speaker)
-          return (
-            <React.Fragment key={i}>
-              {silenceBefore(i) && (
-                <div className="time-passes" style={{ marginLeft: 'calc(var(--ts-col, 78px) + var(--ts-gap, 18px))' }} aria-hidden>a few moments pass</div>
-              )}
-              <div
-                data-line-idx={line.lineIdx ?? i}
-                data-ts={line.timestamp}
-                className="transcript-line"
-                ref={el => {
-                  if (isActive) activeLineRef.current = el
-                  if (isTarget) targetLineRef.current = el
-                }}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'var(--ts-col, 78px) minmax(0, 1fr)',
-                  columnGap: 'var(--ts-gap, 18px)',
-                  padding: '4px 0',
-                  background: isFlash
-                    ? 'var(--highlighter)'
-                    : isActive
-                    ? 'linear-gradient(90deg, color-mix(in srgb, var(--gilt) 16%, transparent), transparent 70%)'
-                    : 'transparent',
-                  boxShadow: isActive ? 'inset 2px 0 0 var(--gilt)' : 'none',
-                  transition: 'background 0.4s',
-                }}
-              >
-                {onSeek && tsSeconds !== null ? (
-                  <button
-                    onClick={() => onSeek(tsSeconds, line.speaker)}
-                    title={`Play from ${line.timestamp}`}
-                    className="transcript-ts"
-                    style={{ color: isActive ? 'var(--gilt-ink)' : undefined }}
-                  >
-                    {line.timestamp}
-                  </button>
-                ) : (
-                  <span className="transcript-ts">{line.timestamp}</span>
-                )}
-                <p style={{ margin: 0, fontSize: '19px', lineHeight: 1.55, color: 'var(--ink)', maxWidth: '70ch' }}>
-                  {who.name && <span className="speaker-name" style={{ marginRight: '0.4em' }}>{who.name}</span>}
-                  {who.player && <span className="speaker-player" style={{ marginRight: '0.5em' }}>{who.player}</span>}
-                  {highlight(line)}
-                  {canQuote && (() => {
-                    const saved = !!quoteFor(line)
-                    const next = visible.slice(i + 1).find(l => l.type === 'speech')
-                    return (
-                      <button
-                        type="button"
-                        className={'quote-toggle' + (saved ? ' saved' : '')}
-                        onClick={() => toggleQuote(line, next?.timestamp)}
-                        aria-label={saved ? 'Remove from quotes' : 'Save this line as a quote'}
-                        title={saved ? 'Saved to Quotes (click to remove)' : 'Save to Quotes'}
-                      >
-                        <QuoteIcon size={15} filled={saved} />
-                      </button>
-                    )
-                  })()}
-                </p>
-              </div>
-            </React.Fragment>
-          )
-        }
-        return null
-      })}
+      {visible.map((line, i) => (
+        <ReadLine
+          key={i}
+          line={line}
+          isActive={i === activeIdx}
+          isTarget={line.type === 'speech' && line.timestamp === targetTimestamp}
+          isFlash={line.type === 'speech' && line.timestamp === flashTimestamp}
+          silenceBefore={readDerived.silence[i]}
+          nextTs={readDerived.nextTs[i]}
+          lowConf={lowConfPerLine[i]}
+          search={searchLower}
+          canSeek={!!onSeek}
+          canQuote={canQuote}
+          quoteSaved={canQuote && line.type === 'speech' ? !!quoteFor(line) : false}
+          actions={readActions}
+          activeRef={activeLineRef}
+          targetRef={targetLineRef}
+        />
+      ))}
     </div>
   )
 }
@@ -4441,6 +4306,220 @@ function UnknownWordsPanel({
       )}
       {ignoredSection}
     </div>
+  )
+}
+
+interface ReadLineActions {
+  seek: (seconds: number, speaker?: string) => void
+  toggleQuote: (line: ParsedLine, nextTs?: string) => void
+}
+const NO_LOW_CONF: LowConfWord[] = []
+const SESSION_TITLE_RE = /^#\s*session transcript\s*$/i
+
+/**
+ * One transcript line in reading mode. Memoised so the audio clock (which
+ * moves the "now playing" highlight several times a second) re-renders only
+ * the lines whose highlight changes, not the whole transcript.
+ */
+const ReadLine = React.memo(function ReadLine({ line, isActive, isTarget, isFlash, silenceBefore, nextTs, lowConf, search,
+  canSeek, canQuote, quoteSaved, actions, activeRef, targetRef }: {
+  line: ParsedLine; isActive: boolean; isTarget: boolean; isFlash: boolean; silenceBefore: boolean; nextTs?: string
+  lowConf: LowConfWord[]; search: string; canSeek: boolean; canQuote: boolean; quoteSaved: boolean
+  actions: ReadLineActions
+  activeRef: React.MutableRefObject<HTMLDivElement | null>; targetRef: React.MutableRefObject<HTMLDivElement | null>
+}) {
+  if (line.type === 'heading') {
+    // The "# Session Transcript" title just repeats the entry heading above.
+    if (SESSION_TITLE_RE.test(line.raw.trim())) return null
+    return <h2 data-line-idx={line.lineIdx} className="sc read-heading">{line.raw.replace(/^#+\s*/, '')}</h2>
+  }
+  if (line.type !== 'speech') return null
+  const tsSeconds = line.timestamp ? parseTimestampToSeconds(line.timestamp) : null
+  const who = splitSpeaker(line.speaker)
+  const text = line.text || ''
+  const marks: Mark[] = lowConf.length ? lowConfRanges(text, lowConf) : []
+  if (search) {
+    const idx = text.toLowerCase().indexOf(search)
+    if (idx >= 0) marks.push({ start: idx, end: idx + search.length, search: true })
+  }
+  return (
+    <>
+      {silenceBefore && <div className="time-passes read-pause" aria-hidden>a few moments pass</div>}
+      <div
+        data-line-idx={line.lineIdx}
+        data-ts={line.timestamp}
+        className={'transcript-line' + (isFlash ? ' flash' : isActive ? ' active' : '')}
+        ref={el => {
+          if (isActive) activeRef.current = el
+          if (isTarget) targetRef.current = el
+        }}
+      >
+        {canSeek && tsSeconds !== null ? (
+          <button onClick={() => actions.seek(tsSeconds, line.speaker)} title={`Play from ${line.timestamp}`} className="transcript-ts">
+            {line.timestamp}
+          </button>
+        ) : (
+          <span className="transcript-ts">{line.timestamp}</span>
+        )}
+        <p className="read-text">
+          {who.name && <span className="speaker-name">{who.name}</span>}
+          {who.player && <span className="speaker-player">{who.player}</span>}
+          {renderMarked(text, marks)}
+          {canQuote && (
+            <button
+              type="button"
+              className={'quote-toggle' + (quoteSaved ? ' saved' : '')}
+              onClick={() => actions.toggleQuote(line, nextTs)}
+              aria-label={quoteSaved ? 'Remove from quotes' : 'Save this line as a quote'}
+              title={quoteSaved ? 'Saved to Quotes (click to remove)' : 'Save to Quotes'}
+            >
+              <QuoteIcon size={15} filled={quoteSaved} />
+            </button>
+          )}
+        </p>
+      </div>
+    </>
+  )
+})
+
+const EDIT_CHUNK = 100
+
+/** Rough height of a block of lines before it's rendered (the text column wraps at ~8.6 px a character). */
+function estimateHeight(lines: string[]): number {
+  const width = Math.min(820, (typeof window !== 'undefined' ? window.innerWidth : 820) - 32) - 120
+  const perLine = Math.max(20, width / 8.6)
+  let h = 0
+  for (const l of lines) h += l.trim() === '' ? 8 : Math.ceil(Math.max(1, l.length - 18) / perLine) * 28 + 10
+  return h
+}
+
+/**
+ * A block of edit rows. Renders as one placeholder of estimated height until
+ * it comes within ~1500 px of the screen, then as real rows for good. When a
+ * block above the screen fills in, the scroll position is corrected by the
+ * height difference so the text you're looking at doesn't jump (iOS Safari
+ * has no native scroll anchoring, so it's done by hand and native anchoring
+ * is turned off for these blocks).
+ */
+const EditChunk = React.memo(function EditChunk({ start, lines, editingIdx, pendingKey, saving, actions, eager }: {
+  start: number; lines: string[]; editingIdx: number; pendingKey: string; saving: boolean; actions: EditRowActions; eager: boolean
+}) {
+  const [shown, setShown] = useState(eager || editingIdx >= 0)
+  const ref = useRef<HTMLDivElement>(null)
+  const placeholderH = useRef(0)
+  if (!shown && editingIdx >= 0) setShown(true)
+  useEffect(() => {
+    if (shown || !ref.current) return
+    const root = ref.current.closest('.session-content')
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) setShown(true) },
+      { root, rootMargin: '1500px 0px' })
+    io.observe(ref.current)
+    return () => io.disconnect()
+  }, [shown])
+  useLayoutEffect(() => {
+    if (!shown || !placeholderH.current || !ref.current) return
+    const root = ref.current.closest('.session-content') as HTMLElement | null
+    const delta = ref.current.offsetHeight - placeholderH.current
+    placeholderH.current = 0
+    if (root && delta && ref.current.getBoundingClientRect().top < root.getBoundingClientRect().top) root.scrollTop += delta
+  }, [shown])
+  if (!shown) {
+    const h = estimateHeight(lines)
+    placeholderH.current = h
+    return <div ref={ref} className="edit-chunk-placeholder" style={{ height: h }} />
+  }
+  const pending = pendingKey ? new Set(pendingKey.split(',').map(Number)) : null
+  return (
+    <div ref={ref} className="edit-chunk">
+      {lines.map((l, i) => {
+        const idx = start + i
+        return <EditRow key={idx} rawLine={l} lineIdx={idx} isEditing={editingIdx === idx}
+          isPending={!!pending?.has(idx)} saving={editingIdx === idx && saving} actions={actions} />
+      })}
+    </div>
+  )
+}, (a, b) => a.start === b.start && a.editingIdx === b.editingIdx && a.pendingKey === b.pendingKey &&
+  a.saving === b.saving && a.actions === b.actions && a.lines.length === b.lines.length &&
+  a.lines.every((l, i) => l === b.lines[i]))
+
+interface EditRowActions {
+  startEdit: (lineIdx: number, value: string) => void
+  save: (lineIdx: number, value: string) => void
+  cancel: () => void
+  insertAfter: (lineIdx: number) => void
+  setValue: (value: string) => void
+}
+
+const EDIT_LINE_RE = /^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$/
+
+/**
+ * One transcript line in edit mode. Memoised: typing in one line, audio time
+ * updates and the like don't re-render the thousands of other rows, which
+ * made editing unusable on phones.
+ */
+const EditRow = React.memo(function EditRow({ rawLine, lineIdx, isEditing, isPending, saving, actions }: {
+  rawLine: string; lineIdx: number; isEditing: boolean; isPending: boolean; saving: boolean; actions: EditRowActions
+}) {
+  // Blank separator lines: one element, nothing to edit.
+  if (!isEditing && rawLine.trim() === '') return <div className="edit-gap" data-line-idx={lineIdx} />
+  const m = isEditing ? null : rawLine.match(EDIT_LINE_RE)
+  const start = () => actions.startEdit(lineIdx, rawLine)
+  return (
+    <div className={'edit-row' + (isEditing ? ' editing' : isPending ? ' pending' : '')} data-line-idx={lineIdx}>
+      <span className="edit-num">{lineIdx + 1}</span>
+      {isEditing ? (
+        <LineEditor initial={rawLine} lineIdx={lineIdx} saving={saving} actions={actions} />
+      ) : m ? (
+        <div className="edit-line" onClick={start} title="Click to edit">
+          <span className="transcript-ts edit-ts">{m[1]}</span>
+          <span className="edit-text"><span className="speaker-name">{m[2].trim()}</span>{m[3]}</span>
+        </div>
+      ) : rawLine.startsWith('#') ? (
+        <div className="edit-line edit-heading" onClick={start}>{rawLine.replace(/^#+\s*/, '')}</div>
+      ) : (
+        <div className="edit-line edit-other" onClick={start}>{rawLine || '\u00a0'}</div>
+      )}
+      {isPending && <span className="edit-pending">sent to the DM for review</span>}
+      {/* Only on the line being edited: one button per line added thousands of elements. */}
+      {isEditing && (
+        <button type="button" className="edit-insert" onMouseDown={e => e.preventDefault()} onClick={() => actions.insertAfter(lineIdx)}
+          title="Insert line below" aria-label={`Insert a line after line ${lineIdx + 1}`}>+</button>
+      )}
+    </div>
+  )
+})
+
+// Browsers that size a textarea to its content in CSS (Chrome 123+) skip the
+// measuring below, which forces a layout of the page on every keystroke.
+const FIELD_SIZING = typeof CSS !== 'undefined' && CSS.supports('field-sizing', 'content')
+function autosize(el: HTMLTextAreaElement) {
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight + 2}px`
+}
+
+/** The text box for the line being edited; it keeps its own text while you type. */
+function LineEditor({ initial, lineIdx, saving, actions }: { initial: string; lineIdx: number; saving: boolean; actions: EditRowActions }) {
+  const [value, setValue] = useState(initial)
+  return (
+    <textarea
+      autoFocus
+      rows={1}
+      value={value}
+      ref={el => { if (el && !FIELD_SIZING) autosize(el) }}
+      onFocus={e => { const n = e.currentTarget.value.length; e.currentTarget.setSelectionRange(n, n) }}
+      onChange={e => {
+        const v = e.target.value.replace(/\n/g, ' '); setValue(v); actions.setValue(v)
+        if (!FIELD_SIZING) autosize(e.target)
+      }}
+      onKeyDown={e => {
+        // One transcript line is one line of text: Enter saves instead of breaking it.
+        if (e.key === 'Enter') { e.preventDefault(); actions.save(lineIdx, value) }
+        else if (e.key === 'Escape') { actions.cancel() }
+      }}
+      onBlur={() => actions.save(lineIdx, value)}
+      disabled={saving}
+      className="line-editor"
+    />
   )
 }
 
