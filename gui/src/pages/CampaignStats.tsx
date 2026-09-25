@@ -4,6 +4,7 @@ import { BarList, PaceChart, TrendLine } from '../Charts'
 import { formatDuration, percent } from '../chartFormat'
 import { DownloadIcon, SpinnerIcon } from '../Icons'
 import { useToast } from '../Toast'
+import { SpeechList } from './SessionView'
 
 interface Profile {
   person: string
@@ -36,6 +37,7 @@ interface CampaignStatsData {
   records: Records
   profiles: Profile[]
   exchanges?: { a: string; b: string; count: number }[]
+  longest_speeches?: { person: string; character: string; ts: string; words: number; seconds: number; interjections: number; excerpt: string; session?: string }[]
   pace?: { start: number; sessions: number; wpm: number }[]
   rules_by_session?: { session: string; share: number }[]
   name_trends?: { name: string; counts: number[]; total: number; trend: 'rising' | 'fading' | null }[]
@@ -47,30 +49,9 @@ const at = (session: string | number, ts: string | number) => (
   <Link to={`/sessions/${encodeURIComponent(String(session))}#t=${ts}`}>{session}, {ts}</Link>
 )
 
-/** The overall speech is just the unbroken one when nobody interrupted it. */
-const sameSpeech = (r: Records) => !!r.longest_monologue && !!r.longest_overall_speech &&
-  r.longest_monologue.session === r.longest_overall_speech.session && r.longest_monologue.ts === r.longest_overall_speech.ts &&
-  Number(r.longest_monologue.words) === Number(r.longest_overall_speech.words)
-
 /** Each record as a ledger entry: label, headline value, where it happened. */
 function recordEntries(r: Records): { key: string; label: string; value: string; detail: ReactNode; excerpt?: string }[] {
   const out = []
-  if (r.longest_monologue) out.push({
-    key: 'longest_monologue', label: 'Longest unbroken dialogue',
-    value: `${formatDuration(Number(r.longest_monologue.seconds))} from ${r.longest_monologue.person}`,
-    detail: <>{Number(r.longest_monologue.words).toLocaleString()} words without a break, {at(r.longest_monologue.session, r.longest_monologue.ts)}</>,
-    excerpt: String(r.longest_monologue.excerpt),
-  })
-  if (r.longest_overall_speech) out.push({
-    key: 'longest_overall_speech', label: 'Longest overall speech',
-    value: `${formatDuration(Number(r.longest_overall_speech.seconds))} from ${r.longest_overall_speech.person}`,
-    detail: sameSpeech(r)
-      ? <>the same speech as the longest unbroken one: nobody cut in, {at(r.longest_overall_speech.session, r.longest_overall_speech.ts)}</>
-      : <>{Number(r.longest_overall_speech.words).toLocaleString()} words
-      {Number(r.longest_overall_speech.interjections) > 0 ? <> through {r.longest_overall_speech.interjections} short interjection{Number(r.longest_overall_speech.interjections) !== 1 ? 's' : ''}</> : <> through short pauses</>},
-      {' '}{at(r.longest_overall_speech.session, r.longest_overall_speech.ts)}</>,
-    excerpt: String(r.longest_overall_speech.excerpt),
-  })
   if (r.biggest_night) out.push({
     key: 'biggest_night', label: 'Biggest night',
     value: `${r.biggest_night.person}, ${formatDuration(Number(r.biggest_night.seconds))}`,
@@ -207,7 +188,7 @@ export default function CampaignStats({ slug }: { slug: string }) {
         </div>
       </div>
       <p style={{ margin: '0 0 28px', fontSize: 15, color: 'var(--ink-faint)' }}>
-        Talk time is estimated from words spoken, at about 160 words a minute. Speeches in each session's first 10 minutes (usually the recap) don't count as records.
+        Talk time is estimated from words spoken, at about 160 words a minute.
       </p>
 
       {records.length > 0 && (
@@ -223,6 +204,14 @@ export default function CampaignStats({ slug }: { slug: string }) {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {(data.longest_speeches ?? []).length > 0 && (
+        <section aria-label="Longest speeches" style={{ marginBottom: 36 }}>
+          <div className="barlist-head"><h3 className="sc">Longest speeches</h3></div>
+          <p className="barlist-note">Up to two short interjections from others don't end a speech. Speeches in the first 10 minutes (usually the recap) don't count.</p>
+          <SpeechList speeches={data.longest_speeches!} at={sp => at(String(sp.session), sp.ts)} />
         </section>
       )}
 

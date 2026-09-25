@@ -239,6 +239,7 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
     records: dict[str, dict] = {}
     people: dict[str, dict] = {}
     all_pairs: dict[tuple[str, str], int] = {}
+    top_speeches: list[dict] = []
     pace: dict[int, dict] = {}
     rules_by_session: list[dict] = []
     nat20s: dict[str, int] = {}
@@ -321,10 +322,8 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
                                                   "broken_by": l["person"]}
             prev = l
 
-        overall = longest_overall_speech([l for l in lines if l["start"] >= RECAP_SECONDS])
-        r = records.get("longest_overall_speech")
-        if overall and (not r or overall["words"] > r["words"]):
-            records["longest_overall_speech"] = {"session": sess["name"], **overall}
+        for sp in longest_speeches(lines):
+            top_speeches.append({"session": sess["name"], **sp})
 
         live = liveliest_exchange(lines)
         r = records.get("liveliest_exchange")
@@ -447,7 +446,9 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
         if b["minutes"] < 5:
             continue
         pace_rows.append({"start": i * PACE_BUCKET_CAMPAIGN, "sessions": b["sessions"], "wpm": round(b["words"] / b["minutes"])})
+    records.pop("longest_monologue", None)
     return {"records": records, "profiles": profiles, "session_order": session_order,
+            "longest_speeches": sorted(top_speeches, key=lambda x: -x["words"])[:3],
             "exchanges": pairs, "pace": pace_rows, "rules_by_session": rules_by_session, "name_trends": name_trends}
 
 
@@ -473,13 +474,7 @@ def session_details(transcript: str, terms: list[str], config: dict,
     total_words = sum(l["words"] for l in lines)
     moments: dict[str, dict] = {}
 
-    after_recap = [l for l in lines if l["start"] >= RECAP_SECONDS] or lines
-    top = max(after_recap, key=lambda l: l["words"])
-    moments["longest_speech"] = {"person": top["person"], "character": top["name"], "ts": top["ts"], "words": top["words"],
-                                 "seconds": round(top["words"] / SPEECH_RATE), "excerpt": _excerpt(top["text"])}
-    overall = longest_overall_speech(after_recap)
-    if overall:
-        moments["longest_overall_speech"] = overall
+    top_speeches = longest_speeches(lines)
     live = liveliest_exchange(lines)
     if live:
         moments["liveliest_exchange"] = live
@@ -579,7 +574,7 @@ def session_details(transcript: str, terms: list[str], config: dict,
     skip = player_names(config, [transcript]) | {t.lower() for t in terms}
     words_of_night = distinctive_words(lines, other_lines, skip) if other_lines else []
 
-    return {"moments": moments, "pace": pace, "breaks": breaks, "exchanges": pairs,
+    return {"moments": moments, "longest_speeches": top_speeches, "pace": pace, "breaks": breaks, "exchanges": pairs,
             "rules": rules, "words_of_night": words_of_night,
             "names": names[:15], "new_names": [n for n in sorted(names, key=lambda n: parse_timestamp(n["first_ts"])) if n["new"]],
             "comparison": comparison}
@@ -644,14 +639,14 @@ INTERJECTION_LINES = 2     # ...nor do two of them in a row...
 RESUME_GAP = 6.0           # ...as long as the speaker picks up again within this many seconds
 
 
-def longest_overall_speech(lines: list[dict]) -> dict | None:
+def speeches(lines: list[dict]) -> list[dict]:
     """
-    The longest stretch one person held the floor: their consecutive lines,
-    carrying on through short interjections ("yeah", "wait what") and short
-    pauses. Seconds are the real span, from the first line's start to the
-    estimated end of the last.
+    Every stretch one person held the floor: their consecutive lines, carrying
+    on through short interjections ("yeah", "wait what") and short pauses.
+    A line on its own is a speech too. Seconds are the real span, from the
+    first line's start to the estimated end of the last.
     """
-    best = None
+    out = []
     i = 0
     while i < len(lines):
         first = lines[i]
@@ -669,11 +664,20 @@ def longest_overall_speech(lines: list[dict]) -> dict | None:
                 j = k + 1
             else:
                 break
-        if not best or words > best["words"]:
-            best = {"person": who, "character": first["name"], "ts": first["ts"], "words": words,
-                    "seconds": round(end - first["start"]), "interjections": heard, "excerpt": _excerpt(" ".join(texts))}
+        out.append({"person": who, "character": first["name"], "ts": first["ts"], "start": first["start"], "words": words,
+                    "seconds": round(end - first["start"]), "interjections": heard, "excerpt": _excerpt(" ".join(texts))})
         i = j if j > i + 1 else i + 1
-    return best
+    return out
+
+
+def longest_speeches(lines: list[dict], n: int = 3) -> list[dict]:
+    """The n longest speeches after the recap (the first RECAP_SECONDS)."""
+    return sorted(speeches([l for l in lines if l["start"] >= RECAP_SECONDS]), key=lambda s: -s["words"])[:n]
+
+
+def longest_overall_speech(lines: list[dict]) -> dict | None:
+    top = longest_speeches(lines, 1)
+    return top[0] if top else None
 
 
 def laugh_count(text: str) -> int:

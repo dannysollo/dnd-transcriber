@@ -111,18 +111,6 @@ def _latest(profile: dict) -> str:
 
 def _records(r: dict) -> list[tuple[str, str, str, str | None]]:
     out = []
-    if (x := r.get("longest_monologue")):
-        out.append(("Longest unbroken dialogue", f"{_dur(x['seconds'])} from {x['person']}",
-                    f"{x['words']:,} words without a break, {x['session']} at {x['ts']}", x.get("excerpt")))
-    if (x := r.get("longest_overall_speech")):
-        mono = r.get("longest_monologue") or {}
-        if (mono.get("session"), mono.get("ts"), mono.get("words")) == (x["session"], x["ts"], x["words"]):
-            detail = f"the same speech as the longest unbroken one: nobody cut in, {x['session']} at {x['ts']}"
-            excerpt = None
-        else:
-            how = f"through {x['interjections']} short interjection{'s' if x['interjections'] != 1 else ''}" if x["interjections"] else "through short pauses"
-            detail, excerpt = f"{x['words']:,} words {how}, {x['session']} at {x['ts']}", x.get("excerpt")
-        out.append(("Longest overall speech", f"{_dur(x['seconds'])} from {x['person']}", detail, excerpt))
     if (x := r.get("biggest_night")):
         out.append(("Biggest night", f"{x['person']}, {_dur(x['seconds'])}", f"{x['words']:,} words in {x['session']}", None))
     if (x := r.get("chattiest_session")):
@@ -178,6 +166,7 @@ h2:first-child { margin-top: 0; }
 .note { font-size: 9.5pt; color: #716250; margin: 0 0 3mm; break-after: avoid; }
 .keep { break-inside: avoid; }
 .records { display: grid; grid-template-columns: 1fr 1fr; column-gap: 9mm; }
+.records.speeches { grid-template-columns: 1fr; }
 .record { border-bottom: 0.25mm solid #D8CCB6; padding: 2.5mm 0 2mm; break-inside: avoid; }
 .record .label { font-size: 10pt; font-variant: small-caps; letter-spacing: .05em; color: #9E2B25; font-weight: 600; }
 .record .value { font-size: 14pt; line-height: 1.2; }
@@ -233,7 +222,7 @@ def render_stats_pdf(data: dict, campaign_name: str) -> bytes:
             f"at the table and {data['words']:,} words spoken{wpm}.")
     if longest:
         lead += f" The longest was {escape(longest['name'])}, at {_dur(longest['duration_seconds'])}."
-    parts.append(f'<p class="lead">{lead}</p><p class="note">Talk time is estimated from words spoken, at about {SPEECH_WPM} words a minute. Speeches in each session\'s first 10 minutes (usually the recap) don\'t count as records.</p>')
+    parts.append(f'<p class="lead">{lead}</p><p class="note">Talk time is estimated from words spoken, at about {SPEECH_WPM} words a minute.</p>')
 
     recs = _records(data.get("records", {}))
     if recs:
@@ -243,6 +232,17 @@ def render_stats_pdf(data: dict, campaign_name: str) -> bytes:
             parts.append(f'<div class="record"><div class="label">{escape(label)}</div><div class="value">{escape(value)}</div>'
                          f'<div class="detail">{escape(detail)}</div>{ex}</div>')
         parts.append("</div>")
+
+    top = data.get("longest_speeches", [])
+    if top:
+        parts.append("<div class=\"keep\"><h2>Longest speeches</h2><p class=\"note\">Up to two short interjections from others don't end a speech. "
+                     "Speeches in the first 10 minutes (usually the recap) don't count.</p><div class=\"records speeches\">")
+        for i, x in enumerate(top, 1):
+            how = f", through {x['interjections']} short interjection{'s' if x['interjections'] != 1 else ''}" if x["interjections"] else ""
+            parts.append(f'<div class="record"><div class="label">{i}</div><div class="value">{escape(_dur(x["seconds"]))} from {escape(x["person"])}</div>'
+                         f'<div class="detail">{x["words"]:,} words{how}, {escape(x["session"])} at {x["ts"]}</div>'
+                         f'<div class="excerpt">“{escape(x["excerpt"])}”</div></div>')
+        parts.append("</div></div>")
 
     people = data.get("people", [])
     if people:

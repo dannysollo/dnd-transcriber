@@ -828,3 +828,8 @@ input.written-line:focus {
 .read-text .speaker-player { margin-right: 0.5em; }
 .read-heading { font-size: 20px; color: var(--rubric); margin: 24px 0 8px 96px; }
 .read-pause { margin-left: calc(var(--ts-col, 78px) + var(--ts-gap, 18px)); }
+
+/* Longest speeches: a ranked ledger */
+.speech-list { list-style: none; margin: 14px 0 0; padding: 0; border-top: 1px solid var(--rule); }
+.speech-list .speech { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 0 12px; }
+.speech-rank { font-size: 24px; line-height: 1.2; color: var(--rubric); font-variant-numeric: lining-nums; }

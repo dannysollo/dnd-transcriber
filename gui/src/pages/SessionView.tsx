@@ -3803,6 +3803,29 @@ function UnsureWalkthrough({
 
 // ─── Stats tab: talk time per speaker ─────────────────────────────────────────
 
+interface Speech { person: string; character: string; ts: string; words: number; seconds: number; interjections: number; excerpt: string; session?: string }
+
+/** The top speeches as a ranked ledger. `at` renders the "where" link. */
+export function SpeechList({ speeches, at }: { speeches: Speech[]; at: (s: Speech) => ReactNode }) {
+  return (
+    <ol className="speech-list">
+      {speeches.map((sp, i) => (
+        <li key={`${sp.session ?? ''}${sp.ts}`} className="record speech">
+          <div className="speech-rank">{i + 1}</div>
+          <div>
+            <div className="record-value">{formatDuration(sp.seconds)} from {sp.person}</div>
+            <div className="record-detail">
+              {sp.words.toLocaleString()} words
+              {sp.interjections > 0 && <>, through {sp.interjections} short interjection{sp.interjections !== 1 ? 's' : ''}</>}, {at(sp)}
+            </div>
+            <div className="record-excerpt">“{sp.excerpt}”</div>
+          </div>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 interface SessionStats {
   duration_seconds: number
   lines: number
@@ -3818,6 +3841,7 @@ interface SessionStats {
   exchanges?: { a: string; b: string; count: number }[]
   names?: { name: string; count: number; first_ts: string; first_by: string; new: boolean }[]
   new_names?: { name: string; first_ts: string; first_by: string }[]
+  longest_speeches?: Speech[]
   comparison?: { rank: number; of: number; average_duration_seconds: number; wpm: number; average_wpm: number } | null
   rules?: { share: number; average_share: number | null; by_person: Record<string, number>; nat20s: { ts: string; person: string; excerpt: string }[] }
   words_of_night?: { word: string; count: number }[]
@@ -3847,23 +3871,6 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
   )
   const m = stats.moments ?? {}
   const moments: { key: string; label: string; value: ReactNode; detail: ReactNode; excerpt?: string }[] = []
-  if (m.longest_speech) moments.push({
-    key: 'longest_speech', label: 'Longest unbroken dialogue',
-    value: `${formatDuration(Number(m.longest_speech.seconds))} from ${m.longest_speech.person}`,
-    detail: <>{Number(m.longest_speech.words).toLocaleString()} words without a break, at {at(m.longest_speech.ts)}</>,
-    excerpt: String(m.longest_speech.excerpt),
-  })
-  if (m.longest_overall_speech) moments.push({
-    key: 'longest_overall_speech', label: 'Longest overall speech',
-    value: `${formatDuration(Number(m.longest_overall_speech.seconds))} from ${m.longest_overall_speech.person}`,
-    detail: m.longest_speech && m.longest_speech.ts === m.longest_overall_speech.ts && Number(m.longest_speech.words) === Number(m.longest_overall_speech.words)
-      ? <>the same speech as the longest unbroken one: nobody cut in, at {at(m.longest_overall_speech.ts)}</>
-      : <>{Number(m.longest_overall_speech.words).toLocaleString()} words
-      {Number(m.longest_overall_speech.interjections) > 0
-        ? <>, through {m.longest_overall_speech.interjections} short interjection{Number(m.longest_overall_speech.interjections) !== 1 ? 's' : ''}</>
-        : <>, through short pauses</>}, at {at(m.longest_overall_speech.ts)}</>,
-    excerpt: String(m.longest_overall_speech.excerpt),
-  })
   if (m.liveliest_exchange) moments.push({
     key: 'liveliest_exchange', label: 'Liveliest exchange',
     value: `${m.liveliest_exchange.turns} turns in one minute`,
@@ -3931,7 +3938,7 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
         </>}
       </p>
       <p style={{ margin: '0 0 28px', fontSize: 15, color: 'var(--ink-faint)' }}>
-        Talk time is estimated from words spoken, at about 160 words a minute. Speeches in the first 10 minutes (usually the recap) don't count as records. Times link to the transcript.
+        Talk time is estimated from words spoken, at about 160 words a minute. Times link to the transcript.
       </p>
 
       {moments.length > 0 && (
@@ -3947,6 +3954,14 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {(stats.longest_speeches ?? []).length > 0 && (
+        <section aria-label="Longest speeches" style={{ marginBottom: 36 }}>
+          <div className="barlist-head"><h3 className="sc">Longest speeches</h3></div>
+          <p className="barlist-note">Up to two short interjections from others don't end a speech. Speeches in the first 10 minutes (usually the recap) don't count.</p>
+          <SpeechList speeches={stats.longest_speeches!} at={sp => <>at {at(sp.ts)}</>} />
         </section>
       )}
 
