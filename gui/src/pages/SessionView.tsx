@@ -870,7 +870,8 @@ export default function SessionView() {
               <span className="sr-only">Reconstructed</span>
             </span>
           )}
-          {!description && !editingDescription && summary && (
+          {/* Any session can get a subtitle, summary or not (reconstructed ones have none at first). */}
+          {!description && !editingDescription && transcript && (
             <button
               className="desc-add"
               onClick={() => { setEditingDescription(true); setDescriptionDraft('') }}
