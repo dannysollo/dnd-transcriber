@@ -388,9 +388,28 @@ export default function CorrectionsPage() {
               </div>
             </div>
           )}
-          {applyAllState === 'running' && applyAllResult?.current && (
-            <div style={{ fontSize: '15px', color: 'var(--ink-faint)' }}>
-              Working on {applyAllResult.current}. This runs on the server, so you can leave this page.
+          {applyAllState === 'running' && applyAllResult && (
+            <div className="apply-progress" role="status" aria-live="polite">
+              <div className="apply-bar" role="progressbar" aria-valuemin={0} aria-valuemax={applyAllResult.total}
+                aria-valuenow={applyAllResult.done} aria-label="Sessions done">
+                <div style={{ width: `${applyAllResult.total ? (100 * applyAllResult.done) / applyAllResult.total : 0}%` }} />
+              </div>
+              <div className="apply-progress-line">
+                {applyAllResult.done} of {applyAllResult.total} sessions
+                {applyAllResult.total_changes > 0 && <>, {applyAllResult.total_changes.toLocaleString()} fixes so far</>}
+                {applyAllResult.current && <>. Now: {applyAllResult.current}</>}
+              </div>
+              {applyAllResult.sessions.length > 0 && (
+                <ol className="apply-log">
+                  {[...applyAllResult.sessions].reverse().map(x => (
+                    <li key={x.session}>
+                      <span>{x.session}</span>
+                      <span className={x.changes ? 'n' : 'n none'}>{x.changes ? `${x.changes.toLocaleString()} fixed` : 'no changes'}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              <div className="apply-progress-note">This runs on the server, so you can leave this page and come back.</div>
             </div>
           )}
           {applyAllResult && applyAllResult.state !== 'running' && (
