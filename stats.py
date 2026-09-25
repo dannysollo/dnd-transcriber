@@ -91,14 +91,24 @@ def count_mentions(transcript: str, terms: list[str], exclude: set[str]) -> dict
     return counts
 
 
-def player_names(config: dict) -> set[str]:
-    """Lowercased usernames, names and character names: people, not places or NPCs."""
+def player_names(config: dict, transcripts=()) -> set[str]:
+    """
+    Lowercased usernames, names and character names: people, not places or NPCs.
+    Also every name used in a speaker label, so a renamed character (an old
+    "Vixeena [Sue]" after the config says Vikranth) is still a person here.
+    """
     out: set[str] = set()
     for username, info in (config.get("players") or {}).items():
         out.add(username.lower())
         for key in ("name", "character"):
             if info and info.get(key):
                 out.add(str(info[key]).lower())
+    for t in transcripts:
+        for m in map(LINE_RE.match, t.splitlines()):
+            if m and m.group(2):
+                for part in split_speaker(m.group(2)):
+                    if part:
+                        out.add(part.lower())
     out.add("dm")
     return out
 
@@ -109,7 +119,7 @@ def campaign_stats(sessions: list[dict], terms: list[str], config: dict) -> dict
     has a transcript. Returns totals, per-session rows, per-person totals and
     the most-mentioned campaign names (people at the table excluded).
     """
-    exclude = player_names(config)
+    exclude = player_names(config, [s["transcript"] for s in sessions])
     rows = []
     people: dict[str, dict] = {}
     mentions: dict[str, dict] = {}
@@ -220,7 +230,7 @@ def campaign_details(sessions: list[dict], terms: list[str], config: dict, quote
     Records, per-person profiles and trends across all transcribed sessions.
     sessions: [{"name", "created_at", "transcript"}], oldest first.
     """
-    exclude = player_names(config)
+    exclude = player_names(config, [s["transcript"] for s in sessions])
     _, _, everyday = _english()
     names_lower = {t.lower(): t for t in terms if t.lower() not in exclude}
     name_re = re.compile(r"\b(" + "|".join(re.escape(t) for t in sorted(names_lower.values(), key=len, reverse=True)) + r")\b", re.I) if names_lower else None
@@ -511,7 +521,7 @@ def session_details(transcript: str, terms: list[str], config: dict,
     pairs = [{"a": a, "b": b, "count": n} for (a, b), n in sorted(exchange_pairs(lines).items(), key=lambda kv: -kv[1])[:6]]
 
     # Names from the wiki: how often, first said when, and whether it's the campaign's first time.
-    exclude = player_names(config)
+    exclude = player_names(config, [transcript, *earlier])
     names = []
     candidates = sorted((t for t in terms if len(t) >= 3 and t.lower() not in exclude), key=len, reverse=True)
     if candidates:
@@ -556,7 +566,7 @@ def session_details(transcript: str, terms: list[str], config: dict,
         "by_person": {p: round(m / w, 4) for p, (m, w) in per_person.items() if w},
         "nat20s": [{"ts": l["ts"], "person": l["person"], "excerpt": _excerpt(l["text"], 16)} for l in lines if NAT20_RE.search(l["text"])],
     }
-    skip = player_names(config) | {t.lower() for t in terms}
+    skip = player_names(config, [transcript]) | {t.lower() for t in terms}
     words_of_night = distinctive_words(lines, other_lines, skip) if other_lines else []
 
     return {"moments": moments, "pace": pace, "breaks": breaks, "exchanges": pairs,
