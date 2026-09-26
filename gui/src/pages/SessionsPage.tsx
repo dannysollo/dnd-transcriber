@@ -533,11 +533,7 @@ export default function SessionsPage() {
                         onClick={() => navigate(`/sessions/${s.name}`)}
                         style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
                       >
-                        <div style={{
-                          fontSize: '23px', color: 'var(--ink)',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          lineHeight: 1.25,
-                        }}>
+                        <div className="session-row-title" title={s.name}>
                           {s.name}
                         </div>
                       </div>

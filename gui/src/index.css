@@ -977,3 +977,10 @@ input.written-line:focus {
   .new-line-editor { grid-template-columns: 72px minmax(0, 1fr); }
   .new-line-text { grid-column: 1 / -1; }
 }
+
+/* Sessions list titles: one line on desktop, wrapped on phones so the whole
+   title can be read (there's no hover there). */
+.session-row-title { font-size: 23px; line-height: 1.25; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 768px) {
+  .session-row-title { white-space: normal; overflow-wrap: anywhere; text-wrap: balance; font-size: 21px; }
+}
