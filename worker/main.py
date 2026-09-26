@@ -410,22 +410,29 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
     # section never uses one) — anchoring on the first ## heading here would
     # treat "## Wiki Update Suggestions" itself as the start and delete the
     # entire summary whenever Claude doesn't add its own extra heading above it.
-    if wiki_only:
-        first_marker = re.search(r'^##', full_text, re.MULTILINE)
-    else:
-        first_marker = re.search(r'^\*\*TL;DR\*\*', full_text, re.MULTILINE)
-        if not first_marker:
-            first_marker = re.search(r'^##', full_text, re.MULTILINE)
-    if first_marker and first_marker.start() > 0:
-        full_text = full_text[first_marker.start():].strip()
-
-    # Extract blurb block
+    # Extract the blurb first: it comes before the TL;DR, so the preamble cut
+    # below would otherwise throw it away.
     blurb = ""
     blurb_match = re.search(r'BLURB_START\s*(.*?)\s*BLURB_END', full_text, re.DOTALL)
     if blurb_match:
         blurb = blurb_match.group(1).strip()
         # Remove blurb block from full_text before splitting summary/wiki
         full_text = (full_text[:blurb_match.start()] + full_text[blurb_match.end():]).strip()
+
+    # The TL;DR comes in many forms ("**TL;DR**", "## TL;DR", "TL;DR:", "- **TL;DR:**").
+    # Only matching the bold form made the fallback below pick "## Wiki Update
+    # Suggestions" as the start whenever the model wrote it differently, which
+    # threw the whole summary away. The fallback now skips that heading.
+    wiki_heading = r'^#{1,3}\s*(?:\d+\.\s*)?Wiki Update Suggestions'
+    if wiki_only:
+        first_marker = re.search(r'^##', full_text, re.MULTILINE)
+    else:
+        first_marker = re.search(r'^(?:#{1,3}\s*)?(?:[-*]\s*)?\**\s*TL;?\s*DR', full_text, re.MULTILINE | re.IGNORECASE)
+        if not first_marker:
+            first_marker = next((m for m in re.finditer(r'^##', full_text, re.MULTILINE)
+                                 if not re.match(wiki_heading, full_text[m.start():], re.IGNORECASE)), None)
+    if first_marker and first_marker.start() > 0:
+        full_text = full_text[first_marker.start():].strip()
 
     # Split on first ## [1] wiki block
     wiki_marker = re.search(r'^## \[1\]', full_text, re.MULTILINE)
@@ -435,6 +442,12 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
     else:
         summary = full_text.strip()
         wiki = ""
+    # The wiki section's own heading sits just above "## [1]": don't leave it
+    # dangling at the end of the summary.
+    summary = re.sub(r'(?:\n\s*-{3,}\s*)?\n*' + wiki_heading[1:] + r'[^\n]*\s*$', '', summary,
+                     flags=re.IGNORECASE).strip()
+    if re.match(wiki_heading, summary, re.IGNORECASE):
+        summary = ""  # nothing but the wiki heading: better no summary than a broken one
 
     return summary, wiki, blurb
 
