@@ -2,6 +2,44 @@
 
 Open work, roughly in priority order. Move items to the commit log when done.
 
+## Bug batch (reported 2026-09-26, awaiting review)
+
+Player reports, none critical. Not started; open questions noted inline.
+
+Bugs:
+- **Added lines render as raw markdown.** An added line showed as
+  `**[00:01] DM (Juno)** test` instead of a normal line. "Add line" opens an
+  empty raw text box, so the line format (`**[mm:ss] Speaker:** text`) has to be
+  typed by hand, and this one is missing the colon. Likely fix: new lines get a
+  time and speaker picker (time prefilled from the line above) and a text box,
+  and the app builds the line. Existing malformed lines should still render.
+- **Adding a rule that applies in several places jumps to the top.** Editing a
+  line, then accepting the "add a rule" prompt, drops you at the top of the
+  transcript, but only when the rule applies to more than one place.
+- **Jumping to lines and holding your place on mobile is inconsistent.** Covers
+  jumping to a line (from Names, quotes, citations) and switching into edit mode.
+  (The desktop case, jumping from Names while still editing, is fixed.) Needs a
+  repro: which jumps, which phone/browser.
+- **The Names tab snippet sometimes doesn't contain the word.** The excerpt
+  starts too early, and the word is further into the line than is shown. Centre
+  the excerpt on the match.
+- **The first word of a new line goes to the previous line**, even across a long
+  silence. Probably word-to-segment assignment at segment boundaries in the
+  worker. Keep the transcript ASR-only: fix the split, don't rewrite text. Need
+  an example session and timestamp, and whether it's Craig sessions,
+  reconstructed ones or both.
+
+Improvements:
+- **Names tab: "change all in this session".** Replace every instance of a
+  word in this session only, without creating a rule or a suggestion for other
+  sessions.
+- **Mobile: hiding/showing the top section on scroll is laggy.**
+- **Mobile: the rename-people UI looks awkward.**
+- **Mobile bottom bar: Sessions, Search, Corrections** (plus More), instead of
+  Sessions, Quotes, Search. Quotes moves into More.
+- **Corrections: sort by the correct word**, not the wrong one, so all the
+  Ereshkigal rules sit together.
+
 ## Speaker attribution
 
 - **onnxruntime in requirements.txt.** Add `onnxruntime<1.24; python_version < "3.11"`
