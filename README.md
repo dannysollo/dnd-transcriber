@@ -134,6 +134,18 @@ ResNet34 (VoxCeleb, CC-BY-4.0), downloaded once by the worker.
 
 ---
 
+## Building the desktop installer
+
+Windows only. In a copy of the repo on a Windows drive, put the binary
+resources (a static `ffmpeg.exe` and an embeddable Python, not in git; a copy
+lives in `Z:\Co-DM build resources\`) in `desktop\resources\`, bump
+`MyAppVersion` in `desktop\installer\dnd-transcriber-worker.iss`, then run
+`desktop\build\build.bat` (needs Python 3.13 and Inno Setup 7). The installer
+lands in `desktop\installer\Output\`; publish it as the
+`dnd-transcriber-worker-setup.exe` asset of a GitHub release. The worker
+itself updates from GitHub on its own; only changes under `desktop/` need a
+new installer.
+
 ## Configuration
 
 Edit `config.yaml`:

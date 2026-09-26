@@ -14,6 +14,8 @@ tqdm
 soundfile
 silero-vad
 flask>=2.0        # Local web dashboard (gui_server.py)
+onnxruntime<1.24; python_version < "3.11"  # voice profiles (voices.py); 1.24+ dropped Python 3.10
+onnxruntime; python_version >= "3.11"
 # pyannote.audio  # Optional: speaker diarization (multi-speaker on single track)
                   # Install: pip install pyannote.audio
                   # Also accept model terms at huggingface.co/pyannote/speaker-diarization-3.1
