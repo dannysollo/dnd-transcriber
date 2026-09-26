@@ -3990,7 +3990,13 @@ ANALYSIS_FLAG = "analysis_pending"
 
 @app.get("/campaigns/{slug}/worker/analysis-jobs")
 def worker_list_analysis_jobs(slug: str, db: Session = Depends(get_db), request: Request = None):
-    """Return sessions with a pending analysis flag. Transcript is corrections-applied."""
+    """Return the oldest session with a pending analysis flag (a list of at most
+    one). Transcript is corrections-applied.
+
+    One per poll: the worker runs jobs one at a time anyway, and sending every
+    queued transcript at once (24 queued legacy sessions) outlasted the
+    worker's 30s read timeout. The worker polls again once it's done, and
+    serving a job moves it to the back of the queue."""
     require_worker_key(slug)(request, db)
     sessions_dir = get_sessions_dir(slug)
     config = load_config(slug)
@@ -3998,41 +4004,46 @@ def worker_list_analysis_jobs(slug: str, db: Session = Depends(get_db), request:
     patterns = config.get("patterns") or []
     pending = []
     if sessions_dir.exists():
-        for session_dir in sessions_dir.iterdir():
-            if session_dir.is_dir() and (session_dir / ANALYSIS_FLAG).exists():
-                transcript_path = session_dir / "transcript.md"
-                notes_path = session_dir / "analysis_notes.md"
-                transcript_text = transcript_path.read_text(encoding="utf-8") if transcript_path.exists() else ""
-                # Read wiki_only flag from file if present (JSON) or default to False
-                flag_path = session_dir / ANALYSIS_FLAG
-                wiki_only = False
-                extra_notes = ""
-                try:
-                    flag_content = flag_path.read_text(encoding="utf-8").strip()
-                    if flag_content:
-                        flag = json.loads(flag_content)
-                        wiki_only = flag.get("wiki_only", False)
-                        # One-off instructions for this run only (e.g. "keep it brief"),
-                        # kept out of the session's own analysis notes.
-                        extra_notes = (flag.get("extra_notes") or "").strip()
-                except Exception:
-                    pass
-                # Apply corrections and patterns so Claude sees the cleaned-up text
-                if transcript_text and (corrections or patterns):
-                    from merge import apply_corrections, apply_patterns
-                    if corrections:
-                        transcript_text = apply_corrections(transcript_text, corrections)
-                    if patterns:
-                        transcript_text = apply_patterns(transcript_text, patterns)
-                pending.append({
-                    "session_name": session_dir.name,
-                    "transcript": transcript_text,
-                    "notes": "\n\n".join(x for x in (
-                        notes_path.read_text(encoding="utf-8").strip() if notes_path.exists() else "",
-                        extra_notes,
-                    ) if x),
-                    "wiki_only": wiki_only,
-                })
+        flagged = sorted(
+            (d for d in sessions_dir.iterdir() if d.is_dir() and (d / ANALYSIS_FLAG).exists()),
+            key=lambda d: (d / ANALYSIS_FLAG).stat().st_mtime,
+        )
+        for session_dir in flagged[:1]:
+            transcript_path = session_dir / "transcript.md"
+            notes_path = session_dir / "analysis_notes.md"
+            transcript_text = transcript_path.read_text(encoding="utf-8") if transcript_path.exists() else ""
+            # Read wiki_only flag from file if present (JSON) or default to False
+            flag_path = session_dir / ANALYSIS_FLAG
+            wiki_only = False
+            extra_notes = ""
+            try:
+                flag_content = flag_path.read_text(encoding="utf-8").strip()
+                if flag_content:
+                    flag = json.loads(flag_content)
+                    wiki_only = flag.get("wiki_only", False)
+                    # One-off instructions for this run only (e.g. "keep it brief"),
+                    # kept out of the session's own analysis notes.
+                    extra_notes = (flag.get("extra_notes") or "").strip()
+            except Exception:
+                pass
+            # Apply corrections and patterns so Claude sees the cleaned-up text
+            if transcript_text and (corrections or patterns):
+                transcript_text, _ = RuleSet(corrections, patterns).apply(transcript_text)
+            pending.append({
+                "session_name": session_dir.name,
+                "transcript": transcript_text,
+                "notes": "\n\n".join(x for x in (
+                    notes_path.read_text(encoding="utf-8").strip() if notes_path.exists() else "",
+                    extra_notes,
+                ) if x),
+                "wiki_only": wiki_only,
+            })
+            # Send it to the back of the queue: a job that keeps failing
+            # (the flag stays) then can't block the others.
+            try:
+                os.utime(flag_path)
+            except OSError:
+                pass
     return pending
 
 class AnalysisResultBody(BaseModel):
