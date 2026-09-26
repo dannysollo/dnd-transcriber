@@ -2,48 +2,21 @@
 
 Open work, roughly in priority order. Move items to the commit log when done.
 
-## Bug batch (reported 2026-09-26, awaiting review)
+## Bug batch (reported 2026-09-26)
 
-Player reports, none critical. Not started; open questions noted inline.
+Done 2026-09-26: added lines (real insert, time/speaker/text fields), rule
+jump to top, Names "This session only" and snippet fix, corrections sorted by
+the correct word, phone bar (Sessions, Search, Corrections, More), header lag,
+bottom bar hides on scroll instead of the Edit row, cramped rename list, and
+the legacy first-word bug (label.py turn-start fix; all 29 reconstructed
+sessions relabelled with hand edits kept, old copies saved on the server as
+transcript.before-turnfix.md).
 
-Bugs:
-- **Added lines render as raw markdown.** An added line showed as
-  `**[00:01] DM (Juno)** test` instead of a normal line. "Add line" opens an
-  empty raw text box, so the line format (`**[mm:ss] Speaker:** text`) has to be
-  typed by hand, and this one is missing the colon. Decided: new lines get a
-  time field (prefilled from the line above), a speaker dropdown and a text
-  box, and the app builds the line. Existing malformed lines should still
-  render.
-- **Adding a rule that applies in several places jumps to the top.** Editing a
-  line, then accepting the "add a rule" prompt, drops you at the top of the
-  transcript, but only when the rule applies to more than one place.
+Still open:
 - **Jumping to lines and holding your place on mobile is inconsistent.** Covers
-  jumping to a line (from Names, quotes, citations) and switching into edit mode.
-  (The desktop case, jumping from Names while still editing, is fixed.) Needs a
-  repro: which jumps, which phone/browser.
-- **The Names tab snippet sometimes doesn't contain the word.** The excerpt
-  starts too early, and the word is further into the line than is shown. Centre
-  the excerpt on the match.
-- **The first word of a new line goes to the previous line**, even across a long
-  silence. Probably word-to-segment assignment at segment boundaries in the
-  worker. Seen in the reconstructed legacy sessions, so it's the
-  reconstruction's speaker labelling (label.py: per-word speaker plus Viterbi
-  smoothing) handing a new speaker's first word to the previous one. Fix the
-  labelling or split lines at long pauses, then re-run on the legacy sessions,
-  keeping user edits (as merge_relabel.py does). Keep the words ASR-only.
-
-Improvements:
-- **Names tab: "change all in this session".** Replace every instance of a
-  word in this session only, without creating a rule or a suggestion for other
-  sessions. Decided: it changes the transcript, summary and wiki suggestions
-  (the files a rule touches), for this session only.
-- **Mobile: hiding/showing the top section on scroll is laggy.**
-- **Mobile: the rename-people UI looks awkward.**
-- **Mobile bottom bar: Sessions, Search, Corrections** (plus More), instead of
-  Sessions, Quotes, Search. Decided: Sessions, Search, Corrections, More;
-  Quotes moves into More.
-- **Corrections: sort by the correct word**, not the wrong one, so all the
-  Ereshkigal rules sit together.
+  jumping to a line (from Names, quotes, citations) and switching into edit
+  mode. No repro yet; to be reported case by case (which jump, which
+  phone/browser, where it lands).
 
 ## Speaker attribution
 
