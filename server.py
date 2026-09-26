@@ -4134,15 +4134,25 @@ def worker_push_analysis_result(
     session_dir = get_sessions_dir(slug) / name
     if not session_dir.exists():
         raise HTTPException(404, "Session not found")
+    # The queued job can ask to leave some outputs alone, e.g. a batch that
+    # regenerates summaries without replacing the sessions' descriptions:
+    # {"skip": ["description", "wiki"]}.
+    skip: set = set()
+    try:
+        flag_text = (session_dir / ANALYSIS_FLAG).read_text(encoding="utf-8").strip()
+        if flag_text:
+            skip = set(json.loads(flag_text).get("skip") or [])
+    except Exception:
+        pass
     wrote = []
     if not body.wiki_only:
-        if body.description.strip():
+        if body.description.strip() and "description" not in skip:
             (session_dir / "description.md").write_text(body.description.strip(), encoding="utf-8")
             wrote.append("description")
         if body.summary.strip():
             (session_dir / "summary.md").write_text(body.summary.strip(), encoding="utf-8")
             wrote.append("summary")
-    if body.wiki.strip():
+    if body.wiki.strip() and "wiki" not in skip:
         (session_dir / "wiki_suggestions.md").write_text(body.wiki.strip(), encoding="utf-8")
         wrote.append("wiki")
     # Clear the pending flag
