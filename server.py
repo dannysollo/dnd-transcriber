@@ -1955,6 +1955,50 @@ def campaign_put_transcript_line(
             "rule_suggestions": suggestions}
 
 
+@app.post("/campaigns/{slug}/sessions/{name}/transcript/line/{line_number}/insert-after")
+def campaign_insert_transcript_line(
+    slug: str,
+    name: str,
+    line_number: int,
+    body: TranscriptLineBody,
+    member=Depends(require_campaign_member("player")),
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Insert a new line after line `line_number` (0 = at the top).
+
+    The editor used to save an added line with PUT on the next line number,
+    which overwrote that line on the server and left every later line number
+    off by one. When edits need approval, the insertion is queued as an edit
+    of the line above (that line, a newline, then the new one)."""
+    path = get_sessions_dir(slug) / name / "transcript.md"
+    if not path.exists():
+        raise HTTPException(404, "Transcript not found")
+    content = body.content.replace("\r", " ").replace("\n", " ")
+    if not content.strip():
+        raise HTTPException(400, "The new line is empty")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if line_number < 0 or line_number > len(lines):
+        raise HTTPException(404, f"Line {line_number} not found")
+
+    is_dm = (not AUTH_ENABLED) or (member is not None and member.role == "dm")
+    if AUTH_ENABLED and not is_dm and current_user is not None:
+        campaign = crud.get_campaign_by_slug(db, slug)
+        if campaign and campaign.settings.get("require_edit_approval"):
+            if line_number == 0:
+                raise HTTPException(400, "Add the line below another one")
+            original = lines[line_number - 1]
+            edit = crud.create_transcript_edit(
+                db, campaign_id=campaign.id, session_name=name, user_id=current_user.id,
+                line_number=line_number, original_text=original, proposed_text=original + "\n" + content,
+            )
+            return JSONResponse(status_code=202, content={"status": "pending", "edit_id": edit.id, "line_number": line_number})
+
+    lines.insert(line_number, content)
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return {"status": "applied", "line_number": line_number + 1, "content": content}
+
+
 @app.get("/campaigns/{slug}/sessions/{name}/summary")
 def campaign_get_summary(
     slug: str,
@@ -2534,6 +2578,32 @@ def campaign_merge_session(
     return _apply_rules_to_session(session_dir, load_config(slug))
 
 
+class ReplaceWordBody(BaseModel):
+    wrong: str
+    right: str
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/replace-word")
+def campaign_replace_word(
+    slug: str,
+    name: str,
+    body: ReplaceWordBody,
+    _member=Depends(require_campaign_member("dm")),
+):
+    """
+    Replace a word everywhere in one session (transcript, summary, wiki
+    suggestions) the way a rule would, but without saving a rule, so other
+    sessions and future transcripts are untouched.
+    """
+    wrong, right = body.wrong.strip(), body.right.strip()
+    if not wrong or not right or wrong == right:
+        raise HTTPException(400, "Need a non-empty 'wrong' and a different 'right'")
+    session_dir = get_sessions_dir(slug) / name
+    if not (session_dir / "transcript.md").exists():
+        raise HTTPException(404, "Session not found")
+    return _apply_rules_to_session(session_dir, {}, RuleSet({wrong: right}, []))
+
+
 # Applying every rule to every session takes a while (hundreds of rules, dozens
 # of multi-hour transcripts, a small shared CPU), so it runs in a background
 # thread; the page starts it and polls for progress.
@@ -3016,7 +3086,9 @@ def campaign_approve_edit(
         if 1 <= n <= len(lines):
             lines[n - 1] = edit.proposed_text
             path.write_text("\n".join(lines), encoding="utf-8")
-        rule_suggestions = _rule_suggestions(slug, edit.original_text, edit.proposed_text)
+        # An added line (queued as "this line, newline, new line") isn't a fix to suggest a rule from.
+        if "\n" not in edit.proposed_text:
+            rule_suggestions = _rule_suggestions(slug, edit.original_text, edit.proposed_text)
 
     reviewer_id = current_user.id if current_user else 0
     edit = crud.approve_edit(db, edit, reviewer_id)

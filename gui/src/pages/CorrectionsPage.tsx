@@ -173,7 +173,9 @@ export default function CorrectionsPage() {
     setTesting(false)
   }
 
-  const sortedCorrections = Object.entries(corrections).sort(([a], [b]) => a.localeCompare(b))
+  // By the correct word, so every spelling of one name sits together.
+  const sortedCorrections = Object.entries(corrections).sort(([wa, ra], [wb, rb]) =>
+    ra.localeCompare(rb, undefined, { sensitivity: 'base' }) || wa.localeCompare(wb, undefined, { sensitivity: 'base' }))
 
   if (campaignLoading) {
     return <div style={{ padding: '32px', color: 'var(--ink-faint)' }}>Loading...</div>

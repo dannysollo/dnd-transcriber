@@ -49,7 +49,8 @@ function parseTranscript(md: string): ParsedLine[] {
   for (const raw of md.split('\n')) {
     const lineIdx = idx++
     // Match: **[00:00] Speaker Name:** text  (with speaker)
-    const m = raw.match(/^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$/)
+    // (or loosely: "**[00:00] Speaker** text", colon missing or outside the bold)
+    const m = raw.match(/^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$/) ?? raw.match(LOOSE_LINE_RE)
     if (m) {
       lines.push({ type: 'speech', raw, lineIdx, timestamp: m[1], speaker: m[2].trim(), text: m[3] })
       continue
@@ -266,14 +267,24 @@ export default function SessionView() {
   const [actionsOpen, setActionsOpen] = useState(false)
   const [chromeHidden, setChromeHidden] = useState(false)
   const lastScrollRef = useRef(0)
+  const chromeHiddenRef = useRef(false)
+  const chromeChangedAtRef = useRef(0)
+  const phoneQuery = useMemo(() => window.matchMedia('(max-width: 768px)'), [])
   const onContentScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    if (!window.matchMedia('(max-width: 768px)').matches) return
+    if (!phoneQuery.matches) return
     const st = e.currentTarget.scrollTop
     const last = lastScrollRef.current
-    if (st < 40) setChromeHidden(false)
-    else if (st > last + 12) setChromeHidden(true)
-    else if (st < last - 12) setChromeHidden(false)
-    if (Math.abs(st - last) > 12 || st < 40) lastScrollRef.current = st
+    if (Math.abs(st - last) <= 12 && st >= 40) return
+    lastScrollRef.current = st
+    const hide = st >= 40 && st > last
+    // Only on a change (not every scroll event), and not again straight away:
+    // showing or hiding resizes the scroller, which fires scroll events of its own.
+    if (hide === chromeHiddenRef.current) return
+    const now = performance.now()
+    if (now - chromeChangedAtRef.current < 300 && st >= 40) return
+    chromeChangedAtRef.current = now
+    chromeHiddenRef.current = hide
+    setChromeHidden(hide)
   }
   // On narrow screens the tab row scrolls; keep the active tab in view.
   useEffect(() => {
@@ -1516,7 +1527,9 @@ export default function SessionView() {
               onTargetReached={() => setTargetTimestamp(null)}
               sessionName={name!}
               editMode={editMode}
-              onTranscriptChange={() => { load(); setChangesLoaded(false); setChangesReport(null); setNamesKey(k => k + 1) }}
+              // Silent: a full reload swaps in the loading skeleton, which unmounts the
+              // transcript and loses your place (e.g. after adding a rule mid-edit).
+              onTranscriptChange={() => { load({ silent: true }); setChangesLoaded(false); setChangesReport(null); setNamesKey(k => k + 1) }}
               onEditsSaved={text => {
                 setTranscript(text)
                 load({ silent: true })
@@ -1740,6 +1753,8 @@ function TranscriptView({
   const [savingAll, setSavingAll] = useState(false)
   const [savingLine, setSavingLine] = useState(false)
   const [pendingLines, setPendingLines] = useState<Set<number>>(new Set())
+  // A line added with "+" that isn't on the server yet (only one at a time).
+  const newLineIdxRef = useRef<number | null>(null)
   const [ruleSuggestions, setRuleSuggestions] = useState<SessionRuleSuggestion[]>([])
   const confidenceIdx = useMemo(() => indexConfidence(confidence ?? null), [confidence])
   // Ribbon bookmark: remember the first visible line while reading, and on the
@@ -1902,11 +1917,23 @@ function TranscriptView({
     }
   }, [editMode])
 
-  // Initialize editedLines when entering edit mode
+  // Initialize editedLines when entering edit mode. When the content changes
+  // under an open editor (a rule was just applied), keep the line being edited
+  // open with what's been typed, as long as the lines still line up.
+  const wasEditModeRef = useRef(editMode)
   useEffect(() => {
+    const entering = editMode && !wasEditModeRef.current
+    wasEditModeRef.current = editMode
     if (editMode && content) {
-      setEditedLines(content.split('\n'))
-      setEditingLineIdx(null)
+      const lines = content.split('\n')
+      const idx = editingLineIdx
+      if (!entering && idx !== null && lines.length === editedLinesRef.current.length) {
+        lines[idx] = editingValueRef.current
+        setEditedLines(lines)
+      } else {
+        setEditedLines(lines)
+        setEditingLineIdx(null)
+      }
     }
     if (!editMode) {
       setEditingLineIdx(null)
@@ -1928,8 +1955,58 @@ function TranscriptView({
     return () => clearTimeout(timer)
   }, [targetTimestamp])
 
-  const saveLine = async (lineIdx: number, value: string) => {
+  // Drop a local line (an added line that was cancelled or left empty, or
+  // one sent for review), keeping the pending marks on the right lines.
+  const removeLocalLine = (lineIdx: number) => {
+    const next = [...editedLinesRef.current]; next.splice(lineIdx, 1)
+    editedLinesRef.current = next
+    setEditedLines(next)
+    setPendingLines(prev => new Set([...prev].filter(i => i !== lineIdx).map(i => (i > lineIdx ? i - 1 : i))))
+    if (newLineIdxRef.current === lineIdx) newLineIdxRef.current = null
+    setEditingLineIdx(prev => (prev === lineIdx ? null : prev))
+  }
+
+  // An added line is inserted on the server after the line above it. (It used
+  // to be saved with a PUT on its own number, which overwrote the line that
+  // was there and left every later line number off by one.)
+  const saveNewLine = async (lineIdx: number, value: string) => {
     if (!sessionName) return
+    if (!value.trim()) { removeLocalLine(lineIdx); return }
+    setSavingLine(true)
+    try {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/transcript/line/${lineIdx}/insert-after`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: value }),
+      })
+      if (r.status === 202) {
+        removeLocalLine(lineIdx)
+        toast('New line sent to the DM for review', 'info')
+      } else if (r.ok) {
+        const next = [...editedLinesRef.current]; next[lineIdx] = value
+        editedLinesRef.current = next
+        newLineIdxRef.current = null
+        if (mountedRef.current) setEditedLines(next)
+        if (!editModeRef.current || !mountedRef.current) onEditsSaved?.(next.join('\n'))
+        else savedEditsRef.current = true
+        setEditingLineIdx(prev => (prev === lineIdx ? null : prev))
+      } else {
+        toast('Could not add the line', 'error')
+      }
+    } catch (_) {
+      toast('Could not add the line', 'error')
+    } finally {
+      setSavingLine(false)
+    }
+  }
+
+  const saveLine = async (lineIdx: number, rawValue: string) => {
+    if (!sessionName) return
+    // "**[00:01] Name** text" (colon missing or outside the bold): write it the standard way.
+    const value = normalizeLine(rawValue)
+    if (newLineIdxRef.current === lineIdx) return saveNewLine(lineIdx, value)
+    // Nothing changed: don't send it (a blur also saves).
+    if (value === editedLinesRef.current[lineIdx]) { setEditingLineIdx(prev => (prev === lineIdx ? null : prev)); return }
     // Capture the editing index at call time — async resolution must not clobber
     // a different line that was opened while this save was in flight (e.g. via insertLineAfter)
     const savedEditingIdx = lineIdx
@@ -1972,22 +2049,35 @@ function TranscriptView({
   }
 
   const insertLineAfter = (lineIdx: number) => {
-    // If a line is currently being edited, commit its current value locally first
-    // so we don't lose it when editedLines splices
-    if (editingLineIdx !== null) {
-      setEditedLines(prev => {
-        const next = [...prev]
-        next[editingLineIdx] = editingValueRef.current
-        return next
-      })
-    }
-    setEditedLines(prev => {
-      const next = [...prev]
-      next.splice(lineIdx + 1, 0, '')
-      return next
-    })
+    if (newLineIdxRef.current !== null) return // finish the added line first
+    // Save the line being edited first (the + button doesn't blur it), so the
+    // server has it before the insert shifts the lines below.
+    if (editingLineIdx !== null) saveLine(editingLineIdx, editingValueRef.current)
+    const next = [...editedLinesRef.current]
+    next.splice(lineIdx + 1, 0, '')
+    editedLinesRef.current = next
+    setEditedLines(next)
+    setPendingLines(prev => new Set([...prev].map(i => (i > lineIdx ? i + 1 : i))))
+    newLineIdxRef.current = lineIdx + 1
     setEditingLineIdx(lineIdx + 1)
     editingValueRef.current = ''
+  }
+
+  // Time and speaker to start an added line with: the nearest line above.
+  const newLineContext = (lineIdx: number): NewLineContext => {
+    const lines = editedLinesRef.current
+    let ts = '00:00', speaker = ''
+    for (let i = lineIdx - 1; i >= 0; i--) {
+      const m = lines[i].match(EDIT_LINE_RE)
+      if (m) { ts = m[1]; speaker = m[2].trim(); break }
+    }
+    const counts = new Map<string, number>()
+    for (const l of lines) {
+      const m = l.match(EDIT_LINE_RE)
+      if (m) counts.set(m[2].trim(), (counts.get(m[2].trim()) ?? 0) + 1)
+    }
+    const speakers = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n)
+    return { ts, speaker, speakers }
   }
 
   const readActionsRef = useRef<ReadLineActions>(null as unknown as ReadLineActions)
@@ -2001,9 +2091,14 @@ function TranscriptView({
   rowActionsRef.current = {
     startEdit: (i, value) => { editingValueRef.current = value; setEditingLineIdx(i) },
     save: (i, value) => { if (!savingLine) saveLine(i, value) },
-    cancel: () => setEditingLineIdx(null),
+    cancel: () => {
+      if (editingLineIdx !== null && editingLineIdx === newLineIdxRef.current) removeLocalLine(editingLineIdx)
+      else setEditingLineIdx(null)
+    },
     insertAfter: i => insertLineAfter(i),
     setValue: v => { editingValueRef.current = v },
+    isNew: i => newLineIdxRef.current === i,
+    newLineContext: i => newLineContext(i),
   }
   const rowActions = useMemo<EditRowActions>(() => ({
     startEdit: (i, v) => rowActionsRef.current.startEdit(i, v),
@@ -2011,6 +2106,8 @@ function TranscriptView({
     cancel: () => rowActionsRef.current.cancel(),
     insertAfter: i => rowActionsRef.current.insertAfter(i),
     setValue: v => rowActionsRef.current.setValue(v),
+    isNew: i => rowActionsRef.current.isNew(i),
+    newLineContext: i => rowActionsRef.current.newLineContext(i),
   }), [])
   const editDisplayLines = useMemo(
     () => (editMode ? (editedLines.length > 0 ? editedLines : (content ?? '').split('\n')) : []),
@@ -2853,48 +2950,30 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
   }
 
   return (
-    <div style={{ flexShrink: 0 }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '0 48px 6px',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          width: '100%',
-          textAlign: 'left',
-          fontSize: '16px',
-          color: 'var(--ink-soft)',
-        }}
-      >
+    <div className="speakers-panel">
+      <button type="button" className="speakers-toggle" onClick={() => setOpen(o => !o)} aria-expanded={open}>
         <svg aria-hidden width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-          style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .2s', color: 'var(--ink-faint)' }}>
+          style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .2s', color: 'var(--ink-faint)', flexShrink: 0 }}>
           <path d="m9 6 6 6-6 6" />
         </svg>
         <span>
           {speakers.length > 0 ? `${speakers.length} speaker${speakers.length !== 1 ? 's' : ''}` : 'Speakers'}
         </span>
         <span style={{ color: 'var(--ink-faint)' }}>rename who's who</span>
-        {renameResult && <span style={{ fontSize: '14px', color: 'var(--moss)', marginLeft: '8px' }}>{renameResult}</span>}
+        {renameResult && <span style={{ fontSize: '14px', color: 'var(--moss)' }}>{renameResult}</span>}
       </button>
 
       {open && (
-        <div style={{ padding: '0 48px 12px 68px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <p style={{ margin: '0 0 4px', fontSize: '15px', color: 'var(--ochre)' }}>
+        <div className="speakers-body">
+          <p className="speakers-warning">
             Renaming edits this transcript directly. Re-transcribing the audio would bring the old names back.
           </p>
           {speakers.map(s => (
-            <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className="speaker-name" style={{ fontSize: '17px', minWidth: '200px' }}>
-                {s.name}
-              </span>
-              <span style={{ fontSize: '14px', color: 'var(--ink-faint)' }}>{s.line_count} line{s.line_count !== 1 ? 's' : ''}</span>
+            <div key={s.name} className={'speaker-row' + (editingSpeaker === s.name ? ' editing' : '')}>
+              <span className="speaker-name speaker-row-name">{s.name}</span>
+              <span className="speaker-row-count">{s.line_count} line{s.line_count !== 1 ? 's' : ''}</span>
               {editingSpeaker === s.name ? (
-                <>
+                <span className="speaker-row-edit">
                   <input
                     autoFocus
                     value={newName}
@@ -2904,36 +2983,21 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
                       else if (e.key === 'Escape') { setEditingSpeaker(null); setNewName('') }
                     }}
                     placeholder="New name"
-                    style={{
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--accent3)',
-                      borderRadius: '3px',
-                      color: 'var(--ink)',
-                      padding: '4px 8px',
-                      fontSize: '15px',
-                      outline: 'none',
-                      width: '160px',
-                    }}
+                    aria-label={`New name for ${s.name}`}
                   />
-                  <button
-                    onClick={() => doRename(s.name)}
-                    disabled={renaming}
-                    style={{ background: 'color-mix(in srgb, var(--rubric) 20%, transparent)', border: '1px solid color-mix(in srgb, var(--rubric) 30%, transparent)', borderRadius: '3px', color: 'var(--accent-text)', padding: '4px 10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    {renaming ? '...' : 'Save'}
+                  <button type="button" className="speaker-row-save" onClick={() => doRename(s.name)} disabled={renaming}>
+                    {renaming ? 'Saving…' : 'Save'}
                   </button>
-                  <button
-                    onClick={() => { setEditingSpeaker(null); setNewName('') }}
-                    style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontSize: '16px', textDecoration: 'underline', textUnderlineOffset: 3 }}
-                  >
+                  <button type="button" className="speaker-row-action" onClick={() => { setEditingSpeaker(null); setNewName('') }}>
                     Cancel
                   </button>
-                </>
+                </span>
               ) : (
                 <button
+                  type="button"
+                  className="speaker-row-action"
                   onClick={() => { setEditingSpeaker(s.name); setNewName(s.name); setRenameResult(null) }}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontSize: '16px', opacity: 0.7 }}
-                  title="Rename speaker"
+                  aria-label={`Rename ${s.name}`}
                 >
                   Rename
                 </button>
@@ -3736,6 +3800,20 @@ function wordRegex(word: string) {
   return new RegExp(`(^|[^A-Za-z0-9'])(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?![A-Za-z0-9'])`, 'i')
 }
 
+/** The line from a little before the word's first whole-word match, so the
+ * one-line (ellipsised) example always shows the word. start is its index in
+ * the returned text, or -1. */
+function excerptAround(line: string, word: string, before = 40): { text: string; start: number } {
+  const m = wordRegex(word).exec(line)
+  if (!m) return { text: line, start: -1 }
+  const at = m.index + m[1].length
+  if (at <= before) return { text: line, start: at }
+  // Cut at a space so the excerpt starts on a whole word.
+  const space = line.lastIndexOf(' ', at - before)
+  const from = space >= 0 && at - space < before * 2 ? space + 1 : at - before
+  return { text: '…' + line.slice(from), start: at - from + 1 }
+}
+
 function buildWalkItems(transcript: string, confidence: ConfidenceMap | null): WalkItem[] {
   if (!confidence) return []
   const lines = transcript.split('\n')
@@ -4232,6 +4310,28 @@ function UnknownWordsPanel({
     }
   }
 
+  // Fix every instance in this session only: no rule, nothing for other sessions.
+  const replaceHere = async (w: UnknownWord) => {
+    const right = (targets[w.word] ?? '').trim()
+    if (!right) return
+    setBusy(w.word)
+    try {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/replace-word`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wrong: w.word, right }),
+      })
+      if (!r.ok) { toast('Could not change it', 'error'); return }
+      const data = await r.json()
+      const n = data.files?.['transcript.md'] ?? 0
+      toast(`Changed ${w.word} → ${right} in this session (${n} in the transcript), no rule saved`, 'success')
+      drop(w.word)
+      onRuleAdded()
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const ignore = async (w: UnknownWord) => {
     setBusy(w.word)
     try {
@@ -4348,6 +4448,11 @@ function UnknownWordsPanel({
               Add rule
             </button>
             <button className="btn-ghost" style={{ fontSize: '15px', padding: '3px 10px' }}
+              disabled={busy === w.word || !(targets[w.word] ?? '').trim()} onClick={() => replaceHere(w)}
+              title="Change every instance in this session only. No rule is saved, so other sessions aren't touched.">
+              This session only
+            </button>
+            <button className="btn-ghost" style={{ fontSize: '15px', padding: '3px 10px' }}
               disabled={busy === w.word} onClick={() => ignore(w)}
               title="It's spelled right: stop flagging it (and its plural/possessive) in every session of this campaign">
               Ignore
@@ -4372,10 +4477,10 @@ function UnknownWordsPanel({
           title="Show in transcript">
           <span style={{ fontVariantNumeric: 'lining-nums tabular-nums', color: 'var(--text-muted)', flexShrink: 0 }}>{ex.ts}</span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {renderMarked(ex.text, (() => {
-              const i = ex.text.toLowerCase().indexOf(w.word.toLowerCase())
-              return i >= 0 ? [{ start: i, end: i + w.word.length, search: true }] : []
-            })())}
+            {(() => {
+              const { text, start } = excerptAround(ex.text, w.word)
+              return renderMarked(text, start >= 0 ? [{ start, end: start + w.word.length, search: true }] : [])
+            })()}
           </span>
         </button>
         </div>
@@ -4569,9 +4674,22 @@ interface EditRowActions {
   cancel: () => void
   insertAfter: (lineIdx: number) => void
   setValue: (value: string) => void
+  isNew: (lineIdx: number) => boolean
+  newLineContext: (lineIdx: number) => NewLineContext
 }
 
+interface NewLineContext { ts: string; speaker: string; speakers: string[] }
+
 const EDIT_LINE_RE = /^\*\*\[([^\]]+)\] ([^:]+):\*\* (.*)$/
+// The same line with the colon missing or outside the bold: "**[00:01] Name** text", "**[00:01] Name**: text".
+const LOOSE_LINE_RE = /^\*\*\[([^\]]+)\] ([^:*]+?)\*\*:? ?(.*)$/
+
+/** Rewrites a loosely formatted speaker line in the standard form; anything else is returned as is. */
+function normalizeLine(line: string): string {
+  if (EDIT_LINE_RE.test(line)) return line
+  const m = line.match(LOOSE_LINE_RE)
+  return m ? `**[${m[1]}] ${m[2].trim()}:** ${m[3]}` : line
+}
 
 /**
  * One transcript line in edit mode. Memoised: typing in one line, audio time
@@ -4583,12 +4701,14 @@ const EditRow = React.memo(function EditRow({ rawLine, lineIdx, isEditing, isPen
 }) {
   // Blank separator lines: one element, nothing to edit.
   if (!isEditing && rawLine.trim() === '') return <div className="edit-gap" data-line-idx={lineIdx} />
-  const m = isEditing ? null : rawLine.match(EDIT_LINE_RE)
+  const m = isEditing ? null : rawLine.match(EDIT_LINE_RE) ?? rawLine.match(LOOSE_LINE_RE)
   const start = () => actions.startEdit(lineIdx, rawLine)
   return (
     <div className={'edit-row' + (isEditing ? ' editing' : isPending ? ' pending' : '')} data-line-idx={lineIdx}>
       <span className="edit-num">{lineIdx + 1}</span>
-      {isEditing ? (
+      {isEditing && actions.isNew(lineIdx) ? (
+        <NewLineEditor lineIdx={lineIdx} saving={saving} actions={actions} />
+      ) : isEditing ? (
         <LineEditor initial={rawLine} lineIdx={lineIdx} saving={saving} actions={actions} />
       ) : m ? (
         <div className="edit-line" onClick={start} title="Click to edit">
@@ -4602,7 +4722,7 @@ const EditRow = React.memo(function EditRow({ rawLine, lineIdx, isEditing, isPen
       )}
       {isPending && <span className="edit-pending">sent to the DM for review</span>}
       {/* Only on the line being edited: one button per line added thousands of elements. */}
-      {isEditing && (
+      {isEditing && !actions.isNew(lineIdx) && (
         <button type="button" className="edit-insert" onMouseDown={e => e.preventDefault()} onClick={() => actions.insertAfter(lineIdx)}
           title="Insert line below" aria-label={`Insert a line after line ${lineIdx + 1}`}>+</button>
       )}
@@ -4641,6 +4761,44 @@ function LineEditor({ initial, lineIdx, saving, actions }: { initial: string; li
       disabled={saving}
       className="line-editor"
     />
+  )
+}
+
+/**
+ * An added line: time (from the line above), speaker and text, so nobody has
+ * to type the line format by hand. Enter or leaving all three fields saves;
+ * Escape or saving it empty drops the line.
+ */
+function NewLineEditor({ lineIdx, saving, actions }: { lineIdx: number; saving: boolean; actions: EditRowActions }) {
+  const ctx = useMemo(() => actions.newLineContext(lineIdx), [lineIdx])
+  const [ts, setTs] = useState(ctx.ts)
+  const [speaker, setSpeaker] = useState(ctx.speaker || ctx.speakers[0] || '')
+  const [text, setText] = useState('')
+  const compose = (t = ts, sp = speaker, tx = text) => {
+    const body = tx.replace(/\n/g, ' ').trim()
+    return body ? `**[${t.trim() || '00:00'}] ${sp.trim() || 'Unknown'}:** ${body}` : ''
+  }
+  const save = () => actions.save(lineIdx, compose())
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); save() }
+    else if (e.key === 'Escape') actions.cancel()
+  }
+  const listId = `speakers-${lineIdx}`
+  return (
+    <div className="new-line-editor"
+      // Moving between the three fields isn't leaving the line.
+      onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) save() }}>
+      <input className="new-line-ts" value={ts} disabled={saving} aria-label="Time"
+        inputMode="numeric" onChange={e => { setTs(e.target.value); actions.setValue(compose(e.target.value)) }} onKeyDown={onKeyDown} />
+      <input className="new-line-speaker" value={speaker} disabled={saving} aria-label="Speaker" list={listId}
+        onChange={e => { setSpeaker(e.target.value); actions.setValue(compose(ts, e.target.value)) }} onKeyDown={onKeyDown} />
+      <datalist id={listId}>{ctx.speakers.map(n => <option key={n} value={n} />)}</datalist>
+      <textarea className="line-editor new-line-text" autoFocus rows={1} value={text} disabled={saving}
+        aria-label="What they said" placeholder="What they said"
+        ref={el => { if (el && !FIELD_SIZING) autosize(el) }}
+        onChange={e => { setText(e.target.value); actions.setValue(compose(ts, speaker, e.target.value)); if (!FIELD_SIZING) autosize(e.target) }}
+        onKeyDown={onKeyDown} />
+    </div>
   )
 }
 

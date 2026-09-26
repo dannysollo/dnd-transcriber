@@ -197,7 +197,7 @@ export default function App() {
           </>
         )}
         <div className="sheet-section">Tools</div>
-        <SheetItem onClick={() => { setMoreOpen(false); navigate('/corrections') }} note="Word rules and patterns">Corrections</SheetItem>
+        <SheetItem onClick={() => { setMoreOpen(false); navigate('/quotes') }} note="Saved lines from every session">Quotes</SheetItem>
         {activeCampaign?.role === 'dm' && (
           <SheetItem onClick={() => { setMoreOpen(false); navigate('/edit-queue') }}
             note={pendingEditCount > 0 ? `${pendingEditCount} waiting for review` : 'Nothing waiting'}>
@@ -333,7 +333,7 @@ export default function App() {
               to={to === '/campaigns' ? campaignHref : to}
               end={to === '/'}
               // A session page is still inside "Sessions"; any /campaigns page is inside "Campaign".
-              className={({ isActive }) => 'cover-link' + (to === '/campaigns' || to === '/corrections' ? ' nav-secondary' : '') + (isActive || (to === '/' && isSessionView) || (to === '/campaigns' && location.pathname.startsWith('/campaigns')) ? ' active' : '')}
+              className={({ isActive }) => 'cover-link' + (to === '/campaigns' || to === '/quotes' ? ' nav-secondary' : '') + (isActive || (to === '/' && isSessionView) || (to === '/campaigns' && location.pathname.startsWith('/campaigns')) ? ' active' : '')}
             >
               <Icon />
               <span style={{ flex: 1 }}>{label}</span>
@@ -361,7 +361,7 @@ export default function App() {
             <GearIcon />
             <span style={{ flex: 1 }}>Preferences</span>
           </NavLink>
-          {/* Phones: the bar keeps Sessions, Quotes and Search; the rest live under More. */}
+          {/* Phones: the bar keeps Sessions, Search and Corrections; the rest live under More. */}
           <button type="button" className="cover-link sidebar-nav-item nav-more" onClick={() => setMoreOpen(true)}
             aria-haspopup="dialog" aria-expanded={moreOpen}>
             <MoreIcon size={18} />

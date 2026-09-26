@@ -891,10 +891,12 @@ input.written-line:focus {
   .session-actions, .session-speakers, .tb-phone-hide, .desc-add { display: none !important; }
   .session-more { display: inline-flex; padding: 10px; margin-right: -10px; }
   .session-header h1 { font-size: 24px !important; }
-  .session-header { max-height: 240px; transition: max-height 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease-out, padding 220ms; }
-  .session-toolbar { max-height: 120px; transition: max-height 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease-out, padding 220ms; }
-  .chrome-hidden .session-header, .chrome-hidden .session-toolbar { max-height: 0; opacity: 0; overflow: hidden; padding-top: 0 !important; padding-bottom: 0 !important;
-    visibility: hidden; transition: max-height 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease-out, padding 220ms, visibility 0s 220ms; }
+  /* Tucked away while scrolling down. The height changes in one step: animating
+     it re-laid-out the whole transcript every frame, which lagged on phones.
+     Only the fade back in animates (opacity is cheap). */
+  .session-header, .session-toolbar { transition: opacity 180ms ease-out; }
+  .chrome-hidden .session-header, .chrome-hidden .session-toolbar { display: none !important; }
+  @starting-style { .session-header, .session-toolbar { opacity: 0; } }
   .session-toolbar { gap: 10px !important; flex-wrap: nowrap !important; }
   .session-toolbar input.written-line { flex: 1 1 auto !important; font-size: 17px !important; }
 
@@ -909,4 +911,68 @@ input.written-line:focus {
 }
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   .session-header, .session-toolbar { transition: none; }
+}
+
+/* Speakers: rename who's who (SpeakersPanel). A name/count/action row that
+   wraps the editor onto its own line, so it fits a phone sheet. */
+.speakers-panel { flex-shrink: 0; }
+.speakers-toggle {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
+  padding: 0 48px 6px; width: 100%;
+  background: transparent; border: none; cursor: pointer; text-align: left;
+  font: inherit; font-size: 16px; color: var(--ink-soft);
+}
+.speakers-body { padding: 0 48px 12px 68px; display: flex; flex-direction: column; }
+.speakers-warning { margin: 0 0 8px; font-size: 15px; color: var(--ochre); max-width: 60ch; }
+.speaker-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline;
+  column-gap: 16px; padding: 8px 0;
+  border-top: 1px solid var(--rule);
+  max-width: 560px;
+}
+.speaker-row:first-of-type { border-top: none; }
+.speaker-row-name { font-size: 17px; min-width: 0; overflow-wrap: anywhere; }
+.speaker-row-count { font-size: 14px; color: var(--ink-faint); white-space: nowrap; font-variant-numeric: lining-nums tabular-nums; }
+.speaker-row-action {
+  background: none; border: none; padding: 4px 0; cursor: pointer;
+  font: inherit; font-size: 16px; color: var(--ink-soft);
+  text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px;
+}
+.speaker-row-action:hover { color: var(--rubric); }
+.speaker-row.editing .speaker-row-edit {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; margin-top: 8px;
+}
+.speaker-row-edit input {
+  flex: 1; min-width: 0;
+  background: var(--bg-surface); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 3px;
+  padding: 6px 10px; font: inherit; font-size: 16px; /* 16px stops iOS zooming in */
+}
+.speaker-row-edit input:focus { outline: none; border-color: var(--rubric); }
+.speaker-row-save {
+  background: var(--rubric); color: var(--page); border: none; border-radius: 3px;
+  padding: 6px 14px; font: inherit; font-size: 15px; cursor: pointer;
+}
+.speaker-row-save:disabled { opacity: .6; cursor: default; }
+@media (max-width: 768px) {
+  .speakers-toggle { padding: 4px 0 8px; }
+  .speakers-body { padding: 0 0 12px; }
+}
+
+/* An added line: time, speaker and text fields (NewLineEditor). */
+.new-line-editor {
+  flex: 1; min-width: 0;
+  display: grid; grid-template-columns: 76px minmax(0, 220px) minmax(0, 1fr); gap: 8px; align-items: start;
+}
+.new-line-editor input {
+  min-width: 0; font: inherit; font-size: 16px; line-height: 1.55; color: var(--ink);
+  background: var(--page); border: 1px solid color-mix(in srgb, var(--ochre) 45%, transparent);
+  border-radius: 3px; padding: 4px 8px; outline: none;
+}
+.new-line-editor input:focus { border-color: var(--ochre); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ochre) 18%, transparent); }
+.new-line-ts { font-variant-numeric: lining-nums tabular-nums; }
+.new-line-speaker { font-variant: small-caps; color: var(--rubric) !important; }
+@media (max-width: 768px) {
+  .new-line-editor { grid-template-columns: 72px minmax(0, 1fr); }
+  .new-line-text { grid-column: 1 / -1; }
 }
