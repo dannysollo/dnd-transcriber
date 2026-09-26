@@ -444,8 +444,9 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
         wiki = ""
     # The wiki section's own heading sits just above "## [1]": don't leave it
     # dangling at the end of the summary.
-    summary = re.sub(r'(?:\n\s*-{3,}\s*)?\n*' + wiki_heading[1:] + r'[^\n]*\s*$', '', summary,
-                     flags=re.IGNORECASE).strip()
+    # (as a heading or in bold, sometimes with an empty code fence after it)
+    summary = re.sub(r'(?:\n\s*-{3,}\s*)?\n*(?:#{1,3}\s*|\*\*)(?:\d+\.\s*)?Wiki Update Suggestions[^\n]*(?:\s*```\w*)?\s*$',
+                     '', summary, flags=re.IGNORECASE).strip()
     if re.match(wiki_heading, summary, re.IGNORECASE):
         summary = ""  # nothing but the wiki heading: better no summary than a broken one
 
