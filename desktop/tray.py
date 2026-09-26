@@ -57,7 +57,7 @@ class TrayIcon:
                 # (new campaign, new audio folder, etc.) without deleting
                 # worker.yaml by hand.
                 pystray.MenuItem("Set Up / Reconfigure Worker", on_setup_worker),
-                pystray.MenuItem("Restart Worker", on_restart_worker),
+                pystray.MenuItem("Start / Restart Worker", on_restart_worker),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Quit", on_quit),
             ),

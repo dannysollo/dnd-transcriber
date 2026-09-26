@@ -197,3 +197,32 @@
   .sidebar-nav a, .sidebar-nav-item { min-height: 56px; }
   .sidebar-nav a span:last-child, .sidebar-nav-item span:last-child { font-size: 12px !important; }
 }
+
+/* Worker controls, shown only inside the desktop app (DesktopWorker.tsx). */
+.desktop-worker {
+  padding: 12px 24px 14px;
+  border-top: 1px solid color-mix(in srgb, var(--gilt) 45%, transparent);
+  color: var(--cover-ink);
+  font-size: 15px;
+}
+.desktop-worker-status { display: flex; align-items: center; gap: 8px; }
+.desktop-worker-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 1.5px solid var(--cover-ink-soft);
+  flex-shrink: 0;
+}
+.desktop-worker-dot.on { background: var(--gilt); border-color: var(--gilt); }
+.desktop-worker-link {
+  background: none; border: none; padding: 0; cursor: pointer; font: inherit; font-size: 14px;
+  color: var(--cover-ink-soft); text-decoration: underline; text-underline-offset: 3px;
+}
+.desktop-worker-btn {
+  display: block; width: 100%; margin-top: 10px; padding: 7px 0;
+  font: inherit; font-size: 15px; cursor: pointer; border-radius: 3px;
+  background: var(--gilt); color: var(--cover); border: 1px solid var(--gilt);
+}
+.desktop-worker-btn.quiet { background: transparent; color: var(--cover-ink-soft); border-color: color-mix(in srgb, var(--cover-ink-soft) 50%, transparent); }
+.desktop-worker-btn:hover { filter: brightness(1.08); }
+.desktop-worker-btn:focus-visible, .desktop-worker-link:focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
+.desktop-worker-note { margin: 8px 0 0; font-size: 14px; color: var(--cover-ink-soft); }
+@media (max-width: 768px) { .desktop-worker { display: none; } }

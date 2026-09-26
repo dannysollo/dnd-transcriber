@@ -203,6 +203,35 @@ class Api:
         except requests.RequestException as e:
             return {"ok": False, "error": str(e)}
 
+    # ── Worker controls for the site's sidebar ────────────────────────────
+    # js_api is exposed to every page this window loads, the Fly-hosted site
+    # included, so the site can show the worker's state and a Start button
+    # when it detects window.pywebview.api (see gui/src/DesktopWorker.tsx).
+    # start/stop return immediately and do the work in a thread: start() can
+    # wait up to 60s for the dashboard, and the page polls worker_state().
+
+    def worker_state(self) -> dict:
+        return {
+            "running": worker.is_running(),
+            "busy": _worker_action,
+            "error": _worker_error,
+            "configured": not onboarding.needs_onboarding(),
+        }
+
+    def start_worker(self) -> dict:
+        if onboarding.needs_onboarding():
+            return {"ok": False, "error": "Set up the worker first."}
+        _run_worker_action("starting", _restart_worker)
+        return {"ok": True}
+
+    def stop_worker(self) -> dict:
+        _run_worker_action("stopping", worker.stop)
+        return {"ok": True}
+
+    def open_dashboard(self) -> dict:
+        _tray_open_dashboard()
+        return {"ok": True}
+
     def finish_onboarding(self) -> dict:
         # Must NOT call _start_worker_and_load_site() synchronously here:
         # worker.start() can take up to 60s (waiting on the dashboard to come
@@ -219,6 +248,38 @@ class Api:
         # there's no pending callback left to race.
         threading.Thread(target=_start_worker_and_load_site, daemon=True).start()
         return {"ok": True}
+
+
+_worker_action: str | None = None  # "starting" / "stopping" while one runs
+_worker_error: str | None = None
+_worker_action_lock = threading.Lock()
+
+
+def _run_worker_action(name: str, fn) -> None:
+    """Run a start/stop in the background, one at a time."""
+    global _worker_action, _worker_error
+    with _worker_action_lock:
+        if _worker_action:
+            return
+        _worker_action = name
+        _worker_error = None
+
+    def run():
+        global _worker_action, _worker_error
+        try:
+            fn()
+        except Exception as e:
+            _worker_error = str(e)
+            print(f"[launcher] Worker {name} failed: {e}")
+        finally:
+            _worker_action = None
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def _restart_worker() -> None:
+    worker.stop()
+    worker.start()
 
 
 def _watch_for_login() -> None:
@@ -307,11 +368,7 @@ def _tray_setup_worker() -> None:
 
 
 def _tray_restart_worker() -> None:
-    worker.stop()
-    try:
-        worker.start()
-    except Exception as e:
-        print(f"[launcher] Failed to restart worker: {e}")
+    _run_worker_action("starting", _restart_worker)
 
 
 def _tray_quit() -> None:

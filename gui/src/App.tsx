@@ -3,6 +3,7 @@ import { CoverWordmark } from './Brand'
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
 import Sheet, { SheetItem } from './Sheet'
 import { MoreIcon } from './Icons'
+import DesktopWorker from './DesktopWorker'
 import './App.css'
 import SessionsPage from './pages/SessionsPage'
 import SessionView from './pages/SessionView'
@@ -367,6 +368,8 @@ export default function App() {
             <span style={{ flex: 1 }}>More{activeCampaign?.role === 'dm' && pendingEditCount > 0 ? ` (${pendingEditCount})` : ''}</span>
           </button>
         </div>
+
+        <DesktopWorker />
 
         {/* Owner's name, inside the back cover */}
         <div className="sidebar-user" style={{ padding: '16px 24px 22px', borderTop: '1px solid color-mix(in srgb, var(--gilt) 45%, transparent)' }}>
