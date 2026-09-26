@@ -12,20 +12,27 @@ type DesktopApi = {
   open_dashboard: () => Promise<{ ok: boolean }>
 }
 
+const DASHBOARD_URL = 'http://127.0.0.1:8788'
+
+function pywebviewApi(): Partial<DesktopApi> | null {
+  return (window as unknown as { pywebview?: { api?: Partial<DesktopApi> } }).pywebview?.api ?? null
+}
+
+// Every app build has window.pywebview; 0.3.1+ adds the worker methods.
 function desktopApi(): DesktopApi | null {
-  const api = (window as unknown as { pywebview?: { api?: Partial<DesktopApi> } }).pywebview?.api
-  // Older app builds expose the api without the worker methods.
+  const api = pywebviewApi()
   return api && typeof api.worker_state === 'function' ? (api as DesktopApi) : null
 }
 
 export default function DesktopWorker() {
+  const [inApp, setInApp] = useState(() => !!(window as unknown as { pywebview?: unknown }).pywebview)
   const [api, setApi] = useState<DesktopApi | null>(desktopApi)
   const [state, setState] = useState<WorkerState | null>(null)
 
   // pywebview injects its api after the page loads.
   useEffect(() => {
     if (api) return
-    const onReady = () => setApi(desktopApi())
+    const onReady = () => { setInApp(true); setApi(desktopApi()) }
     window.addEventListener('pywebviewready', onReady)
     return () => window.removeEventListener('pywebviewready', onReady)
   }, [api])
@@ -40,7 +47,15 @@ export default function DesktopWorker() {
     return () => { alive = false; window.clearInterval(id) }
   }, [api, state?.busy])
 
-  if (!api || !state) return null
+  if (!inApp) return null
+
+  // The dashboard opens in its own app window on 0.3.1+; older builds send
+  // target=_blank links to the system browser.
+  const dashboard = api
+    ? <button type="button" className="desktop-worker-btn quiet" onClick={() => { api.open_dashboard() }}>Open worker dashboard</button>
+    : <a className="desktop-worker-btn quiet" href={DASHBOARD_URL} target="_blank" rel="noreferrer">Open worker dashboard</a>
+
+  if (!api || !state) return <div className="desktop-worker">{dashboard}</div>
 
   const act = (fn: () => Promise<unknown>) => {
     // Show the change right away; the next poll confirms it.
@@ -57,14 +72,13 @@ export default function DesktopWorker() {
       <div className="desktop-worker-status" role="status">
         <span className={'desktop-worker-dot' + (state.running && !state.busy ? ' on' : '')} aria-hidden="true" />
         <span style={{ flex: 1 }}>{label}</span>
-        {state.running && !state.busy && (
-          <button type="button" className="desktop-worker-link" onClick={() => act(api.open_dashboard)}>Dashboard</button>
-        )}
       </div>
-      {!state.busy && state.configured && (
-        state.running
-          ? <button type="button" className="desktop-worker-btn quiet" onClick={() => act(api.stop_worker)}>Stop worker</button>
-          : <button type="button" className="desktop-worker-btn" onClick={() => act(api.start_worker)}>Start worker</button>
+      {!state.busy && state.configured && !state.running && (
+        <button type="button" className="desktop-worker-btn" onClick={() => act(api.start_worker)}>Start worker</button>
+      )}
+      {state.running && !state.busy && dashboard}
+      {state.running && !state.busy && (
+        <button type="button" className="desktop-worker-link stop" onClick={() => act(api.stop_worker)}>Stop worker</button>
       )}
       {!state.configured && <p className="desktop-worker-note">Set up the worker from the tray menu first.</p>}
       {state.error && !state.busy && <p className="desktop-worker-note">Couldn't start: {state.error}</p>}

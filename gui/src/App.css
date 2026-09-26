@@ -217,12 +217,14 @@
   color: var(--cover-ink-soft); text-decoration: underline; text-underline-offset: 3px;
 }
 .desktop-worker-btn {
-  display: block; width: 100%; margin-top: 10px; padding: 7px 0;
+  display: block; box-sizing: border-box; text-align: center; text-decoration: none; width: 100%; margin-top: 10px; padding: 7px 0;
   font: inherit; font-size: 15px; cursor: pointer; border-radius: 3px;
   background: var(--gilt); color: var(--cover); border: 1px solid var(--gilt);
 }
 .desktop-worker-btn.quiet { background: transparent; color: var(--cover-ink-soft); border-color: color-mix(in srgb, var(--cover-ink-soft) 50%, transparent); }
 .desktop-worker-btn:hover { filter: brightness(1.08); }
 .desktop-worker-btn:focus-visible, .desktop-worker-link:focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
+.desktop-worker-link.stop { display: block; margin: 8px auto 0; }
+.desktop-worker > .desktop-worker-btn:first-child { margin-top: 0; }
 .desktop-worker-note { margin: 8px 0 0; font-size: 14px; color: var(--cover-ink-soft); }
 @media (max-width: 768px) { .desktop-worker { display: none; } }
