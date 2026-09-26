@@ -286,6 +286,13 @@ export default function SessionView() {
     chromeHiddenRef.current = hide
     setChromeHidden(hide)
   }
+  // Phones: scrolling down the transcript also tucks away the app's bottom bar
+  // (App.css, body.phone-bar-hidden), while the row with search and Edit stays.
+  const barHidden = chromeHidden && tab === 'transcript'
+  useEffect(() => {
+    document.body.classList.toggle('phone-bar-hidden', barHidden)
+  }, [barHidden])
+  useEffect(() => () => document.body.classList.remove('phone-bar-hidden'), [])
   // On narrow screens the tab row scrolls; keep the active tab in view.
   useEffect(() => {
     tabsRowRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')

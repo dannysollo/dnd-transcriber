@@ -893,10 +893,11 @@ input.written-line:focus {
   .session-header h1 { font-size: 24px !important; }
   /* Tucked away while scrolling down. The height changes in one step: animating
      it re-laid-out the whole transcript every frame, which lagged on phones.
-     Only the fade back in animates (opacity is cheap). */
-  .session-header, .session-toolbar { transition: opacity 180ms ease-out; }
-  .chrome-hidden .session-header, .chrome-hidden .session-toolbar { display: none !important; }
-  @starting-style { .session-header, .session-toolbar { opacity: 0; } }
+     Only the fade back in animates (opacity is cheap). The search/Edit row
+     stays; the app's bottom bar hides instead (App.css). */
+  .session-header { transition: opacity 180ms ease-out; }
+  .chrome-hidden .session-header { display: none !important; }
+  @starting-style { .session-header { opacity: 0; } }
   .session-toolbar { gap: 10px !important; flex-wrap: nowrap !important; }
   .session-toolbar input.written-line { flex: 1 1 auto !important; font-size: 17px !important; }
 

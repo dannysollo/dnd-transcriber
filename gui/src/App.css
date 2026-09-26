@@ -180,6 +180,11 @@
   .sticky-mini-player {
     bottom: 60px !important;
   }
+
+  /* Scrolling down a transcript tucks the bottom bar away (SessionView). */
+  body.phone-bar-hidden .app-sidebar { display: none !important; }
+  body.phone-bar-hidden .app-main { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body.phone-bar-hidden .sticky-mini-player { bottom: env(safe-area-inset-bottom, 0px) !important; }
 }
 
 /* Desktop: offset sticky mini player by sidebar width so it doesn't cover the logout button */
