@@ -307,7 +307,12 @@ def _watch_for_login() -> None:
     # Reconfigure Worker" item is still there if they come back later.
 
 
-def _start_worker_and_load_site() -> None:
+def _start_worker_and_load_site(navigate: bool = True) -> None:
+    """navigate=False when the window is already showing the site (a normal
+    launch): loading it a second time reset pywebview's ready flag, and on
+    this page it never got set again, so every js_api call from the site
+    (the sidebar's worker status, Start, Stop) ran but its answer was never
+    delivered; the status froze and the buttons looked dead."""
     try:
         # worker.start() no-ops if a worker is already reachable on :8788
         # (its single-instance guard) — harmless on first boot (nothing's
@@ -324,7 +329,8 @@ def _start_worker_and_load_site() -> None:
         # dashboard will just show "unreachable" until they fix whatever
         # went wrong and hit "Restart Worker" from the tray menu.
         print(f"[launcher] Failed to start worker: {e}")
-    main_window.load_url(_site_url())
+    if navigate:
+        main_window.load_url(_site_url())
 
 
 def _on_closing() -> bool:
@@ -372,9 +378,18 @@ def _tray_restart_worker() -> None:
 
 
 def _tray_quit() -> None:
-    _cleanup()
-    for w in list(webview.windows):
-        w.destroy()
+    # Quit has to end the process: a copy left running in the background
+    # holds the WebView2 profile, and the next launch then shows a blank
+    # white window. If tearing the windows down doesn't end it, exit anyway.
+    threading.Timer(5.0, lambda: os._exit(0)).start()
+    try:
+        _cleanup()
+    finally:
+        for w in list(webview.windows):
+            try:
+                w.destroy()
+            except Exception as e:
+                print(f"[launcher] Couldn't close a window on quit: {e}")
 
 
 def _on_gui_start() -> None:
@@ -391,7 +406,7 @@ def _on_gui_start() -> None:
     if not onboarding.needs_onboarding():
         # No setup needed (worker.yaml already exists from a previous run) —
         # start the worker immediately rather than waiting on any UI action.
-        threading.Thread(target=_start_worker_and_load_site, daemon=True).start()
+        threading.Thread(target=_start_worker_and_load_site, kwargs={"navigate": False}, daemon=True).start()
 
 
 def _redirect_stdio_for_windowed_build() -> None:
