@@ -10,9 +10,10 @@ Bugs:
 - **Added lines render as raw markdown.** An added line showed as
   `**[00:01] DM (Juno)** test` instead of a normal line. "Add line" opens an
   empty raw text box, so the line format (`**[mm:ss] Speaker:** text`) has to be
-  typed by hand, and this one is missing the colon. Likely fix: new lines get a
-  time and speaker picker (time prefilled from the line above) and a text box,
-  and the app builds the line. Existing malformed lines should still render.
+  typed by hand, and this one is missing the colon. Decided: new lines get a
+  time field (prefilled from the line above), a speaker dropdown and a text
+  box, and the app builds the line. Existing malformed lines should still
+  render.
 - **Adding a rule that applies in several places jumps to the top.** Editing a
   line, then accepting the "add a rule" prompt, drops you at the top of the
   transcript, but only when the rule applies to more than one place.
@@ -25,18 +26,22 @@ Bugs:
   the excerpt on the match.
 - **The first word of a new line goes to the previous line**, even across a long
   silence. Probably word-to-segment assignment at segment boundaries in the
-  worker. Keep the transcript ASR-only: fix the split, don't rewrite text. Need
-  an example session and timestamp, and whether it's Craig sessions,
-  reconstructed ones or both.
+  worker. Seen in the reconstructed legacy sessions, so it's the
+  reconstruction's speaker labelling (label.py: per-word speaker plus Viterbi
+  smoothing) handing a new speaker's first word to the previous one. Fix the
+  labelling or split lines at long pauses, then re-run on the legacy sessions,
+  keeping user edits (as merge_relabel.py does). Keep the words ASR-only.
 
 Improvements:
 - **Names tab: "change all in this session".** Replace every instance of a
   word in this session only, without creating a rule or a suggestion for other
-  sessions.
+  sessions. Decided: it changes the transcript, summary and wiki suggestions
+  (the files a rule touches), for this session only.
 - **Mobile: hiding/showing the top section on scroll is laggy.**
 - **Mobile: the rename-people UI looks awkward.**
 - **Mobile bottom bar: Sessions, Search, Corrections** (plus More), instead of
-  Sessions, Quotes, Search. Quotes moves into More.
+  Sessions, Quotes, Search. Decided: Sessions, Search, Corrections, More;
+  Quotes moves into More.
 - **Corrections: sort by the correct word**, not the wrong one, so all the
   Ereshkigal rules sit together.
 
