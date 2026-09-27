@@ -3190,6 +3190,36 @@ def campaign_get_confidence(
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+class DismissUnsureBody(BaseModel):
+    ts: str
+    speaker: str
+    word: str
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/confidence/dismiss")
+def campaign_dismiss_unsure_word(
+    slug: str,
+    name: str,
+    body: DismissUnsureBody,
+    _member=Depends(require_campaign_member("player")),
+):
+    """"Keep" in the unsure-word review: the word is right, so stop flagging it
+    (drops it from the line's low-confidence list)."""
+    path = get_sessions_dir(slug) / name / CONFIDENCE_FILE
+    if not path.exists():
+        raise HTTPException(404, "No confidence data for this session")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    removed = 0
+    for line in data.get("lines", []):
+        if line.get("ts") == body.ts and line.get("speaker") == body.speaker:
+            keep = [w for w in line.get("words", []) if w.get("word", "").lower() != body.word.lower()]
+            removed += len(line.get("words", [])) - len(keep)
+            line["words"] = keep
+    data["lines"] = [l for l in data.get("lines", []) if l.get("words")]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return {"removed": removed}
+
+
 @app.get("/campaigns/{slug}/sessions/{name}/unknown-words")
 def campaign_unknown_words(
     slug: str,

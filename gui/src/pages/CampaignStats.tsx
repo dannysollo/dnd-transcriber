@@ -210,7 +210,7 @@ export default function CampaignStats({ slug }: { slug: string }) {
       {(data.longest_speeches ?? []).length > 0 && (
         <section aria-label="Longest speeches" style={{ marginBottom: 36 }}>
           <div className="barlist-head"><h3 className="sc">Longest speeches</h3></div>
-          <p className="barlist-note">Up to two short interjections from others don't end a speech. Speeches in the first 10 minutes (usually the recap) don't count.</p>
+          <p className="barlist-note">Short interjections from others (a few words, up to two in a row) don't end a speech. Speeches in the first 10 minutes (usually the recap) don't count.</p>
           <SpeechList speeches={data.longest_speeches!} at={sp => at(String(sp.session), sp.ts)} />
         </section>
       )}

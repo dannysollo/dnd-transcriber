@@ -122,6 +122,8 @@
   .session-content {
     padding: 10px 12px !important;
   }
+  /* Room for the docked mini player so it doesn't cover the last lines. */
+  .session-content.has-audio { padding-bottom: 96px !important; }
 
   /* Compact session header on mobile */
   .session-view-root > div:first-of-type {

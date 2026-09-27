@@ -225,7 +225,9 @@ def _transcribe_via_vad_chunks(wav_path: str, model, **whisper_kwargs) -> dict:
                     "start": chunk_start + seg["start"],
                     "end": chunk_start + seg["end"],
                     "text": seg["text"],
-                    "low_conf": seg.get("low_conf", []),
+                    # word times are relative to the chunk too
+                    "low_conf": [{**w, "t": round(chunk_start + w["t"], 2)} if "t" in w else w
+                                 for w in seg.get("low_conf", [])],
                 })
         finally:
             Path(tmp.name).unlink(missing_ok=True)

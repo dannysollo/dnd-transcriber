@@ -4,6 +4,18 @@
 // focus, and a table view so nothing is hover-only.
 import { useState, type ReactNode } from 'react'
 
+/** Beside the point, flipped to its left (or above it) near the right (or bottom)
+ * edge so it never runs off screen. x, y are viewport coordinates. */
+function tooltipPosition(x: number, y: number): React.CSSProperties {
+  const flipX = x > window.innerWidth - 240
+  const flipY = y > window.innerHeight - 120
+  return {
+    left: flipX ? x - 14 : x + 14,
+    top: flipY ? y - 14 : y + 14,
+    transform: `translate(${flipX ? '-100%' : '0'}, ${flipY ? '-100%' : '0'})`,
+  }
+}
+
 export interface BarRow {
   key: string
   label: ReactNode          // shown left of the bar
@@ -71,7 +83,7 @@ export function BarList({ title, note, rows, valueHeader = 'Value' }: {
       )}
 
       {hovered && hover && !asTable && (
-        <div className="chart-tooltip" role="tooltip" style={{ left: hover.x + 14, top: hover.y + 14 }}>
+        <div className="chart-tooltip" role="tooltip" style={tooltipPosition(hover.x, hover.y)}>
           <strong>{hovered.display}</strong>
           <span>{hovered.labelText}</span>
           {hovered.details?.map(d => <span key={d} className="muted">{d}</span>)}
@@ -129,7 +141,7 @@ export function TrendLine({ points, max, format, label, width = 320, height = 64
         ))}
       </svg>
       {hp && hover && hp.value !== null && (
-        <div className="chart-tooltip" role="tooltip" style={{ left: hover.x + 14, top: hover.y + 14 }}>
+        <div className="chart-tooltip" role="tooltip" style={tooltipPosition(hover.x, hover.y)}>
           <strong>{format(hp.value)}</strong>
           <span>{hp.label}</span>
         </div>

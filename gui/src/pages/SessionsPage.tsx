@@ -3,6 +3,8 @@ import { AlertIcon, CloseIcon } from '../Icons'
 import { useNavigate } from 'react-router-dom'
 import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
+
+const LAST_SESSION_KEY = 'codm-last-session'
 import { useToast } from '../Toast'
 
 type SortKey = 'name' | 'date_added' | 'modified'
@@ -119,6 +121,23 @@ export default function SessionsPage() {
       setJobMap(map)
     }
   }
+
+  // Coming back from a session puts you next to it in the list, not at the top.
+  const openSession = (name: string) => {
+    try { sessionStorage.setItem(LAST_SESSION_KEY, name) } catch { /* no storage */ }
+    navigate(`/sessions/${name}`)
+  }
+  useEffect(() => {
+    if (loading || !sessions.length) return
+    let name: string | null = null
+    try { name = sessionStorage.getItem(LAST_SESSION_KEY); sessionStorage.removeItem(LAST_SESSION_KEY) } catch { /* no storage */ }
+    if (!name) return
+    const row = document.querySelector<HTMLElement>(`.session-card[data-session="${CSS.escape(name)}"]`)
+    if (!row) return
+    row.scrollIntoView({ block: 'center' })
+    row.classList.add('session-card-return')
+    window.setTimeout(() => row.classList.remove('session-card-return'), 1600)
+  }, [loading, sessions.length])
 
   const load = async () => {
     setLoading(true)
@@ -496,6 +515,7 @@ export default function SessionsPage() {
             return (
               <div
                 key={s.name}
+                data-session={s.name}
                 className="session-card"
                 onDragEnter={e => handleDragEnter(e, s.name)}
                 onDragLeave={e => handleDragLeave(e, s.name)}
@@ -530,7 +550,7 @@ export default function SessionsPage() {
                     {/* Top row: title + badges */}
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: s.description ? 5 : 0 }}>
                       <div
-                        onClick={() => navigate(`/sessions/${s.name}`)}
+                        onClick={() => openSession(s.name)}
                         style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
                       >
                         <div className="session-row-title" title={s.name}>
@@ -565,7 +585,7 @@ export default function SessionsPage() {
                     {/* Description blurb */}
                     {s.description && (
                       <p
-                        onClick={() => navigate(`/sessions/${s.name}`)}
+                        onClick={() => openSession(s.name)}
                         style={{
                           margin: '0 0 8px 0',
                           fontSize: '16px',

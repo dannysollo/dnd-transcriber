@@ -235,7 +235,7 @@ def render_stats_pdf(data: dict, campaign_name: str) -> bytes:
 
     top = data.get("longest_speeches", [])
     if top:
-        parts.append("<div class=\"keep\"><h2>Longest speeches</h2><p class=\"note\">Up to two short interjections from others don't end a speech. "
+        parts.append("<div class=\"keep\"><h2>Longest speeches</h2><p class=\"note\">Short interjections from others (a few words, up to two in a row) don't end a speech. "
                      "Speeches in the first 10 minutes (usually the recap) don't count.</p><div class=\"records speeches\">")
         for i, x in enumerate(top, 1):
             how = f", through {x['interjections']} short interjection{'s' if x['interjections'] != 1 else ''}" if x["interjections"] else ""

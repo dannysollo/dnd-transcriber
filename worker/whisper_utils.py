@@ -168,14 +168,20 @@ LOW_CONF_RECORD_THRESHOLD = 0.6
 
 
 def _low_conf_words(words) -> list[dict]:
-    """[{word, prob}] for words below LOW_CONF_RECORD_THRESHOLD, in order."""
+    """[{word, prob, t}] for words below LOW_CONF_RECORD_THRESHOLD, in order.
+    t = the word's start in seconds (relative to the audio Whisper was given;
+    transcribe.py shifts it by the chunk's start), so the site can play the
+    word itself rather than the start of a long line."""
     out = []
     for w in words:
         prob = getattr(w, "probability", None)
         text = w.word.strip().strip(".,!?;:\"()\u2026-")
         if prob is None or not text or prob >= LOW_CONF_RECORD_THRESHOLD:
             continue
-        out.append({"word": text, "prob": round(float(prob), 3)})
+        item = {"word": text, "prob": round(float(prob), 3)}
+        if getattr(w, "start", None) is not None:
+            item["t"] = round(float(w.start), 2)
+        out.append(item)
     return out
 
 

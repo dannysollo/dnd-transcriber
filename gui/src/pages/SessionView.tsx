@@ -93,7 +93,7 @@ const ribbonKey = (campaign: string, session: string) => `dnd-ribbon:${campaign}
 // The worker records words Whisper decoded with low probability, keyed by the
 // transcript line's timestamp + speaker (line numbers shift with edits).
 
-interface LowConfWord { word: string; prob: number }
+interface LowConfWord { word: string; prob: number; t?: number }  // t: the word's start, seconds (newer transcripts)
 interface ConfidenceMap { version: number; lines: { ts: string; speaker: string; words: LowConfWord[] }[] }
 type ConfidenceIndex = Map<string, { speaker: string; words: LowConfWord[] }[]>
 
@@ -293,6 +293,20 @@ export default function SessionView() {
     document.body.classList.toggle('phone-bar-hidden', barHidden)
   }, [barHidden])
   useEffect(() => () => document.body.classList.remove('phone-bar-hidden'), [])
+  // Which ends of the scrolling tab row have more tabs past them: the fade
+  // shows only on those sides ("start", "end", "both" or "none").
+  const [tabEdges, setTabEdges] = useState('end')
+  const updateTabEdges = () => {
+    const el = tabsRowRef.current
+    if (!el) return
+    const left = el.scrollLeft > 4, right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+    setTabEdges(left && right ? 'both' : left ? 'start' : right ? 'end' : 'none')
+  }
+  useEffect(() => {
+    updateTabEdges()
+    window.addEventListener('resize', updateTabEdges)
+    return () => window.removeEventListener('resize', updateTabEdges)
+  }, [])
   // On narrow screens the tab row scrolls; keep the active tab in view.
   useEffect(() => {
     tabsRowRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')
@@ -779,8 +793,11 @@ export default function SessionView() {
   }
 
   /** Play one transcript line in place: from its start to the next line's (at most 20 s). */
-  const playLine = (timestamp: string) => {
+  const playLine = (timestamp: string, word?: string, text?: string) => {
     const from = parseTimestampToSeconds(timestamp)
+    // A Names example: play around the word itself (a long line's later words
+    // used to fall after the clip ended).
+    if (word && text) { playMoment(...wordClip(from, text, word)); return }
     const next = lineStarts.find(l => l.seconds > from)?.seconds ?? from + 8
     playMoment(Math.max(0, from - 0.5), Math.min(next + 0.8, from + 20))
   }
@@ -1267,7 +1284,7 @@ export default function SessionView() {
         flexDirection: 'column',
         flexShrink: 0,
       }}>
-      <div ref={tabsRowRef} className="session-tabs-row" role="tablist" style={{ display: 'flex', gap: '28px', padding: '0 48px', overflowX: 'auto', scrollbarWidth: 'none', borderBottom: '1px solid var(--rule)' }}>
+      <div ref={tabsRowRef} className="session-tabs-row" role="tablist" data-edges={tabEdges} onScroll={updateTabEdges} style={{ display: 'flex', gap: '28px', padding: '0 48px', overflowX: 'auto', scrollbarWidth: 'none', borderBottom: '1px solid var(--rule)' }}>
         {tabs.map(t => (
           <button
             key={t.id}
@@ -1511,7 +1528,7 @@ export default function SessionView() {
       )}
 
       {/* Content */}
-      <div ref={sessionContentRef} className="session-content" onScroll={onContentScroll} style={{ flex: 1, overflow: 'auto', padding: '18px 48px', paddingBottom: !mainAudioVisible && audioFiles.length > 0 ? '80px' : '40px' }}>
+      <div ref={sessionContentRef} className={'session-content' + (audioFiles.length > 0 ? ' has-audio' : '')} onScroll={onContentScroll} style={{ flex: 1, overflow: 'auto', padding: '18px 48px', paddingBottom: !mainAudioVisible && audioFiles.length > 0 ? '80px' : '40px' }}>
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '820px' }}>
             {[0,1,2,3].map(i => (
@@ -3801,7 +3818,22 @@ function ChangesView({
 const WALK_THRESHOLD = 0.5
 const LINE_PARTS = /^(\*\*\[([^\]]+)\] ([^:]+):\*\* )(.*)$/
 
-interface WalkItem { lineIdx: number; ts: string; seconds: number; speaker: string; word: string; prob: number }
+interface WalkItem { lineIdx: number; ts: string; seconds: number; speaker: string; word: string; prob: number; t?: number }
+
+/** Roughly where a word falls in a line, in seconds from the line's start, at
+ * an ordinary speaking pace. For older transcripts that don't store word times. */
+function wordOffsetSeconds(text: string, word: string): number {
+  const m = wordRegex(word).exec(text)
+  if (!m) return 0
+  return text.slice(0, m.index).split(/\s+/).filter(Boolean).length / 2.5
+}
+
+/** A short clip around a word: a little before it to a few seconds after. */
+function wordClip(lineStart: number, text: string, word: string, t?: number): [number, number] {
+  const at = t ?? lineStart + wordOffsetSeconds(text, word)
+  const from = Math.max(lineStart - 0.5, at - 2, 0)
+  return [from, Math.max(at + 4, from + 5)]
+}
 
 function wordRegex(word: string) {
   return new RegExp(`(^|[^A-Za-z0-9'])(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?![A-Za-z0-9'])`, 'i')
@@ -3842,7 +3874,7 @@ function buildWalkItems(transcript: string, confidence: ConfidenceMap | null): W
       const key = `${lineIdx}|${w.word.toLowerCase()}`
       if (seen.has(key)) continue
       seen.add(key)
-      items.push({ lineIdx, ts: m[2], seconds: parseTimestampToSeconds(m[2]), speaker: m[3], word: w.word, prob: w.prob })
+      items.push({ lineIdx, ts: m[2], seconds: parseTimestampToSeconds(m[2]), speaker: m[3], word: w.word, prob: w.prob, t: w.t })
     }
   }
   return items.sort((a, b) => a.seconds - b.seconds || a.lineIdx - b.lineIdx)
@@ -3868,18 +3900,21 @@ function UnsureWalkthrough({
   const [addRule, setAddRule] = useState(false)
   const [busy, setBusy] = useState(false)
   const [fixed, setFixed] = useState(0)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const lines = useMemo(() => transcript.split('\n'), [transcript])
   const item = items[idx]
 
-  // Each stop: bring the line into view and play from just before it to the
-  // next line (or 8s at most).
+  // Each stop: bring the line into view and play a few seconds around the word
+  // (its stored time when the transcript has one, else estimated from its
+  // position in the line). Playing from the line's start missed words late in
+  // long lines.
+  const clipFor = (it: WalkItem) => wordClip(it.seconds, lines[it.lineIdx]?.match(LINE_PARTS)?.[4] ?? '', it.word, it.t)
   useEffect(() => {
     if (!item) return
     setValue(item.word)
     setAddRule(false)
     onShowLine(item.ts)
-    const next = items.slice(idx + 1).find(i => i.lineIdx !== item.lineIdx)?.seconds
-    onPlay(Math.max(0, item.seconds - 0.5), Math.min(next ?? item.seconds + 8, item.seconds + 8))
+    onPlay(...clipFor(item))
   }, [idx])
   useEffect(() => () => onStop(), [])
 
@@ -3899,7 +3934,47 @@ function UnsureWalkthrough({
   const after = at >= 0 ? text.slice(at + item.word.length, at + item.word.length + 90) : ''
   const changed = value.trim() !== '' && value.trim() !== item.word
 
-  const advance = () => setIdx(i => i + 1)
+  const advance = () => { setConfirmDelete(false); setIdx(i => i + 1) }
+
+  // Keep: the word is right, so stop flagging it (here and in the transcript).
+  const keepWord = async () => {
+    setBusy(true)
+    try {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/confidence/dismiss`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ts: item.ts, speaker: item.speaker, word: item.word }),
+      })
+      if (!r.ok) { toast('Could not mark it as checked', 'error'); return }
+      onChanged()
+      advance()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Delete line: for a line nobody said (a hallucination). Blanks it, so line
+  // numbers stay put, and moves past every unsure word in it.
+  const deleteLine = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return }
+    setBusy(true)
+    try {
+      const r = await fetch(apiUrl(`/sessions/${sessionName}/transcript/line/${item.lineIdx + 1}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: '' }),
+      })
+      if (!r.ok) { toast('Could not delete the line', 'error'); return }
+      if (r.status === 202) toast('Deletion sent to the DM for review', 'info')
+      else lines[item.lineIdx] = ''
+      onChanged()
+      setConfirmDelete(false)
+      const next = items.findIndex((it, i) => i > idx && it.lineIdx !== item.lineIdx)
+      setIdx(next === -1 ? items.length : next)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const applyFix = async () => {
     const m = lines[item.lineIdx]?.match(LINE_PARTS)
@@ -3946,7 +4021,7 @@ function UnsureWalkthrough({
       </p>
       <form
         className="walkthrough-actions"
-        onSubmit={e => { e.preventDefault(); if (changed) applyFix(); else advance() }}
+        onSubmit={e => { e.preventDefault(); if (changed) applyFix(); else keepWord() }}
       >
         <input
           autoFocus
@@ -3962,14 +4037,19 @@ function UnsureWalkthrough({
           also save as a rule
         </label>
         <span style={{ flex: 1 }} />
-        <button type="button" className="btn-ghost" onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0}>Back</button>
+        <button type="button" className="btn-ghost" onClick={() => { setConfirmDelete(false); setIdx(i => Math.max(0, i - 1)) }} disabled={idx === 0}>Back</button>
+        <button type="button" className="btn-ghost" onClick={advance} title="Leave it flagged and move on">Skip</button>
+        <button type="button" className={confirmDelete ? 'btn-danger' : 'btn-ghost'} onClick={deleteLine} disabled={busy}
+          title="Remove the whole line (for a line nobody actually said)">
+          {confirmDelete ? 'Confirm delete' : 'Delete line'}
+        </button>
         <button type="button" className="btn-ghost"
-          onClick={() => onPlay(Math.max(0, item.seconds - 0.5), item.seconds + 8)}>Play again</button>
+          onClick={() => onPlay(...clipFor(item))}>Play again</button>
         <button type="submit" className={changed ? 'btn-primary' : 'btn-secondary'} disabled={busy}>
           {changed ? 'Fix' : 'Keep'}
         </button>
       </form>
-      <div style={{ fontSize: 14, color: 'var(--ink-faint)' }}>Enter keeps the word (or applies your fix). Esc closes.</div>
+      <div style={{ fontSize: 14, color: 'var(--ink-faint)' }}>Keep marks the word as checked; Skip leaves it flagged. Enter keeps the word (or applies your fix). Esc closes.</div>
     </div>
   )
 }
@@ -4133,7 +4213,7 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
       {(stats.longest_speeches ?? []).length > 0 && (
         <section aria-label="Longest speeches" style={{ marginBottom: 36 }}>
           <div className="barlist-head"><h3 className="sc">Longest speeches</h3></div>
-          <p className="barlist-note">Up to two short interjections from others don't end a speech. Speeches in the first 10 minutes (usually the recap) don't count.</p>
+          <p className="barlist-note">Short interjections from others (a few words, up to two in a row) don't end a speech. Speeches in the first 10 minutes (usually the recap) don't count.</p>
           <SpeechList speeches={stats.longest_speeches!} at={sp => <>at {at(sp.ts)}</>} />
         </section>
       )}
@@ -4268,7 +4348,7 @@ function UnknownWordsPanel({
   onJump: (timestamp: string) => void
   onRuleAdded: () => void
   /** Play the line at this timestamp in place (absent when the session has no audio). */
-  onPlay?: (timestamp: string) => void
+  onPlay?: (timestamp: string, word?: string, text?: string) => void
   onStop?: () => void
   audioPlaying?: boolean
 }) {
@@ -4474,7 +4554,7 @@ function UnknownWordsPanel({
         <div key={ex.line} className="unknown-word-example-row">
         {onPlay && (
           <button type="button" className="example-play"
-            onClick={() => { if (playing) { onStop?.(); setPlayingKey(null) } else { setPlayingKey(key); onPlay(ex.ts) } }}
+            onClick={() => { if (playing) { onStop?.(); setPlayingKey(null) } else { setPlayingKey(key); onPlay(ex.ts, w.word, ex.text) } }}
             aria-label={playing ? `Stop the audio at ${ex.ts}` : `Play the audio at ${ex.ts}`}
             title={playing ? 'Stop' : 'Play this line'}>
             {playing ? <PauseIcon size={14} /> : <PlayIcon size={14} />}
@@ -4659,7 +4739,13 @@ const EditChunk = React.memo(function EditChunk({ start, lines, editingIdx, pend
   if (!shown) {
     const h = estimateHeight(lines)
     placeholderH.current = h
-    return <div ref={ref} className="edit-chunk-placeholder" style={{ height: h }} />
+    // A throbber that stays in view while you scroll over lines not rendered yet
+    // (on a slow phone this used to look like the page had frozen).
+    return (
+      <div ref={ref} className="edit-chunk-placeholder" style={{ height: h }}>
+        <div className="chunk-throbber" role="status"><span className="throbber" aria-hidden="true" />Loading lines…</div>
+      </div>
+    )
   }
   const pending = pendingKey ? new Set(pendingKey.split(',').map(Number)) : null
   return (
