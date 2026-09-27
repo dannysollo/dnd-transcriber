@@ -12,6 +12,7 @@ running for the same campaign — two pollers would double-claim jobs.
 import os
 import subprocess
 import sys
+import threading
 import time
 from typing import Optional
 
@@ -29,6 +30,9 @@ class WorkerProcess:
     def __init__(self):
         self._proc: Optional[subprocess.Popen] = None
         self._log_file = None
+        # start() and stop() are called from several threads (app startup, the
+        # site's Start/Stop buttons, the tray). One at a time.
+        self._lock = threading.RLock()
 
     # ── Status ────────────────────────────────────────────────────────────
 
@@ -57,6 +61,16 @@ class WorkerProcess:
     def start(self) -> None:
         """Spawn the worker, unless one is already running on :8788 — in
         that case this app just attaches to it (single-instance guard)."""
+        with self._lock:
+            self._start()
+
+    def _start(self) -> None:
+        # Our own worker still booting counts as running: its dashboard takes a
+        # few seconds to come up, and checking only the dashboard let a second
+        # start in that window spawn a second worker (two pollers, double claims).
+        if self._proc is not None and self._proc.poll() is None:
+            print("[launcher] Worker already starting or running — not spawning another.")
+            return
         if self._dashboard_alive():
             print("[launcher] Worker already running on :8788 — attaching instead of spawning a new one.")
             return
@@ -142,6 +156,10 @@ class WorkerProcess:
         """Ask the worker to stop via HTTP, then wait, then hard-kill the
         whole process tree if it hasn't exited in time. Safe to call even if
         nothing is running."""
+        with self._lock:
+            self._stop(timeout)
+
+    def _stop(self, timeout: float) -> None:
         if not self.is_running():
             return
 

@@ -406,7 +406,9 @@ def _on_gui_start() -> None:
     if not onboarding.needs_onboarding():
         # No setup needed (worker.yaml already exists from a previous run) —
         # start the worker immediately rather than waiting on any UI action.
-        threading.Thread(target=_start_worker_and_load_site, kwargs={"navigate": False}, daemon=True).start()
+        # Through _run_worker_action, so the sidebar shows "starting" and a
+        # Start click during startup is ignored instead of starting a second worker.
+        _run_worker_action("starting", lambda: _start_worker_and_load_site(navigate=False))
 
 
 def _redirect_stdio_for_windowed_build() -> None:
