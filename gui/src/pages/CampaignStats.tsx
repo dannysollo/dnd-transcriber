@@ -27,6 +27,7 @@ interface Profile {
 type Records = Record<string, Record<string, string | number>>
 
 interface CampaignStatsData {
+  updating?: boolean  // previous counts, a recount is running on the server
   sessions: number
   duration_seconds: number
   words: number
@@ -135,6 +136,13 @@ export default function CampaignStats({ slug }: { slug: string }) {
       .catch(() => setFailed(true))
       .finally(() => setRefreshing(false))
   }, [slug, version])
+  // The server shows the last counts at once while it recounts after a change
+  // ("updating"); check back until the fresh ones are in.
+  useEffect(() => {
+    if (!data?.updating) return
+    const id = window.setTimeout(() => setVersion(v => v + 1), 15000)
+    return () => window.clearTimeout(id)
+  }, [data])
 
   const refresh = () => { setRefreshing(true); setVersion(v => v + 1) }
 
@@ -170,6 +178,7 @@ export default function CampaignStats({ slug }: { slug: string }) {
 
   return (
     <div style={{ maxWidth: '860px' }}>
+      {data.updating && <p className="barlist-note stats-updating" role="status"><span className="throbber" aria-hidden="true" />Updating with the latest changes. These are the previous counts.</p>}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
         <p className="stats-sentence" style={{ flex: '1 1 420px' }}>
           {data.sessions} session{data.sessions !== 1 ? 's' : ''} recorded, {formatDuration(data.duration_seconds)} at the table

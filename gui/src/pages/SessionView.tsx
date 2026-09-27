@@ -4080,6 +4080,7 @@ export function SpeechList({ speeches, at }: { speeches: Speech[]; at: (s: Speec
 }
 
 interface SessionStats {
+  updating?: boolean  // previous counts, a recount is running on the server
   duration_seconds: number
   lines: number
   words: number
@@ -4108,12 +4109,19 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
   const apiUrl = useApiUrl()
   const [stats, setStats] = useState<SessionStats | null>(null)
   const [failed, setFailed] = useState(false)
+  const [version, setVersion] = useState(0)
   useEffect(() => {
     fetch(apiUrl(`/sessions/${sessionName}/stats`))
       .then(r => (r.ok ? r.json() : Promise.reject()))
       .then(setStats)
       .catch(() => setFailed(true))
-  }, [sessionName, apiUrl])
+  }, [sessionName, apiUrl, version])
+  // Previous counts shown while the server recounts: check back for the fresh ones.
+  useEffect(() => {
+    if (!stats?.updating) return
+    const id = window.setTimeout(() => setVersion(v => v + 1), 15000)
+    return () => window.clearTimeout(id)
+  }, [stats])
 
   if (failed) return <EmptyTabState title="Stats unavailable" message="The transcript couldn't be counted. Try reloading." />
   if (!stats) return <div className="skeleton" style={{ height: 200, maxWidth: 820 }} />
@@ -4179,6 +4187,7 @@ function SessionStatsPanel({ sessionName, onJump }: { sessionName: string; onJum
 
   return (
     <div style={{ maxWidth: '820px' }}>
+      {stats.updating && <p className="barlist-note stats-updating" role="status"><span className="throbber" aria-hidden="true" />Updating with the latest changes. These are the previous counts.</p>}
       <p className="stats-sentence">
         {formatDuration(stats.duration_seconds)} at the table, {stats.words.toLocaleString()} words
         {stats.words_per_minute && !stats.comparison ? <> ({Math.round(stats.words_per_minute)} a minute)</> : null} across {stats.lines.toLocaleString()} lines

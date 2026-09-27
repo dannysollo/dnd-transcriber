@@ -4,6 +4,7 @@ server.py — FastAPI backend for the Co-DM GUI
 import asyncio
 from datetime import datetime
 import io
+import hashlib
 import json
 import os
 import queue
@@ -3395,6 +3396,63 @@ def _cached(key: tuple, compute):
     return value
 
 
+# Stats take ~30s to recompute for the whole campaign on the small Fly machine,
+# and any change to any session (an edit, a quote, a cleanup) invalidates them.
+# The machine also stops when idle, emptying the in-memory cache. So results
+# are kept on disk, and when something changed the last result is served at
+# once (with "updating": true) while a fresh one is computed in the background.
+_swr_latest: dict[tuple, tuple[str, dict]] = {}
+_swr_running: set[tuple] = set()
+_swr_lock = threading.Lock()
+
+
+def _swr_path(key: tuple) -> Path:
+    slug = key[1]
+    digest = hashlib.md5(json.dumps(key, default=str).encode()).hexdigest()[:16]
+    return BASE_DIR / "campaigns" / slug / ".stats-cache" / f"{key[0]}-{digest}.json"
+
+
+def _stale_while_revalidate(key: tuple, fingerprint: tuple, compute) -> dict:
+    fp = hashlib.md5(json.dumps(fingerprint, default=str).encode()).hexdigest()
+    have = _swr_latest.get(key)
+    if have is None:
+        path = _swr_path(key)
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            have = (saved["fp"], saved["value"])
+            _swr_latest[key] = have
+        except Exception:
+            have = None
+    if have and have[0] == fp:
+        return have[1]
+
+    def run():
+        try:
+            value = compute()
+            _swr_latest[key] = (fp, value)
+            path = _swr_path(key)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"fp": fp, "value": value}), encoding="utf-8")
+            tmp.replace(path)
+        finally:
+            with _swr_lock:
+                _swr_running.discard(key)
+
+    if have is None:  # nothing to show yet: compute now
+        with _swr_lock:
+            _swr_running.add(key)
+        run()
+        return _swr_latest[key][1]
+    with _swr_lock:
+        start = key not in _swr_running
+        if start:
+            _swr_running.add(key)
+    if start:
+        threading.Thread(target=run, daemon=True).start()
+    return {**have[1], "updating": True}
+
+
 @app.get("/campaigns/{slug}/sessions/{name}/stats")
 def campaign_session_stats(
     slug: str,
@@ -3406,8 +3464,8 @@ def campaign_session_stats(
     path = get_sessions_dir(slug) / name / "transcript.md"
     if not path.exists():
         raise HTTPException(404, "Transcript not found")
-    return _cached(("session-stats", slug, name, _campaign_fingerprint(slug)),
-                   lambda: _session_stats_payload(slug, name, path))
+    return _stale_while_revalidate(("session-stats", slug, name), _campaign_fingerprint(slug),
+                                   lambda: _session_stats_payload(slug, name, path))
 
 
 def _session_stats_payload(slug: str, name: str, path: Path) -> dict:
@@ -3442,8 +3500,9 @@ def _campaign_transcripts(slug: str) -> list[dict]:
 
 
 def _campaign_stats_payload(slug: str) -> dict:
-    """Everything the campaign Stats page and its PDF show (cached until anything changes)."""
-    return _cached(("campaign-stats", slug, _campaign_fingerprint(slug)), lambda: _compute_campaign_stats(slug))
+    """Everything the campaign Stats page and its PDF show (see _stale_while_revalidate)."""
+    return _stale_while_revalidate(("campaign-stats", slug), _campaign_fingerprint(slug),
+                                   lambda: _compute_campaign_stats(slug))
 
 
 def _compute_campaign_stats(slug: str) -> dict:

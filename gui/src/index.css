@@ -1008,3 +1008,4 @@ input.written-line:focus {
 }
 @keyframes throbber-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .throbber { animation-duration: 2.4s; } }
+.stats-updating { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
