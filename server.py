@@ -235,6 +235,33 @@ def rename_session(name: str, body: RenameSessionBody):
     return {"name": body.new_name, "status": session_status(new_path)}
 
 
+SESSION_RENAMES_FILE = "session_renames.json"
+
+
+def _record_session_rename(slug: str, old: str, new: str) -> None:
+    path = get_sessions_dir(slug).parent / SESSION_RENAMES_FILE
+    try:
+        renames = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except Exception:
+        renames = {}
+    renames = {k: (new if v == old else v) for k, v in renames.items()}  # chains: a -> b -> c
+    renames[old] = new
+    renames.pop(new, None)  # renamed back
+    path.write_text(json.dumps(renames, indent=1), encoding="utf-8")
+
+
+def _current_session_name(slug: str, name: str) -> str:
+    """The session's name now, for a worker still using the name it was queued under."""
+    if (get_sessions_dir(slug) / name).exists():
+        return name
+    path = get_sessions_dir(slug).parent / SESSION_RENAMES_FILE
+    try:
+        renames = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except Exception:
+        return name
+    return renames.get(name, name)
+
+
 @app.get("/sessions/{name}/transcript")
 def get_transcript(name: str):
     sessions_dir = get_sessions_dir()
@@ -1806,6 +1833,7 @@ def campaign_rename_session(
     name: str,
     body: RenameSessionBody,
     _member=Depends(require_campaign_member("dm")),
+    db: Session = Depends(get_db),
 ):
     if "/" in body.new_name or "\\" in body.new_name:
         raise HTTPException(400, "Session name cannot contain slashes")
@@ -1819,6 +1847,17 @@ def campaign_rename_session(
     if new_path.exists():
         raise HTTPException(400, f"Session '{body.new_name}' already exists")
     old_path.rename(new_path)
+    # Rows that point at the session by name follow it (a queued or running
+    # transcription job, share links, edits waiting for review), and the old
+    # name is remembered: a worker that claimed the job before the rename
+    # still uploads under the old name.
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if campaign:
+        for model in (TranscriptionJob, SessionShare, TranscriptEdit):
+            db.query(model).filter(model.campaign_id == campaign.id, model.session_name == name) \
+              .update({model.session_name: body.new_name}, synchronize_session=False)
+        db.commit()
+    _record_session_rename(slug, name, body.new_name)
     return {"name": body.new_name, "status": session_status(new_path)}
 
 
@@ -3777,6 +3816,7 @@ def worker_list_pending_jobs(slug: str, db: Session = Depends(get_db), request: 
 @app.post("/campaigns/{slug}/worker/jobs/{session_name}/claim")
 def worker_claim_job(slug: str, session_name: str, db: Session = Depends(get_db), request: Request = None):
     campaign = require_worker_key(slug)(request, db)
+    session_name = _current_session_name(slug, session_name)
     job = crud.get_job(db, campaign.id, session_name)
     if not job:
         raise HTTPException(404, "Job not found")
@@ -3802,6 +3842,7 @@ def worker_push_transcript(
     db: Session = Depends(get_db), request: Request = None,
 ):
     campaign = require_worker_key(slug)(request, db)
+    session_name = _current_session_name(slug, session_name)
     session_dir = BASE_DIR / "campaigns" / slug / "sessions" / session_name
     session_dir.mkdir(parents=True, exist_ok=True)
     (session_dir / "transcript.md").write_text(body.transcript, encoding="utf-8")
@@ -3825,6 +3866,7 @@ async def worker_push_audio(
     db: Session = Depends(get_db), request: Request = None,
 ):
     require_worker_key(slug)(request, db)
+    session_name = _current_session_name(slug, session_name)
     session_dir = BASE_DIR / "campaigns" / slug / "sessions" / session_name
     session_dir.mkdir(parents=True, exist_ok=True)
     # Always store as merged.mp3 regardless of uploaded filename
@@ -3845,6 +3887,7 @@ def worker_report_error(
     db: Session = Depends(get_db), request: Request = None,
 ):
     campaign = require_worker_key(slug)(request, db)
+    session_name = _current_session_name(slug, session_name)
     job = crud.get_job(db, campaign.id, session_name)
     if not job:
         raise HTTPException(404, "Job not found")
@@ -4131,6 +4174,7 @@ def worker_push_analysis_result(
 ):
     """Worker posts completed analysis back. Clears the flag and writes files."""
     require_worker_key(slug)(request, db)
+    name = _current_session_name(slug, name)
     session_dir = get_sessions_dir(slug) / name
     if not session_dir.exists():
         raise HTTPException(404, "Session not found")
