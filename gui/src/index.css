@@ -738,12 +738,17 @@ input.written-line:focus {
 .jump-link { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; cursor: pointer; }
 .jump-link:hover { color: var(--rubric); text-decoration-color: currentColor; }
 .jump-link:focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
-.attendance { border-collapse: collapse; margin-top: 12px; font-size: 16px; }
-.attendance th, .attendance td { padding: 4px 6px; text-align: center; border-bottom: 1px solid var(--rule); }
+/* Fits the width however many sessions there are (it used to scroll sideways,
+   hiding the later sessions and the Missed column with no hint they were there). */
+.attendance { border-collapse: collapse; margin-top: 12px; font-size: 16px; width: 100%; table-layout: fixed; }
+.attendance th, .attendance td { padding: 4px 1px; text-align: center; border-bottom: 1px solid var(--rule); }
+.attendance .attendance-name-col { width: 96px; }
+.attendance .attendance-missed-col { width: 64px; }
+.attendance td:last-child, .attendance th:last-child { padding-left: 8px; }
 .attendance th[scope="row"] { text-align: right; font-weight: 400; padding-right: 14px; white-space: nowrap; }
-.attendance thead th { font-weight: 600; color: var(--ink-faint); font-size: 14px; font-variant-numeric: lining-nums tabular-nums; }
-.attendance .mark { display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: var(--chart-bar); vertical-align: middle; }
-.attendance .gap { display: inline-block; width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--rule-strong); vertical-align: middle; }
+.attendance thead th { font-weight: 600; color: var(--ink-faint); font-size: 13px; overflow: visible; white-space: nowrap; font-variant-numeric: lining-nums tabular-nums; }
+.attendance .mark { display: inline-block; width: min(12px, 100%); aspect-ratio: 1; border-radius: 2px; background: var(--chart-bar); vertical-align: middle; }
+.attendance .gap { display: inline-block; width: min(12px, 100%); aspect-ratio: 1; box-sizing: border-box; border-radius: 2px; border: 1px solid var(--rule-strong); vertical-align: middle; }
 .attendance-wrap { overflow-x: auto; }
 .word-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 19px; color: var(--ink); }
 .word-list .word-count { font-size: 14px; color: var(--ink-faint); font-variant-numeric: lining-nums tabular-nums; margin-left: 2px; }

@@ -373,11 +373,17 @@ function Attendance({ profiles, sessions }: { profiles: Profile[]; sessions: str
         <p className="barlist-note">Everyone has been at every session.</p>
       ) : (
         <>
-          <p className="barlist-note">Sessions numbered in the order they were added. Hover a number for its name.</p>
+          <p className="barlist-note">Oldest session on the left. Hover a column for its name.</p>
           <div className="attendance-wrap">
             <table className="attendance">
               <thead>
-                <tr><td />{sessions.map((s, i) => <th key={s} scope="col" title={s}>{i + 1}</th>)}<th scope="col">Missed</th></tr>
+                {/* Every session gets a column that fits the width; with dozens of them only
+                    every fifth is numbered (all of them name themselves on hover). */}
+                <tr><td className="attendance-name-col" />{sessions.map((s, i) => {
+                  const n = i + 1
+                  const label = sessions.length <= 20 || n === 1 || n % 5 === 0 || n === sessions.length
+                  return <th key={s} scope="col" title={`${n}. ${s}`}>{label ? n : ''}</th>
+                })}<th scope="col" className="attendance-missed-col">Missed</th></tr>
               </thead>
               <tbody>
                 {profiles.map(p => {
