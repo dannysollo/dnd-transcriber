@@ -4,35 +4,25 @@ Open work, roughly in priority order. Move items to the commit log when done.
 
 ## Bug batch (reported 2026-09-27)
 
-Player reports from Juno. Working through them one at a time.
+Done 2026-09-27: unsure-word review Keep/Skip/Delete line, flagged-word clips
+centred on the word (worker now stores word times), editor throbber, audio
+player no longer covering the end of a tab on phones, tab-row edge fades,
+back to the same session in the list, chart tooltips kept on screen, longest
+speeches note.
 
-Bugs:
-- **Wrong speaker and a phantom line (Craig session).** "9-26-2026 -- In Another
-  Life", 01:05:36-01:05:42: "It might have been The Growning" is shown as Belle
-  (Mihir) but Marko said it, and Marko's own line at 01:05:36 ("Uh, it might've
-  been Negroni") isn't something he said. Likely mic bleed or a Whisper
-  hallucination on one track; needs the per-track audio.
-- **Hallucinated line.** Same session, 04:40:01, Aella: "Bay, The Death,
-  Correct, Holly Grayfield, Taylor, Coles, Herbal Club." Not rampant; more
-  examples to come.
-- **Flagged-word audio misses the word.** In Names and the unsure-word review,
-  the clip starts at the line's timestamp, so in a long line the word can come
-  after the clip ends, even though the text preview shows it.
-- **Audio controls cover the end of the summary** on phones (the mini player
-  sits over the last lines).
-- **Stats: the share-of-talk tooltip goes off screen** for the last sessions
-  (right edge).
+"9-26-2026 -- In Another Life" had Marko's and Danny's lines echoed onto
+Mihir's track (99 cross-speaker duplicates vs 10-20 in a normal session):
+Discord through his speakers, picked up by his mic. The 124 echo lines were
+removed (backup: transcript.before-echo-cleanup.md). No worker change: Mihir
+is being asked to use headphones or echo cancellation. If it recurs, an
+echo filter (a line matching one said just before on another track, and much
+quieter on its own) is the fix.
 
-Improvements:
-- **Loading indicator (throbber) in the transcript** instead of a frozen page
-  when you scroll past the lines rendered so far.
-- **Unsure-word review: add Skip and Delete line** next to Back, Play again and
-  Keep.
-- **Tab row fades:** hide the right fade when scrolled all the way right; show a
-  left fade when not scrolled all the way left.
-- **Back from a session returns to that session in the list**, not the top.
-- **Longest speeches: allow more than two interjections** (it already does) and
-  fix the note that says "up to two".
+Still open:
+- **Hallucinated lines.** Whisper occasionally invents a line, e.g. 04:40:01
+  Aella in the same session ("Bay, The Death, Correct, Holly Grayfield...").
+  Not rampant; collecting more examples. Delete line in the unsure-word
+  review now removes one.
 - **Names -> transcript jump is laggy on phones.** Possibly a slow train
   connection; recorded for now.
 
