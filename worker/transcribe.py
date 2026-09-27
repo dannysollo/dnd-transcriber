@@ -13,8 +13,10 @@ Players config maps usernames to display names/characters.
 
 import json
 import os
+import re
 import subprocess
 import tempfile
+from collections import Counter
 from pathlib import Path
 
 import diarize as diarize_module
@@ -38,6 +40,64 @@ HALLUCINATION_PHRASES = {
     "i'll fix that.", "more sultry!", "i'm so happy.",
     "thanks for watching!", "apps and links are in the description!",
 }
+
+
+# Stock Whisper hallucinations (YouTube/podcast captions from its training
+# data), matched anywhere in a line. Mic bleed and quiet stretches bring them
+# out: one 2026-09-26 session had "Subtitles by the Amara.org community" three
+# times, "please Like, Comment, and Subscribe!" and "visit www.fema.gov".
+HALLUCINATION_PATTERN = re.compile(
+    r"subtitles by|amara\.org|thanks? (you )?for watching|like,? comment,? and subscribe|like and subscribe"
+    r"|this video is sponsored|for more information,? visit|downloaded from www|end of this episode"
+    r"|see you in the next video", re.I)
+
+# Everyday words a person really does repeat ("no, no, no", "wait, wait, wait").
+_REPEATABLE = {"no", "yes", "yeah", "yep", "wait", "okay", "ok", "oh", "ha", "he", "hi", "ho", "well",
+               "right", "cool", "sorry", "come in", "hold on", "uh-huh", "ow", "go", "stop", "hey", "i",
+               "i'll", "i'm", "i'd", "i've", "i mean", "please", "thanks", "thank you", "what", "come on"}
+
+
+_FIRST_PERSON = {"i", "i'm", "i'll", "i'd", "i've", "it", "it's"}
+
+
+def looks_hallucinated(text: str, vocab: set[str]) -> bool:
+    """
+    A line Whisper most likely invented: a stock caption phrase, or a recited
+    list: the same name-like phrase three or more times ("Eel, Eel, Eel, Eel"),
+    or a comma list that is nearly all campaign vocabulary. With name hints on
+    (use_hotwords), Whisper sometimes recites the hint list into noise ("The
+    Black Blade, Anne von Ne" on five people's tracks in one session).
+    """
+    if HALLUCINATION_PATTERN.search(text):
+        return True
+    frags = [f.strip().strip(".!?") for f in text.split(",") if f.strip().strip(".!?")]
+    if not frags:
+        return False
+    top, n = Counter(frags).most_common(1)[0]
+    first_word = top.lower().split()[0] if top else ""
+    if top[:1].isupper() and top.lower() not in _REPEATABLE and first_word not in _FIRST_PERSON:
+        # the same phrase over and over as nearly the whole line: a multi-word
+        # phrase 4+ times ("The Black Blade, The Black Blade, ..."), a single word
+        # 5+ times (people do call a name a few times: "Kali, Kali, Kali")
+        if len(top.split()) > 1 and n >= 4 and n >= len(frags) * 0.8:
+            return True
+        if n >= 5 and n >= len(frags) * 0.8:
+            return True
+    if len(frags) >= 2 and vocab:
+        hits = sum(1 for f in frags if f.lower() in vocab or f.lower().removeprefix("the ") in vocab
+                   or (len(f) >= 8 and any(v.startswith(f.lower()) for v in vocab)))
+        # two vocab words ("Judah, Judah") can be real; a longer run, or a pair
+        # with a multi-word name in it, is a recitation
+        long_enough = len(frags) >= 3 or any(len(f.split()) > 1 for f in frags)
+        # every piece is campaign vocabulary, and not just one name called out
+        # repeatedly ("Aella, Aella, Aella")
+        return long_enough and hits == len(frags) and len({f.lower() for f in frags}) >= 2
+    return False
+
+
+def vocab_phrases(vocab_prompt: str) -> set[str]:
+    """The campaign vocabulary as lowercase phrases (the vocab prompt is a comma/newline list)."""
+    return {p.strip().strip(".").lower() for p in re.split(r"[,\n]", vocab_prompt or "") if len(p.strip()) >= 3}
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -391,7 +451,7 @@ def transcribe_session(session_dir: Path, model, config: dict) -> tuple[str, dic
         print(f"    → {len(result['segments'])} segments")
 
     split_shared_mics(session_dir, audio_files, speakers_dir, players, config)
-    return merge_speaker_jsons(speakers_dir)
+    return merge_speaker_jsons(speakers_dir, vocab_prompt=vocab_prompt)
 
 
 def split_shared_mics(session_dir: Path, audio_files: list, speakers_dir: Path, players: dict, config: dict) -> None:
@@ -426,7 +486,7 @@ def split_shared_mics(session_dir: Path, audio_files: list, speakers_dir: Path, 
 
 # ─── Merge per-speaker JSONs into markdown ────────────────────────────────────
 
-def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 4.0) -> tuple[str, dict]:
+def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 4.0, vocab_prompt: str = "") -> tuple[str, dict]:
     """
     Merge all speaker JSON files into a single timestamped markdown transcript,
     sorted by time. Format: **[MM:SS] Speaker:** text
@@ -442,6 +502,7 @@ def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 4.0) -> tuple[str, 
     speakers talking in between doesn't reset the clock).
     """
     all_segments = []
+    vocab = vocab_phrases(vocab_prompt)
 
     for json_file in sorted(speakers_dir.glob("*.json")):
         with open(json_file, encoding="utf-8") as f:
@@ -456,6 +517,9 @@ def merge_speaker_jsons(speakers_dir: Path, min_gap: float = 4.0) -> tuple[str, 
             if text.lower() in ("[music]", "[applause]", "[laughter]", "...", "."):
                 continue
             if text.lower() in HALLUCINATION_PHRASES:
+                continue
+            if looks_hallucinated(text, vocab):
+                print(f"  [hallucination] dropped {speaker} @ {format_time(seg['start'])}: {text[:80]}")
                 continue
             all_segments.append({
                 "speaker": speaker,
