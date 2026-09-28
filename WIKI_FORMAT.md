@@ -64,16 +64,18 @@ order written, with the key as the label (`played-by` shows as "Played by").
   abstract.
 
 The one-line italic descriptor under the title shows in the page header.
-Timeline entries start with a bold date (`**Mar 2026**` or a session date),
+Timeline entries start with a bold date or story arc (`**Mar 2026**`, `**Ophir**`),
 then ` — `, then the event; the site puts the dates in their own column.
 
 Rules:
 
-- **Brief.** A character page is usually 150-400 words. Leave out moment-to-moment
-  detail; that lives in the session summaries.
+- **Brief.** An NPC, place or item page is usually 150-400 words. Player
+  characters get more room (500-900 words): a Background section, a Powers
+  and possessions section, and up to fifteen timeline entries. Leave out
+  moment-to-moment detail; that lives in the session summaries.
 - **Timeline, not a diary.** Only turning points: first meeting, betrayals, deaths,
   revelations, changes of allegiance, items gained or lost. Five to ten entries is
-  plenty for a major character. Newest last.
+  plenty for a major NPC. Newest last.
 - **Link generously, but only to real pages.** `[[Exact Page Title]]` or
   `[[Exact Page Title|shown text]]`. Link a name the first time it appears in a
   section. Don't link to pages that don't exist.
