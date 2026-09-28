@@ -9,6 +9,7 @@ import { RuleSuggestionBar, type SessionRuleSuggestion, addCorrectionRule } from
 import ReactMarkdown from 'react-markdown'
 import { BarList, PaceChart } from '../Charts'
 import WorkerOffline from '../WorkerOffline'
+import WhoIsThis from '../WhoIsThis'
 import { formatDuration, percent } from '../chartFormat'
 
 
@@ -1547,27 +1548,33 @@ export default function SessionView() {
           </div>
         ) : tab === 'transcript' ? (
           transcript ? (
-            <TranscriptView
-              content={transcript}
-              initialEditLine={anchorLineRef.current?.idx ?? null}
-              search={search}
-              currentTime={audioFiles.length > 0 ? currentTime : undefined}
-              onSeek={audioFiles.length > 0 ? seekAndSwitch : undefined}
-              targetTimestamp={targetTimestamp}
-              onTargetReached={() => setTargetTimestamp(null)}
-              sessionName={name!}
-              editMode={editMode}
-              // Silent: a full reload swaps in the loading skeleton, which unmounts the
-              // transcript and loses your place (e.g. after adding a rule mid-edit).
-              onTranscriptChange={() => { load({ silent: true }); setChangesLoaded(false); setChangesReport(null); setNamesKey(k => k + 1) }}
-              onEditsSaved={text => {
-                setTranscript(text)
-                load({ silent: true })
-                setChangesLoaded(false); setChangesReport(null); setNamesKey(k => k + 1)
-              }}
-              confidence={confidence}
-              showConfidence={showConfidence && !editMode}
-            />
+            <>
+              {!editMode && (!authEnabled || activeCampaign?.role === 'dm') && (
+                <WhoIsThis sessionName={name!} onPlay={audioFiles.length > 0 ? playMoment : undefined}
+                  onRenamed={() => { load({ silent: true }); setChangesLoaded(false); setChangesReport(null) }} />
+              )}
+              <TranscriptView
+                content={transcript}
+                initialEditLine={anchorLineRef.current?.idx ?? null}
+                search={search}
+                currentTime={audioFiles.length > 0 ? currentTime : undefined}
+                onSeek={audioFiles.length > 0 ? seekAndSwitch : undefined}
+                targetTimestamp={targetTimestamp}
+                onTargetReached={() => setTargetTimestamp(null)}
+                sessionName={name!}
+                editMode={editMode}
+                // Silent: a full reload swaps in the loading skeleton, which unmounts the
+                // transcript and loses your place (e.g. after adding a rule mid-edit).
+                onTranscriptChange={() => { load({ silent: true }); setChangesLoaded(false); setChangesReport(null); setNamesKey(k => k + 1) }}
+                onEditsSaved={text => {
+                  setTranscript(text)
+                  load({ silent: true })
+                  setChangesLoaded(false); setChangesReport(null); setNamesKey(k => k + 1)
+                }}
+                confidence={confidence}
+                showConfidence={showConfidence && !editMode}
+              />
+            </>
           ) : (
             <EmptyTabState
               title="No transcript yet"

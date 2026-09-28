@@ -133,6 +133,12 @@ def poll_loop(config: dict, stop_event: threading.Event):
                     print(f"[worker]   Fetching audio from Craig...")
                     download_recording(craig_url, session_dir)
 
+                # A session from one mixed recording (no Craig tracks): reconstruct.py.
+                if claimed.get("reconstruct"):
+                    whisper_model = run_reconstruction(client, config, session_name, session_dir,
+                                                       claimed["reconstruct"], whisper_model)
+                    continue
+
                 if not session_dir.exists():
                     client.report_error(session_name, f"Session directory not found: {session_dir}")
                     print(f"[worker]   [ERROR] Session dir not found: {session_dir}")
@@ -451,6 +457,37 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
         summary = ""  # nothing but the wiki heading: better no summary than a broken one
 
     return summary, wiki, blurb
+
+
+def run_reconstruction(client, config: dict, session_name: str, session_dir: Path, request: dict, whisper_model):
+    """Download the uploaded recording, reconstruct the transcript, push it all
+    back. Returns the Whisper model (loaded here if the one in hand isn't one)."""
+    from reconstruct import reconstruct
+    print(f"[worker]   Reconstruction: downloading the recording...")
+    rec = client.download_recording(session_name, session_dir)
+    campaign_config = client.get_campaign_config()
+    # Word timings need Whisper (Canary, if that's the configured engine, has none).
+    model_name = config.get("whisper_model") or campaign_config.get("whisper_model") or "turbo"
+    if model_name.startswith("canary"):
+        model_name = "turbo"
+    if whisper_model is None or getattr(whisper_model, "_model_name", None) != model_name:
+        whisper_model = load_whisper_model(model_name)
+        whisper_model._model_name = model_name
+    library = client.get_voice_library()
+    transcript, confidence, unknown = reconstruct(rec, whisper_model, library, request,
+                                                  campaign_config.get("vocab_prompt", ""))
+    print(f"[worker]   Pushing transcript...")
+    client.push_transcript(session_name, transcript, confidence)
+    client.push_unknown_voices(session_name, unknown)
+    with tempfile.NamedTemporaryFile(suffix="_merged.mp3", delete=False) as tmp:
+        merged_path = tmp.name
+    print(f"[worker]   Pushing audio...")
+    merge_audio_files([rec], merged_path)
+    client.push_audio(session_name, merged_path)
+    Path(merged_path).unlink(missing_ok=True)
+    rec.unlink(missing_ok=True)
+    print(f"[worker]   [DONE] {session_name} (reconstructed)")
+    return whisper_model
 
 
 def analysis_poll_loop(config: dict, stop_event: threading.Event):

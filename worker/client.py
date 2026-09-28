@@ -90,6 +90,26 @@ class WorkerClient:
         )
         r.raise_for_status()
 
+    def download_recording(self, session_name: str, dest_dir) -> "Path":
+        """The uploaded recording for a reconstruction job, streamed to dest_dir."""
+        from pathlib import Path
+        dest_dir = Path(dest_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        with requests.get(self._url(f"/worker/sessions/{session_name}/recording"), headers=self.headers,
+                          stream=True, timeout=(30, 600)) as r:
+            r.raise_for_status()
+            name = r.headers.get("content-disposition", "").split("filename=")[-1].strip('"; ') or "recording.mp3"
+            dest = dest_dir / name
+            with open(dest, "wb") as f:
+                for chunk in r.iter_content(1024 * 1024):
+                    f.write(chunk)
+        return dest
+
+    def push_unknown_voices(self, session_name: str, data: dict) -> None:
+        r = requests.post(self._url(f"/worker/sessions/{session_name}/unknown-voices"),
+                          headers=self.headers, json=data, timeout=30)
+        r.raise_for_status()
+
     def get_voice_library(self) -> dict:
         """The campaign's voice profiles (worker/voices.py)."""
         r = requests.get(self._url("/worker/voices"), headers=self.headers, timeout=30)

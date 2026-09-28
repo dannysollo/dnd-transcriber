@@ -3715,6 +3715,105 @@ def _queue_transcription(db: Session, campaign, name: str, current_user: Optiona
     return crud.create_transcription_job(db, campaign.id, name, current_user.id if current_user else 0)
 
 
+# ─── Reconstruction: a session from one mixed recording ──────────────────────
+# For sessions recorded without Craig. The DM uploads the recording and says who
+# was there; the worker downloads it, transcribes with word times and labels
+# speakers by the voice library (worker/reconstruct.py). Voices that match no
+# one become "Unknown voice N", with short clips for a "who is this?" step.
+
+RECORDING_DIR = "recording"
+RECONSTRUCT_REQUEST = "reconstruct_request.json"
+UNKNOWN_VOICES_FILE = "unknown_voices.json"
+RECORDING_EXTS = {".mp3", ".m4a", ".wav", ".flac", ".ogg", ".opus", ".webm", ".mp4", ".mkv", ".mov", ".aac"}
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/recording")
+async def campaign_upload_recording(
+    slug: str, name: str, file: UploadFile = File(...),
+    _member=Depends(require_campaign_member("dm")),
+):
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in RECORDING_EXTS:
+        raise HTTPException(400, f"Unsupported file type {ext or '(none)'}: use an audio or video file")
+    rec_dir = session_dir / RECORDING_DIR
+    if rec_dir.exists():
+        shutil.rmtree(rec_dir)
+    rec_dir.mkdir()
+    dest = rec_dir / f"recording{ext}"
+    with open(dest, "wb") as out:  # streamed: recordings run to hundreds of MB
+        shutil.copyfileobj(file.file, out, 1024 * 1024)
+    return {"ok": True, "bytes": dest.stat().st_size}
+
+
+class ReconstructBody(BaseModel):
+    attendees: list[str] = []   # voice library keys: player usernames, "guest:<name>"
+    guests: list[str] = []      # guests with no profile yet (names), for the who-is-this step
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/reconstruct")
+def campaign_request_reconstruction(
+    slug: str, name: str, body: ReconstructBody,
+    _member=Depends(require_campaign_member("dm")),
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session_dir = get_sessions_dir(slug) / name
+    rec = next(iter((session_dir / RECORDING_DIR).glob("recording.*")), None) if (session_dir / RECORDING_DIR).exists() else None
+    if not rec:
+        raise HTTPException(400, "Upload the recording first")
+    if not body.attendees and not body.guests:
+        raise HTTPException(400, "Pick who was there")
+    (session_dir / RECONSTRUCT_REQUEST).write_text(json.dumps({
+        "attendees": body.attendees, "guests": [g.strip() for g in body.guests if g.strip()],
+        "recording": rec.name, "requested": datetime.utcnow().isoformat(),
+    }), encoding="utf-8")
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    return {"job": _job_dict(_queue_transcription(db, campaign, name, current_user))}
+
+
+@app.get("/campaigns/{slug}/worker/sessions/{session_name}/recording")
+def worker_get_recording(slug: str, session_name: str, db: Session = Depends(get_db), request: Request = None):
+    require_worker_key(slug)(request, db)
+    session_name = _current_session_name(slug, session_name)
+    rec_dir = get_sessions_dir(slug) / session_name / RECORDING_DIR
+    rec = next(iter(rec_dir.glob("recording.*")), None) if rec_dir.exists() else None
+    if not rec:
+        raise HTTPException(404, "No recording uploaded for this session")
+    return FileResponse(str(rec), filename=rec.name)
+
+
+@app.post("/campaigns/{slug}/worker/sessions/{session_name}/unknown-voices")
+async def worker_push_unknown_voices(slug: str, session_name: str, db: Session = Depends(get_db), request: Request = None):
+    require_worker_key(slug)(request, db)
+    session_name = _current_session_name(slug, session_name)
+    body = await request.json()
+    session_dir = get_sessions_dir(slug) / session_name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    (session_dir / UNKNOWN_VOICES_FILE).write_text(json.dumps(body), encoding="utf-8")
+    return {"ok": True}
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/unknown-voices")
+def campaign_unknown_voices(slug: str, name: str, _member=Depends(require_campaign_member("spectator"))):
+    """Unknown voices still in the transcript (a renamed one drops out), with sample clips."""
+    session_dir = get_sessions_dir(slug) / name
+    path = session_dir / UNKNOWN_VOICES_FILE
+    if not path.exists() or not (session_dir / "transcript.md").exists():
+        return {"voices": []}
+    transcript = _read_text_cached(session_dir / "transcript.md")
+    voices = [v for v in json.loads(path.read_text(encoding="utf-8")).get("voices", [])
+              if f"] {v['label']}:**" in transcript]
+    for v in voices:
+        v["lines"] = transcript.count(f"] {v['label']}:**")
+    return {"voices": voices}
+
+
 class CraigLinkBody(BaseModel):
     url: str
     queue: bool = True
@@ -3915,8 +4014,13 @@ def worker_claim_job(slug: str, session_name: str, db: Session = Depends(get_db)
     job = crud.claim_job(db, job)
     # The Craig link carries the recording's access key, so it's only handed
     # to the worker, never included in the member-facing job dicts.
-    craig = _read_craig_source(get_sessions_dir(slug) / session_name)
-    return {**_job_dict(job), "craig_url": craig["url"] if craig else None}
+    session_dir = get_sessions_dir(slug) / session_name
+    craig = _read_craig_source(session_dir)
+    reconstruct = None
+    if (session_dir / RECONSTRUCT_REQUEST).exists():
+        reconstruct = json.loads((session_dir / RECONSTRUCT_REQUEST).read_text(encoding="utf-8"))
+        reconstruct["players"] = load_config(slug).get("players") or {}
+    return {**_job_dict(job), "craig_url": craig["url"] if craig else None, "reconstruct": reconstruct}
 
 
 class TranscriptUploadBody(BaseModel):
@@ -3944,6 +4048,17 @@ def worker_push_transcript(
     else:
         # Don't leave a previous run's map pointing at words that no longer exist
         confidence_path.unlink(missing_ok=True)
+    request_path = session_dir / RECONSTRUCT_REQUEST
+    if request_path.exists():
+        req = json.loads(request_path.read_text(encoding="utf-8"))
+        (session_dir / RECONSTRUCTED_FILE).write_text(json.dumps({
+            "source": "uploaded recording", "video_id": None,
+            "method": "Whisper with word timings; speakers matched by voice against the campaign's voice library",
+            "attendees": req.get("attendees", []) + req.get("guests", []),
+            "created": datetime.utcnow().isoformat(timespec="seconds"),
+        }), encoding="utf-8")
+        request_path.unlink()
+        shutil.rmtree(session_dir / RECORDING_DIR, ignore_errors=True)  # the worker uploads the mp3
     job = crud.get_job(db, campaign.id, session_name)
     if job:
         crud.complete_job(db, job)

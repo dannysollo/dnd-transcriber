@@ -29,18 +29,10 @@ Still open:
 
 ## Speaker attribution
 
-- **(In progress) Voice library in Campaign Settings.** Who has a profile, how
-  much audio it's built from, last updated, reset. The worker also learns each
-  player's profile from their own Craig track every session (it only learned
-  shared-mic players before).
-- **(In progress) Legacy reconstruction as a site feature.** Decided
-  2026-09-28: upload a single mixed recording on the site ("new session from a
-  recording"), pick who was there; the worker downloads it, runs Whisper with
-  word times and labels speakers by the library's voice profiles (the manual
-  pipeline in `~/dnd-legacy-audio/work`: label.py's method, first-word fix
-  included); voices matching no profile become "Unknown voice N", and the
-  session shows a "who is this?" panel with short clips of each to assign a
-  player or a guest name. The session is marked reconstructed.
+- Voice library in Campaign Settings and site-based reconstruction are done
+  (2026-09-28). Untested end to end with a real upload: the first real
+  reconstruction is the test. Profiles fill in as Craig sessions come in (Sue
+  had none yet); guests are learned too.
 
 ## Review
 
@@ -50,8 +42,6 @@ Still open:
 
 ## Notifications and operations
 
-- **(In progress)** Warn when a job is queued while the worker hasn't checked
-  in recently.
 
 ## Name and app
 

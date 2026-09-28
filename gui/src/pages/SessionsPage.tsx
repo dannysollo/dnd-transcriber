@@ -6,6 +6,7 @@ import { useAuth } from '../AuthContext'
 
 const LAST_SESSION_KEY = 'codm-last-session'
 import WorkerOffline from '../WorkerOffline'
+import NewFromRecording from '../NewFromRecording'
 import { useToast } from '../Toast'
 
 type SortKey = 'name' | 'date_added' | 'modified'
@@ -448,6 +449,13 @@ export default function SessionsPage() {
                 Create session
               </button>
             </div>
+          )}
+          {(!authEnabled || activeCampaign?.role === 'dm') && activeCampaign && (
+            <NewFromRecording slug={activeCampaign.slug} defaultName={newName.trim()}
+              onDone={(sessionName, job) => {
+                load()
+                if (job) setJobMap(prev => ({ ...prev, [sessionName]: job as TranscriptionJob }))
+              }} />
           )}
         </div>
       </div>

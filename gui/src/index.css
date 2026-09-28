@@ -1029,3 +1029,35 @@ input.written-line:focus {
 .voice-actions { display: flex; gap: 8px; }
 .voice-name-form { display: flex; gap: 8px; }
 .voice-name-form input { font: inherit; font-size: 17px; padding: 4px 8px; border: 1px solid var(--rule-strong); border-radius: 3px; background: var(--page); color: var(--ink); min-width: 0; }
+
+/* Sessions > New session from a single recording (NewFromRecording.tsx) */
+.from-recording { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; padding: 16px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); max-width: 680px; }
+.from-recording-intro { margin: 0; font-size: 16px; color: var(--ink-soft); line-height: 1.55; }
+.from-recording-field { display: flex; flex-direction: column; gap: 4px; font-size: 15px; color: var(--ink-faint); }
+.from-recording-field input[type="file"] { font: inherit; font-size: 16px; color: var(--ink); }
+.from-recording-people { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.from-recording-people legend { font-size: 15px; color: var(--ink-faint); margin-bottom: 6px; }
+.from-recording-person { display: flex; align-items: baseline; gap: 10px; font-size: 18px; color: var(--ink); }
+.from-recording-person input { accent-color: var(--rubric); }
+.from-recording-note { font-size: 14px; color: var(--ink-faint); margin: 0; }
+.from-recording-guest { display: flex; gap: 10px; align-items: flex-end; margin-top: 4px; max-width: 360px; }
+.from-recording-guest input { flex: 1; min-width: 0; }
+.from-recording-actions { display: flex; gap: 10px; }
+.upload-progress { position: relative; height: 26px; border: 1px solid var(--rule-strong); border-radius: 3px; overflow: hidden; max-width: 420px; }
+.upload-progress > div { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--rubric) 22%, transparent); transition: width 0.3s; }
+.upload-progress > span { position: relative; display: block; padding: 2px 10px; font-size: 15px; color: var(--ink); font-variant-numeric: lining-nums tabular-nums; }
+
+/* Reconstructed sessions: naming the voices the worker couldn't place (WhoIsThis.tsx) */
+.who-is-this { max-width: 820px; margin: 0 0 24px; padding: 16px 18px; border: 1px solid var(--rule-strong); border-left: 3px solid var(--ochre); border-radius: 3px; }
+.who-is-this h3 { margin: 0 0 6px; font-size: 19px; color: var(--ink); }
+.who-is-this-note { margin: 0 0 12px; font-size: 16px; color: var(--ink-soft); line-height: 1.5; }
+.who-voice { padding: 12px 0; border-top: 1px solid var(--rule); }
+.who-voice-head { display: flex; align-items: baseline; gap: 10px; }
+.who-voice-count { font-size: 14px; color: var(--ink-faint); }
+.who-clips { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.who-clips li { display: flex; align-items: baseline; gap: 10px; font-size: 16px; min-width: 0; }
+.who-clip-ts { font-size: 14px; color: var(--ink-faint); font-variant-numeric: lining-nums tabular-nums; flex-shrink: 0; }
+.who-clip-text { color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who-voice-pick { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.who-voice-pick select { font: inherit; font-size: 16px; padding: 5px 8px; border: 1px solid var(--rule-strong); border-radius: 3px; background: var(--page); color: var(--ink); }
+.who-voice-pick input { min-width: 0; flex: 0 1 200px; }
