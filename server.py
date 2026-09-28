@@ -4285,6 +4285,178 @@ def campaign_name_voice(slug: str, key: str, body: VoiceNameBody, _member=Depend
     return {"ok": True}
 
 
+# ─── Wiki (the campaign's vault, read and edited on the site; see wiki.py) ─────
+# Replaces the Netlify site. Readable by anyone when the campaign's wiki is
+# public (settings.wiki_public), else by members. DMs edit; an edit is
+# committed and pushed to the vault repo, so Obsidian keeps working.
+
+_wiki_pull_at: dict[str, float] = {}
+_wiki_lock = threading.Lock()
+
+
+def _wiki_vault(slug: str, db: Session) -> Optional[Path]:
+    """The vault checkout, cloned on first use; pulled at most every 5 minutes (in the background)."""
+    import time
+    config = load_config(slug)
+    vault = _campaign_vault_dir(config, slug)
+    has_repo = bool(config.get("vault_repo_url") or (crud.get_campaign_by_slug(db, slug).settings or {}).get("vault_repo_url"))
+    if vault is None and has_repo:
+        vault, err = _sync_vault(config, slug, db)
+        if err:
+            raise HTTPException(502, f"Couldn't fetch the wiki: {err}")
+        _wiki_pull_at[slug] = time.time()
+    elif vault is not None and has_repo and time.time() - _wiki_pull_at.get(slug, 0) > 300:
+        _wiki_pull_at[slug] = time.time()
+
+        def pull():
+            from db.database import SessionLocal
+            s2 = SessionLocal()
+            try:
+                with _wiki_lock:
+                    _sync_vault(load_config(slug), slug, s2)
+            finally:
+                s2.close()
+        threading.Thread(target=pull, daemon=True).start()
+    return vault
+
+
+def _wiki_reader(slug: str, user: Optional[User], db: Session):
+    """The campaign, if this visitor may read its wiki; the member (or None)."""
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    member = crud.get_member(db, campaign.id, user.id) if user else None
+    public = bool((campaign.settings or {}).get("wiki_public"))
+    if AUTH_ENABLED and not public and not member and not (user and user.is_admin):
+        raise HTTPException(401 if not user else 403, "This wiki is for campaign members")
+    can_edit = (not AUTH_ENABLED) or bool(user and user.is_admin) or bool(member and member.role == "dm")
+    return campaign, public, can_edit
+
+
+def _wiki_index(slug: str, vault: Path):
+    import wiki
+    return _cached(("wiki", slug, wiki.fingerprint(vault)), lambda: wiki.scan(vault))
+
+
+@app.get("/campaigns/{slug}/wiki")
+def campaign_wiki_index(slug: str, user: Optional[User] = Depends(get_current_user), db: Session = Depends(get_db)):
+    campaign, public, can_edit = _wiki_reader(slug, user, db)
+    vault = _wiki_vault(slug, db)
+    if vault is None:
+        return {"name": campaign.name, "public": public, "can_edit": can_edit, "has_wiki": False, "pages": []}
+    idx = _wiki_index(slug, vault)
+    return {"name": campaign.name, "public": public, "can_edit": can_edit, "has_wiki": True,
+            "pages": idx.summary(), "broken": sum(len(p.broken) for p in idx.pages.values())}
+
+
+@app.get("/campaigns/{slug}/wiki/search")
+def campaign_wiki_search(slug: str, q: str = "", user: Optional[User] = Depends(get_current_user), db: Session = Depends(get_db)):
+    _wiki_reader(slug, user, db)
+    vault = _wiki_vault(slug, db)
+    return {"results": _wiki_index(slug, vault).search(q) if vault else []}
+
+
+@app.get("/campaigns/{slug}/wiki/pages/{page}")
+def campaign_wiki_page(slug: str, page: str, user: Optional[User] = Depends(get_current_user), db: Session = Depends(get_db)):
+    _wiki_reader(slug, user, db)
+    vault = _wiki_vault(slug, db)
+    if vault is None:
+        raise HTTPException(404, "This campaign has no wiki yet")
+    idx = _wiki_index(slug, vault)
+    p = idx.pages.get(page)
+    if not p:
+        raise HTTPException(404, "No such page")
+    return {"title": p.title, "slug": p.slug, "section": p.section, "path": p.path, "markdown": p.text,
+            "hash": hashlib.md5(p.text.encode()).hexdigest(), "broken": p.broken,
+            "backlinks": [{"title": idx.pages[b].title, "slug": b} for b in idx.backlinks.get(p.slug, []) if b in idx.pages]}
+
+
+def _vault_commit(slug: str, vault: Path, paths: list[str], message: str) -> Optional[str]:
+    """Commit these files and push, when the vault is a git repo with a token. Returns a problem, or None."""
+    if not (vault / ".git").exists():
+        return None  # a server-only wiki: the file is the record
+    config = load_config(slug)
+    url = config.get("vault_repo_url")
+    token = config.get("vault_github_token") or os.environ.get("GITHUB_TOKEN")
+    run = lambda *a: subprocess.run(list(a), cwd=vault, capture_output=True, text=True)
+    run("git", "config", "user.email", "deploy@dnd-transcriber")
+    run("git", "config", "user.name", "Co-DM")
+    run("git", "add", "--", *paths)
+    c = run("git", "commit", "-m", message)
+    if c.returncode != 0 and "nothing to commit" not in c.stdout + c.stderr:
+        return f"commit failed: {c.stderr.strip()[:200]}"
+    if not (url and token):
+        return "saved on the server, but there's no vault token to push it to GitHub"
+    run("git", "remote", "set-url", "origin", url.replace("https://", f"https://x-access-token:{token}@"))
+    run("git", "pull", "--rebase")
+    push = run("git", "push")
+    return None if push.returncode == 0 else f"saved, but pushing to GitHub failed: {push.stderr.strip()[:200]}"
+
+
+class WikiPageBody(BaseModel):
+    markdown: str
+    base_hash: Optional[str] = None  # the page as the editor loaded it, to catch a clash
+    title: Optional[str] = None      # new pages
+    section: Optional[str] = None    # new pages
+
+
+@app.put("/campaigns/{slug}/wiki/pages/{page}")
+def campaign_wiki_save(slug: str, page: str, body: WikiPageBody,
+                       user: Optional[User] = Depends(get_current_user), db: Session = Depends(get_db)):
+    _, _, can_edit = _wiki_reader(slug, user, db)
+    if not can_edit:
+        raise HTTPException(403, "Only the DM can edit the wiki")
+    vault = _wiki_vault(slug, db)
+    idx = _wiki_index(slug, vault) if vault else None
+    p = idx.pages.get(page) if idx else None
+    if not p:
+        raise HTTPException(404, "No such page")
+    if body.base_hash and hashlib.md5(p.text.encode()).hexdigest() != body.base_hash:
+        raise HTTPException(409, "The page changed since you opened it (someone else, or Obsidian). Reload to see their version.")
+    with _wiki_lock:
+        (vault / p.path).write_text(body.markdown, encoding="utf-8")
+        who = user.username if user else "the site"
+        problem = _vault_commit(slug, vault, [p.path], f"Edit {p.title} (by {who} on the site)")
+    return {"ok": True, "warning": problem}
+
+
+@app.post("/campaigns/{slug}/wiki/pages")
+def campaign_wiki_create(slug: str, body: WikiPageBody,
+                         user: Optional[User] = Depends(get_current_user), db: Session = Depends(get_db)):
+    import wiki
+    _, _, can_edit = _wiki_reader(slug, user, db)
+    if not can_edit:
+        raise HTTPException(403, "Only the DM can edit the wiki")
+    title = (body.title or "").strip()
+    if not title or any(c in title for c in '/\\:*?"<>|#[]'):
+        raise HTTPException(400, "A page needs a title without / \\ : * ? \" < > | # [ ]")
+    vault = _wiki_vault(slug, db) or (BASE_DIR / "vaults" / slug)
+    vault.mkdir(parents=True, exist_ok=True)
+    idx = _wiki_index(slug, vault)
+    if idx.resolve(title):
+        raise HTTPException(400, f"There's already a page called {title}")
+    section = "/".join(part for part in (body.section or "").split("/") if part and part not in ("..", "."))
+    rel = Path(section) / f"{title}.md" if section else Path(f"{title}.md")
+    with _wiki_lock:
+        (vault / rel).parent.mkdir(parents=True, exist_ok=True)
+        (vault / rel).write_text(body.markdown or f"# {title}\n", encoding="utf-8")
+        who = user.username if user else "the site"
+        problem = _vault_commit(slug, vault, [str(rel)], f"Add {title} (by {who} on the site)")
+    return {"ok": True, "slug": wiki.slugify(title), "warning": problem}
+
+
+class WikiSettingsBody(BaseModel):
+    public: bool
+
+
+@app.put("/campaigns/{slug}/wiki/settings")
+def campaign_wiki_settings(slug: str, body: WikiSettingsBody,
+                           _member=Depends(require_campaign_member("dm")), db: Session = Depends(get_db)):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    crud.update_campaign_settings(db, campaign, {"wiki_public": body.public})
+    return {"public": body.public}
+
+
 # ─── Vault connection test ────────────────────────────────────────────────────
 
 @app.post("/campaigns/{slug}/vault/test")
@@ -4577,7 +4749,8 @@ if gui_dist.exists():
     # campaigns for the app, and is also the Campaigns page). A browser
     # loading the address gets the app; the app's own fetch() calls, which
     # don't ask for HTML, still get the JSON.
-    _PAGE_PATHS = re.compile(r"^/(sessions|campaigns)(/[^/]+)?/?$")
+    # (the wiki's page routes share their paths with its API, so they're here too)
+    _PAGE_PATHS = re.compile(r"^/(sessions|campaigns)(/[^/]+)?/?$|^/campaigns/[^/]+/wiki(/[^/]+)?/?$")
 
     @app.middleware("http")
     async def pages_over_api(request: Request, call_next):

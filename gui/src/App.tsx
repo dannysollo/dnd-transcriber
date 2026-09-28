@@ -19,6 +19,7 @@ import ShareView from './pages/ShareView'
 import SettingsPage from './pages/SettingsPage'
 import QuotesPage from './pages/QuotesPage'
 import { useAuth, avatarUrl } from './AuthContext'
+import WikiPage from './pages/WikiPage'
 import { useCampaign } from './CampaignContext'
 
 const APP_VERSION = "1.0.0"
@@ -72,8 +73,15 @@ const QuotesNavIcon = () => (
   </svg>
 )
 
+const WikiIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" /><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5" /><path d="M8 7h8M8 11h6" />
+  </svg>
+)
+
 const navItems = [
   { to: '/', label: 'Sessions', Icon: ScrollIcon },
+  { to: '/wiki', label: 'Wiki', Icon: WikiIcon },   // the active campaign's wiki, see wikiHref
   { to: '/quotes', label: 'Quotes', Icon: QuotesNavIcon },
   { to: '/search', label: 'Search', Icon: SearchIcon },
   { to: '/campaigns', label: 'Campaign', Icon: ShieldIcon },   // points at the active campaign's settings, see campaignHref
@@ -92,6 +100,8 @@ export default function App() {
   const location = useLocation()
   const isSessionView = location.pathname.startsWith('/sessions/')
   const campaignHref = activeCampaign ? `/campaigns/${activeCampaign.slug}/settings` : '/campaigns'
+  const wikiHref = activeCampaign ? `/campaigns/${activeCampaign.slug}/wiki` : '/campaigns'
+  const isWikiView = /^\/campaigns\/[^/]+\/wiki/.test(location.pathname)
 
   // Fetch worker heartbeat for DMs
   useEffect(() => {
@@ -167,6 +177,18 @@ export default function App() {
     )
   }
 
+  // A campaign's wiki can be public: logged-out visitors read it without the app around it.
+  if (authEnabled && !isLoggedIn && /^\/campaigns\/[^/]+\/wiki/.test(window.location.pathname)) {
+    return (
+      <div className="wiki-public">
+        <Routes>
+          <Route path="/campaigns/:slug/wiki" element={<WikiPage />} />
+          <Route path="/campaigns/:slug/wiki/:page" element={<WikiPage />} />
+        </Routes>
+      </div>
+    )
+  }
+
   if (authEnabled && !isLoggedIn) {
     // Allow invite pages to render even when logged out
     if (!window.location.pathname.startsWith('/invite/')) {
@@ -197,6 +219,9 @@ export default function App() {
           </>
         )}
         <div className="sheet-section">Tools</div>
+        {activeCampaign && (
+          <SheetItem onClick={() => { setMoreOpen(false); navigate(`/campaigns/${activeCampaign.slug}/wiki`) }} note="Characters, places, lore">Wiki</SheetItem>
+        )}
         <SheetItem onClick={() => { setMoreOpen(false); navigate('/quotes') }} note="Saved lines from every session">Quotes</SheetItem>
         {activeCampaign?.role === 'dm' && (
           <SheetItem onClick={() => { setMoreOpen(false); navigate('/edit-queue') }}
@@ -330,10 +355,10 @@ export default function App() {
             <NavLink
               key={to}
               // "Campaign" opens the active campaign's settings (the list lives in the selector above).
-              to={to === '/campaigns' ? campaignHref : to}
+              to={to === '/campaigns' ? campaignHref : to === '/wiki' ? wikiHref : to}
               end={to === '/'}
               // A session page is still inside "Sessions"; any /campaigns page is inside "Campaign".
-              className={({ isActive }) => 'cover-link' + (to === '/campaigns' || to === '/quotes' ? ' nav-secondary' : '') + (isActive || (to === '/' && isSessionView) || (to === '/campaigns' && location.pathname.startsWith('/campaigns')) ? ' active' : '')}
+              className={({ isActive }) => 'cover-link' + (to === '/campaigns' || to === '/quotes' || to === '/wiki' ? ' nav-secondary' : '') + (isActive || (to === '/' && isSessionView) || (to === '/campaigns' && location.pathname.startsWith('/campaigns') && !isWikiView) || (to === '/wiki' && isWikiView) ? ' active' : '')}
             >
               <Icon />
               <span style={{ flex: 1 }}>{label}</span>
@@ -440,6 +465,8 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/campaigns/:slug/settings" element={<CampaignSettingsPage />} />
+          <Route path="/campaigns/:slug/wiki" element={<WikiPage />} />
+          <Route path="/campaigns/:slug/wiki/:page" element={<WikiPage />} />
           <Route path="/campaigns/:slug" element={<CampaignRedirect />} />
           <Route path="/sessions" element={<Navigate to="/" replace />} />
           <Route path="/invite/:token" element={<InvitePage />} />
