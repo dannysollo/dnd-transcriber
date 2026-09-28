@@ -72,8 +72,9 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     const sim = forceSimulation(nodes)
       .force('link', forceLink<Node, Edge>(links).id(d => d.id).distance(90).strength(0.12))
       .force('charge', forceManyBody().strength(-360).distanceMax(700))
-      .force('x', forceX(width / 2).strength(0.035))
-      .force('y', forceY(height / 2).strength(0.035))
+      // pages with no links would drift to the edges and shrink the fitted view
+      .force('x', forceX(width / 2).strength(d => ((d as Node).degree ? 0.035 : 0.3)))
+      .force('y', forceY(height / 2).strength(d => ((d as Node).degree ? 0.035 : 0.3)))
       .force('center', forceCenter(width / 2, height / 2))
       .force('collide', forceCollide<Node>().radius(d => radius(d) + 6))
       .stop()
@@ -111,6 +112,8 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     const zoomer = zoom<SVGSVGElement, unknown>().scaleExtent([0.25, 6]).on('zoom', e => {
       const t: ZoomTransform = e.transform
       g.attr('transform', t.toString())
+      // labels stay a readable size on screen at any zoom
+      label.attr('font-size', 13 / t.k).attr('stroke-width', 3 / t.k).attr('dy', d => -radius(d) - 4 / t.k)
       if ((t.k >= LABEL_ZOOM) !== (scale >= LABEL_ZOOM)) { scale = t.k; place() } else scale = t.k
     })
     svg.call(zoomer)

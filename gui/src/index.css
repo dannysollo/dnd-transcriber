@@ -1153,8 +1153,8 @@ button.wiki-missing { cursor: pointer; }
 .wg-node { stroke: var(--page-raised); stroke-width: 2; cursor: pointer; transition: opacity 0.15s; }
 .wg-node.dim { opacity: 0.18; }
 .wg-node:focus-visible { outline: none; stroke: var(--gilt); stroke-width: 3; }
-.wg-labels text { font-family: var(--font-journal); font-size: 12px; fill: var(--ink); text-anchor: middle; pointer-events: none;
-  paint-order: stroke; stroke: var(--page-raised); stroke-width: 3px; stroke-linejoin: round; display: none; }
+.wg-labels text { font-family: var(--font-journal); fill: var(--ink); text-anchor: middle; pointer-events: none;
+  paint-order: stroke; stroke: var(--page-raised); stroke-linejoin: round; display: none; }
 .wg-labels text.on, .wg-labels text.hot { display: block; }
 .wg-labels text.hot { font-weight: 600; }
 .wg-labels text.dim { display: none; }
