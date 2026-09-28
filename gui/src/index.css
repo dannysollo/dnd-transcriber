@@ -1115,3 +1115,7 @@ button.wiki-missing { cursor: pointer; }
   .wiki-backlinks { position: static; border-top: 1px solid var(--rule); padding-top: 12px; }
   .wiki-body table { display: block; overflow-x: auto; }
 }
+.wiki-body ul { list-style: disc; }
+.wiki-body ul ul { list-style: circle; }
+.wiki-body ol { list-style: decimal; }
+.wiki-body li::marker { color: var(--ink-faint); }

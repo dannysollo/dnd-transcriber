@@ -18,6 +18,7 @@ LINK_RE = re.compile(r"\[\[([^\]\n]+)\]\]")
 
 # The standard sections, in the order the wiki shows them (others follow, A-Z).
 SECTION_ORDER = ["Characters", "Locations", "Factions", "Events", "Items", "Mechanics"]
+SUBSECTION_ORDER = ["PCs", "NPCs"]  # player characters first
 
 
 def slugify(title: str) -> str:
@@ -59,8 +60,11 @@ class WikiIndex:
 
     def summary(self) -> list[dict]:
         def section_key(p: Page):
-            top = p.section.split("/")[0] if p.section else ""
-            return (SECTION_ORDER.index(top) if top in SECTION_ORDER else len(SECTION_ORDER), p.section, p.title.lower())
+            parts = p.section.split("/") if p.section else [""]
+            top, sub = parts[0], "/".join(parts[1:])
+            return (SECTION_ORDER.index(top) if top in SECTION_ORDER else len(SECTION_ORDER),
+                    SUBSECTION_ORDER.index(sub) if sub in SUBSECTION_ORDER else len(SUBSECTION_ORDER),
+                    p.section, p.title.lower())
         return [{"title": p.title, "slug": p.slug, "section": p.section, "excerpt": excerpt(p.text),
                  "backlinks": len(self.backlinks.get(p.slug, [])), "broken": len(p.broken)}
                 for p in sorted(self.pages.values(), key=section_key)]
