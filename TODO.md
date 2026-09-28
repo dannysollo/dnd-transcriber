@@ -38,7 +38,8 @@ Still open:
 
 - Wiki inside the transcriber and wiki generation: done 2026-09-28. The
   Netlify deploy action is disabled (the old site stays up, frozen, until
-  it's deleted in Netlify). Not ported: the old site's relationship graph.
+  it's deleted in Netlify). The relationship graph and the Index.md front page
+  were ported too.
   Generation hasn't had a real run yet (tested with Claude stubbed out).
 - **Clean up the As Above, So Below wiki** (the vault's ~124 pages).
   Character pages list nearly everything that ever happened to them; they
