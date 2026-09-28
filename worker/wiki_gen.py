@@ -116,7 +116,8 @@ PAGE_SYSTEM = """You write one page of a tabletop campaign's wiki, following thi
 
 %s
 
-Output ONLY the page's markdown, starting with "# Title". Use only facts from the notes you're given.
+Output ONLY the page's markdown, starting with its properties block ("---" lines) and then "# Title".
+Use only facts from the notes you're given.
 Link other pages with [[Exact Title]] only when the title is in the list of pages provided."""
 
 
@@ -129,7 +130,7 @@ def write_page(entity: dict, sessions: list[dict], titles: list[str], fmt: str, 
            + ", ".join(titles) + "\n\nNotes from the sessions that mention it, oldest first:\n\n" + (ctx or "(none yet)"))
     md = ask_claude(PAGE_SYSTEM % fmt, msg, scratch)
     md = re.sub(r"^```(?:markdown)?\s*|\s*```$", "", md.strip())
-    if not md.startswith("#"):
+    if not md.startswith(("#", "---")):
         md = f"# {entity['title']}\n\n{md}"
     return {"title": entity["title"], "section": entity["folder"], "markdown": md}
 

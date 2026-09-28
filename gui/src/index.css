@@ -1086,7 +1086,30 @@ input.written-line:focus {
 .wiki-result-section { margin-left: 10px; font-size: 14px; color: var(--ink-faint); }
 .wiki-result-snippet { margin: 4px 0 0; font-size: 15px; color: var(--ink-soft); }
 .wiki-crumbs { font-size: 15px; color: var(--ink-faint); margin-bottom: 8px; }
-.wiki-article-head { display: flex; align-items: baseline; gap: 16px; justify-content: space-between; border-bottom: 1px solid var(--rule-strong); padding-bottom: 8px; margin-bottom: 20px; }
+.wiki-article-head { display: flex; align-items: flex-end; gap: 8px 20px; justify-content: space-between; flex-wrap: wrap; border-bottom: 1px solid var(--rule-strong); padding-bottom: 10px; margin-bottom: 20px; }
+.wiki-article-head:has(+ .wiki-facts) { border-bottom: none; padding-bottom: 0; margin-bottom: 16px; }
+.wiki-descriptor { margin: 0; font-size: 18px; font-style: italic; color: var(--ink-soft); }
+.wiki-head-side { display: flex; align-items: center; gap: 18px; padding-bottom: 4px; }
+/* Status: the words say it; the dot is for a glance (moss fine, ochre in doubt, rubric gone). */
+.wiki-status { display: inline-flex; align-items: baseline; gap: 8px; font-size: 16px; color: var(--ink); }
+.wiki-status i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--moss); align-self: center; }
+.wiki-status.doubt i { background: var(--ochre); }
+.wiki-status.gone i { background: var(--rubric); }
+/* Key facts (the page's properties): one ruled band under the title. */
+.wiki-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); clip-path: inset(0 0 0 1px); margin: 0 0 22px; border-top: 1px solid var(--rule-strong); border-bottom: 1px solid var(--rule-strong); }
+.wiki-facts div { display: flex; flex-direction: column; gap: 2px; padding: 9px 14px 10px; border-left: 1px solid var(--rule); margin-left: -1px; }
+.wiki-facts dt { font-size: 14px; color: var(--ink-faint); font-variant: small-caps; letter-spacing: 0.05em; }
+.wiki-facts dd { margin: 0; font-size: 17px; line-height: 1.35; color: var(--ink); }
+/* The standard sections (WIKI_FORMAT.md): abstract, dated timeline, ruled relationships. */
+.wiki-body .wiki-sec h2 { font-size: 20px; font-weight: 600; color: var(--rubric); font-variant: small-caps; letter-spacing: 0.05em; border-bottom: none; margin: 32px 0 8px; padding-bottom: 0; }
+.wiki-body .wiki-sec-lead > p:first-of-type { font-size: 19px; line-height: 1.6; margin-top: 0; }
+.wiki-body .wiki-sec-timeline ul { list-style: none; padding: 0; }
+.wiki-body .wiki-sec-timeline li { margin: 0; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+.wiki-dated { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 16px; }
+.wiki-when { color: var(--ink-faint); font-size: 15px; font-weight: 400; padding-top: 2px; font-variant-numeric: lining-nums tabular-nums; }
+.wiki-when strong { font-weight: 400; }
+.wiki-body .wiki-sec-relationships ul { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px; }
+.wiki-body .wiki-sec-relationships li { margin: 0; padding: 7px 0; border-bottom: 1px solid var(--rule); line-height: 1.45; }
 .wiki-layout { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 40px; align-items: start; }
 .wiki-body { font-size: 18px; line-height: 1.65; color: var(--ink); max-width: 72ch; }
 .wiki-body h2 { font-size: 24px; font-weight: 500; margin: 28px 0 8px; border-bottom: 1px solid var(--rule); padding-bottom: 4px; }
@@ -1114,6 +1137,11 @@ button.wiki-missing { cursor: pointer; }
   .wiki-layout { grid-template-columns: minmax(0, 1fr); }
   .wiki-backlinks { position: static; border-top: 1px solid var(--rule); padding-top: 12px; }
   .wiki-body table { display: block; overflow-x: auto; }
+  .wiki-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wiki-facts div { border-left: none; margin-left: 0; padding-left: 0; border-top: 1px solid var(--rule); }
+  .wiki-facts div:nth-child(-n+2) { border-top: none; }
+  .wiki-dated { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .wiki-body .wiki-sec-relationships ul { grid-template-columns: minmax(0, 1fr); }
 }
 .wiki-body ul { list-style: disc; }
 .wiki-body ul ul { list-style: circle; }

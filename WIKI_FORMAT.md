@@ -23,24 +23,49 @@ everything that ever happened.
 ## Every page
 
 ```markdown
+---
+kind: Player character
+played-by: Christina
+race: Half-elf
+class: Artificer
+chord: "[[Hod]]"
+family: "[[Alexander Nouveau]] (grandfather), [[Nico]] (brother)"
+status: Alive, back with the party
+aliases: [The Scion]
+---
 # Page Title
 *One line: what this is.*
 
 Abstract: 2-4 sentences. Who or what it is, why it matters to the story,
 and where things stand now. Someone who reads only this should know enough.
 
-- **Key fact:** value
-- **Key fact:** value
-
 ## Timeline
-- **Session date** — one significant thing that happened. [[Links]] to who and where.
+- **Mar 2026** — one significant thing that happened. [[Links]] to who and where.
 
 ## Relationships
 - [[Other Page]] — how they relate, in a few words.
 
 ## Appearances
-[[Session name]], [[Session name]] (or plain dates when sessions aren't pages)
+Plain prose: how many sessions, first and latest, or the sessions by name.
 ```
+
+**Properties** (the YAML between the `---` lines, Obsidian's Properties panel)
+hold the key facts. The site shows them as a band under the title, in the
+order written, with the key as the label (`played-by` shows as "Played by").
+
+- `status` shows beside the title with a dot: moss when fine, ochre for
+  missing/captured/unknown/cursed, rubric for dead/destroyed. Always include it
+  for characters, factions and items.
+- `kind` and `aliases` aren't shown. `aliases` lets `[[Other Name]]` links reach
+  the page, as in Obsidian.
+- **Quote any value with a `[[link]]`** (`chord: "[[Hod]]"`); unquoted, YAML
+  reads it as a list.
+- Keep values short (a few words). Anything needing a sentence belongs in the
+  abstract.
+
+The one-line italic descriptor under the title shows in the page header.
+Timeline entries start with a bold date (`**Mar 2026**` or a session date),
+then ` — `, then the event; the site puts the dates in their own column.
 
 Rules:
 
@@ -60,14 +85,14 @@ Rules:
 
 ## Key facts by kind
 
-| Kind | Facts to lead with |
+| Kind (`kind:`) | Properties to lead with |
 | --- | --- |
-| Player character | Player, Race, Class, Affiliation, Status |
-| NPC | Role, Affiliation, Status, First met |
-| Location | Region, Ruled by, Notable for |
-| Faction | Leader, Base, Aims |
-| Event | When, Where, Who |
-| Item | Type, Held by, Powers |
-| Mechanic | Where it shows up |
+| Player character | played-by, race, class, affiliation, status |
+| NPC | role, affiliation, first-met, status |
+| Location | region, ruled-by, notable-for |
+| Faction | leader, base, aims, status |
+| Event | when, where, who |
+| Item | type, held-by, powers, status |
+| Mechanic | where-it-shows-up |
 
-Leave out a fact the sessions don't establish; don't write "unknown".
+Leave out a property the sessions don't establish; don't write "unknown".

@@ -4387,7 +4387,8 @@ def campaign_wiki_page(slug: str, page: str, user: Optional[User] = Depends(get_
     if not p:
         raise HTTPException(404, "No such page")
     return {"title": p.title, "slug": p.slug, "section": p.section, "path": p.path, "markdown": p.text,
-            "hash": hashlib.md5(p.text.encode()).hexdigest(), "broken": p.broken,
+            "body": p.body, "facts": [{"label": k, "value": v} for k, v in p.facts()], "status": p.status,
+            "aliases": p.aliases, "hash": hashlib.md5(p.text.encode()).hexdigest(), "broken": p.broken,
             "backlinks": [{"title": idx.pages[b].title, "slug": b} for b in idx.backlinks.get(p.slug, []) if b in idx.pages]}
 
 

@@ -11,19 +11,21 @@ import WikiGraph from '../WikiGraph'
 // by title; ones with no page show as missing. DMs edit in place; a save is
 // committed to the vault repo, so Obsidian stays in step.
 
-interface PageSummary { title: string; slug: string; section: string; excerpt: string; backlinks: number; broken: number }
+interface PageSummary { title: string; slug: string; section: string; excerpt: string; backlinks: number; broken: number; aliases?: string[] }
 interface WikiIndex { name: string; public: boolean; can_edit: boolean; has_wiki: boolean; pages: PageSummary[]; broken?: number }
-interface WikiPageData { title: string; slug: string; section: string; path: string; markdown: string; hash: string; broken: string[]; backlinks: { title: string; slug: string }[] }
+interface WikiPageData { title: string; slug: string; section: string; path: string; markdown: string; body?: string; facts?: { label: string; value: string }[]; status?: string; hash: string; broken: string[]; backlinks: { title: string; slug: string }[] }
 
 const WIKILINK = /\[\[([^\]\n]+)\]\]/g
 const GRAPH_PAGE = '_graph'   // the relationship graph's route (not a page slug: those never start with _)
 const INDEX_SLUG = 'index'    // the vault's Index.md: the wiki's front page
 
 /** A page's markdown, with [[wikilinks]] as links (or, for a DM, a way to create a missing page). */
-function WikiMarkdown({ markdown, bySlug, base, canEdit, onMissing }: {
-  markdown: string; bySlug: Map<string, string>; base: string; canEdit: boolean; onMissing: (title: string) => void
+function WikiMarkdown({ markdown, bySlug, base, canEdit, onMissing, inline = false, dated = false }: {
+  markdown: string; bySlug: Map<string, string>; base: string; canEdit: boolean; onMissing: (title: string) => void; inline?: boolean; dated?: boolean
 }) {
   const components = {
+    ...(inline ? { p: ({ children }: { children?: ReactNode }) => <>{children}</> } : {}),
+    ...(dated ? { li: TimelineItem } : {}),
     a: ({ href, children }: { href?: string; children?: ReactNode }) => {
       if (href?.startsWith('#missing:')) {
         const name = decodeURIComponent(href.slice(9))
@@ -36,6 +38,40 @@ function WikiMarkdown({ markdown, bySlug, base, canEdit, onMissing }: {
     },
   }
   return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{linkify(markdown, bySlug, base)}</ReactMarkdown>
+}
+
+/** "- **Oct 2025** — what happened": the date in its own column (styled only
+ * only under a Timeline heading; other lists with a bold lead-in read as written). */
+function TimelineItem({ node, children }: { node?: { children?: { type: string; tagName?: string; value?: string }[] }; children?: ReactNode }) {
+  const kids = node?.children?.filter(c => !(c.type === 'text' && !c.value?.trim())) ?? []
+  const parts = Array.isArray(children) ? children.filter(c => !(typeof c === 'string' && !c.trim())) : null
+  if (!parts || parts.length < 2 || kids[0]?.type !== 'element' || kids[0]?.tagName !== 'strong') return <li>{children}</li>
+  const [when, ...rest] = parts
+  if (typeof rest[0] === 'string') rest[0] = rest[0].replace(/^\s*[—–:-]\s*/, '')
+  return <li className="wiki-dated"><span className="wiki-when">{when}</span><span>{rest}</span></li>
+}
+
+/** Split the body at its "## " headings, so each standard section can be styled. */
+function sections(md: string): { key: string; md: string }[] {
+  const out: { key: string; md: string }[] = []
+  for (const chunk of md.split(/\n(?=## )/)) {
+    const h = chunk.match(/^## +(.+)/)
+    out.push({ key: h ? h[1].trim().toLowerCase().replace(/[^a-z]+/g, '-') : 'lead', md: chunk })
+  }
+  return out
+}
+
+/** The italic one-liner under the title ("*Player character, the Scion*"), which the header shows. */
+function takeDescriptor(md: string): [string | null, string] {
+  const m = md.match(/^\s*\*([^*\n]+)\*\s*(?:\n|$)/)
+  return m ? [m[1].trim(), md.slice(m[0].length)] : [null, md]
+}
+
+/** How a status reads at a glance: gone, in doubt, or fine. The words carry it too. */
+function statusTone(s: string): string {
+  if (/\b(dead|deceased|died|killed|destroyed|fallen|slain)\b/i.test(s)) return 'gone'
+  if (/\b(missing|captured|captive|imprisoned|unknown|lost|cursed|dormant|sealed)\b/i.test(s)) return 'doubt'
+  return 'fine'
 }
 
 /** The file usually starts with its own "# Title"; the page shows the title already. */
@@ -57,6 +93,13 @@ function linkify(md: string, bySlug: Map<string, string>, base: string): string 
     const text = shown.replace(/[[\]]/g, '')
     return slug ? `[${text}](${base}/${slug})` : `[${text}](#missing:${encodeURIComponent(name)})`
   })
+}
+
+/** Lowercased title or alias -> page slug, as Obsidian resolves [[links]]. */
+function linkMap(pages: PageSummary[]): Map<string, string> {
+  const m = new Map(pages.map(p => [p.title.toLowerCase(), p.slug]))
+  for (const p of pages) for (const a of p.aliases ?? []) if (!m.has(a.toLowerCase())) m.set(a.toLowerCase(), p.slug)
+  return m
 }
 
 function useWikiIndex(slug: string) {
@@ -107,7 +150,7 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
   const [showAll, setShowAll] = useState(false)
   const [front, setFront] = useState<string | null>(null)
   const [creatingTitle, setCreatingTitle] = useState<string | null>(null)
-  const bySlug = useMemo(() => new Map(index.pages.map(p => [p.title.toLowerCase(), p.slug])), [index.pages])
+  const bySlug = useMemo(() => linkMap(index.pages), [index.pages])
   useEffect(() => {
     if (!hasIndexPage) return
     fetch(`/campaigns/${slug}/wiki/pages/${INDEX_SLUG}`).then(r => (r.ok ? r.json() : null)).then(d => d && setFront(d.markdown)).catch(() => {})
@@ -329,12 +372,14 @@ function WikiArticle({ slug, page, index, base, onChanged }: { slug: string; pag
     .then(d => { if (d) { setData(d); setMissing(false) } })
   useEffect(() => { setData(null); setEditing(false); setCreatingTitle(null); load(); topRef.current?.scrollIntoView() }, [slug, page])
 
-  const bySlug = useMemo(() => new Map(index.pages.map(p => [p.title.toLowerCase(), p.slug])), [index.pages])
+  const bySlug = useMemo(() => linkMap(index.pages), [index.pages])
 
   if (missing) return <div className="page-content wiki"><p className="wiki-note">There's no page here. <Link to={base}>Back to the wiki</Link></p></div>
   if (!data) return <div className="page-content wiki"><div className="skeleton" style={{ height: 320, maxWidth: 820 }} /></div>
 
-  const body = withoutTitle(data.markdown, data.title)
+  const [descriptor, body] = takeDescriptor(withoutTitle(data.body ?? data.markdown, data.title))
+  const md = (text: string, inline = false, dated = false) =>
+    <WikiMarkdown markdown={text} bySlug={bySlug} base={base} canEdit={index.can_edit} onMissing={setCreatingTitle} inline={inline} dated={dated} />
 
   const save = async () => {
     setSaving(true)
@@ -359,11 +404,24 @@ function WikiArticle({ slug, page, index, base, onChanged }: { slug: string; pag
         {data.section && <span> / {data.section.split('/').join(' / ')}</span>}
       </nav>
       <header className="wiki-article-head">
-        <h1 className="wiki-title">{data.title}</h1>
-        {index.can_edit && !editing && (
-          <button type="button" className="btn-ghost" onClick={() => { setDraft(data.markdown); setEditing(true) }}>Edit</button>
-        )}
+        <div>
+          <h1 className="wiki-title">{data.title}</h1>
+          {descriptor && !editing && <p className="wiki-descriptor">{md(descriptor, true)}</p>}
+        </div>
+        <div className="wiki-head-side">
+          {data.status && !editing && (
+            <span className={`wiki-status ${statusTone(data.status)}`}><i aria-hidden="true" />{md(data.status, true)}</span>
+          )}
+          {index.can_edit && !editing && (
+            <button type="button" className="btn-ghost" onClick={() => { setDraft(data.markdown); setEditing(true) }}>Edit</button>
+          )}
+        </div>
       </header>
+      {!editing && !!data.facts?.length && (
+        <dl className="wiki-facts" aria-label="Key facts">
+          {data.facts.map(f => <div key={f.label}><dt>{f.label}</dt><dd>{md(f.value, true)}</dd></div>)}
+        </dl>
+      )}
       {creatingTitle && (
         <NewPageForm slug={slug} sections={[...new Set(index.pages.map(p => p.section))]} initialTitle={creatingTitle}
           onCreated={s => { onChanged(); navigate(`${base}/${s}`) }} onCancel={() => setCreatingTitle(null)} />
@@ -371,7 +429,7 @@ function WikiArticle({ slug, page, index, base, onChanged }: { slug: string; pag
 
       {editing ? (
         <div className="wiki-editor">
-          <p className="wiki-note">Markdown, with [[Page name]] or [[Page name|shown text]] for links. Saving commits it to the vault.</p>
+          <p className="wiki-note">Markdown, with [[Page name]] or [[Page name|shown text]] for links. Key facts go in the properties between the --- lines at the top (see the wiki format guide). Saving commits it to the vault.</p>
           <textarea value={draft} onChange={e => setDraft(e.target.value)} aria-label={`Edit ${data.title}`} spellCheck />
           <div className="wiki-editor-actions">
             <button type="button" className="btn-primary" onClick={save} disabled={saving || draft === data.markdown}>{saving ? 'Saving…' : 'Save'}</button>
@@ -381,7 +439,7 @@ function WikiArticle({ slug, page, index, base, onChanged }: { slug: string; pag
       ) : (
         <div className="wiki-layout">
           <article className="wiki-body">
-            <WikiMarkdown markdown={body} bySlug={bySlug} base={base} canEdit={index.can_edit} onMissing={setCreatingTitle} />
+            {sections(body).map((sec, i) => <section key={i} className={`wiki-sec wiki-sec-${sec.key}`}>{md(sec.md, false, sec.key === 'timeline')}</section>)}
           </article>
           <aside className="wiki-backlinks" aria-label="What links here">
             <Link to={`${base}/${GRAPH_PAGE}?focus=${data.slug}`} className="index-link">See it in the graph</Link>
