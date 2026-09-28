@@ -19,25 +19,28 @@ echo filter (a line matching one said just before on another track, and much
 quieter on its own) is the fix.
 
 Still open:
-- **Hallucinated lines.** Whisper occasionally invents a line, e.g. 04:40:01
-  Aella in the same session ("Bay, The Death, Correct, Holly Grayfield...").
-  Not rampant; collecting more examples. Delete line in the unsure-word
-  review now removes one.
+- **Hallucinated lines.** Mostly handled: ~100 removed across the Craig
+  sessions (stock captions, recited name lists, echoes; backups kept as
+  transcript.before-hallucination-sweep.md), and the worker now drops those
+  patterns itself. One-offs remain; Delete line in the unsure-word review
+  removes them.
 - **Names -> transcript jump is laggy on phones.** Possibly a slow train
   connection; recorded for now.
 
 ## Speaker attribution
 
-- **Voice library UI.** The library (`voices.json`) is built and used by the
-  worker; the site could show who has a profile and when it was last updated,
-  and offer a reset. Flag voices that match no profile as Unknown (needed for
-  legacy reconstruction).
-- **Legacy reconstruction as a site feature.** It's a manual pipeline for now
-  (`~/dnd-legacy-audio/work`: asr.py, label.py, upload.py; 30 sessions done,
-  first-word fix included). As a feature: upload a mixed recording, pick who
-  was there (guests too), label by voice profiles, then a one-time "who is
-  this?" step for unknown voices. Discord ring detection from video is an
-  optional tiebreaker.
+- **(In progress) Voice library in Campaign Settings.** Who has a profile, how
+  much audio it's built from, last updated, reset. The worker also learns each
+  player's profile from their own Craig track every session (it only learned
+  shared-mic players before).
+- **(In progress) Legacy reconstruction as a site feature.** Decided
+  2026-09-28: upload a single mixed recording on the site ("new session from a
+  recording"), pick who was there; the worker downloads it, runs Whisper with
+  word times and labels speakers by the library's voice profiles (the manual
+  pipeline in `~/dnd-legacy-audio/work`: label.py's method, first-word fix
+  included); voices matching no profile become "Unknown voice N", and the
+  session shows a "who is this?" panel with short clips of each to assign a
+  player or a guest name. The session is marked reconstructed.
 
 ## Review
 
@@ -47,9 +50,8 @@ Still open:
 
 ## Notifications and operations
 
-- Discord notification when a transcript or summary finishes (the campaign
-  settings already have a webhook field).
-- Warn when a job is queued while the worker hasn't checked in recently.
+- **(In progress)** Warn when a job is queued while the worker hasn't checked
+  in recently.
 
 ## Name and app
 
