@@ -35,6 +35,7 @@ into the worker's data folder. Dependencies: onnxruntime, plus torchaudio (for
 the fbank features) and soundfile, which the worker already uses.
 """
 import os
+import re
 import subprocess
 import tempfile
 from datetime import datetime, timezone
@@ -230,6 +231,13 @@ def _owner(filename: str, players: dict) -> str | None:
     return next((u for u in players if u.lower() in low), None)
 
 
+def _guest_key(filename: str) -> str | None:
+    """A guest's library key from their Craig track ("3-somebody.flac" -> "guest:somebody")."""
+    stem = Path(filename).stem
+    name = re.sub(r"^\d+-", "", stem).split("_")[0].strip().lower()
+    return f"guest:{name}" if name else None
+
+
 def process_session(tracks: list[tuple[Path, dict]], players: dict, library: dict, session: str,
                     label_for) -> list[str]:
     """
@@ -246,7 +254,21 @@ def process_session(tracks: list[tuple[Path, dict]], players: dict, library: dic
     for audio, data in tracks:
         owner = _owner(audio.name, players)
         segs = data.get("segments") or []
-        if not owner or not segs:
+        if not segs:
+            continue
+        if not owner:
+            # A guest (not in the campaign's players): learn their voice too, keyed by
+            # Craig username, so a returning guest is recognised in reconstructions.
+            # The DM can name them in Campaign Settings; a name set there is kept.
+            key = _guest_key(audio.name)
+            a = load_audio(audio)
+            W, _ = segment_windows(a, segs)
+            if key and len(W) >= 30:
+                rng = np.random.default_rng(0)
+                sample = W[rng.choice(len(W), min(len(W), LIBRARY_SAMPLE), replace=False)]
+                name = (library.get("people", {}).get(key) or {}).get("name") or key.split(":", 1)[1]
+                update_library(library, key, name, embed(sample), session)
+                log.append(f"{audio.name}: updated guest voice profile {name}")
             continue
         shared_with = sharers.get(owner.lower(), [])
         a = load_audio(audio)

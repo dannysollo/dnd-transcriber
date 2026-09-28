@@ -3,6 +3,7 @@ import CampaignStats from './CampaignStats'
 import { CloseIcon } from '../Icons'
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import VoiceLibrary from '../VoiceLibrary'
 import { useAuth } from '../AuthContext'
 
 interface Campaign {
@@ -53,7 +54,7 @@ export default function CampaignSettingsPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [invites, setInvites] = useState<Invite[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'settings' | 'config' | 'people' | 'stats' | 'worker'>('settings')
+  const [tab, setTab] = useState<'settings' | 'config' | 'people' | 'stats' | 'voices' | 'worker'>('settings')
 
   // Config tab state (mirrors SettingsPage)
   const [config, setConfig] = useState<Record<string, any> | null>(null)
@@ -347,7 +348,7 @@ export default function CampaignSettingsPage() {
 
       {/* Tabs */}
       <div role="tablist" style={{ display: 'flex', gap: '28px', marginBottom: '28px', borderBottom: '1px solid var(--rule)' }}>
-        {(['settings', 'config', 'people', 'stats', ...(myRole === 'dm' ? ['worker'] : [])] as ('settings' | 'config' | 'people' | 'stats' | 'worker')[]).map(t => (
+        {(['settings', 'config', 'people', 'stats', ...(myRole === 'dm' ? ['voices', 'worker'] : [])] as ('settings' | 'config' | 'people' | 'stats' | 'voices' | 'worker')[]).map(t => (
           <button
             key={t}
             role="tab"
@@ -844,6 +845,8 @@ export default function CampaignSettingsPage() {
           )}
         </div>
       )}
+
+      {tab === 'voices' && myRole === 'dm' && slug && <VoiceLibrary slug={slug} />}
 
       {tab === 'worker' && myRole === 'dm' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '540px' }}>

@@ -4064,9 +4064,11 @@ def campaign_session_reconstructed(slug: str, name: str, _member=Depends(require
 
 
 # ─── Voice library (worker only; see worker/voices.py) ──────────────────────
-# One speaker-embedding profile per player, learned by the worker from tracks
-# with one person on them, used to split shared mics. It's numbers only (no
-# audio), but it's still personal data, so only the worker can read it.
+# One speaker-embedding profile per player (and per guest, "guest:<craig name>"),
+# learned by the worker from tracks with one person on them; used to split
+# shared mics and to label reconstructed sessions. It's numbers only (no
+# audio), but it's still personal data: only the worker reads the vectors;
+# DMs see who has a profile and can reset one or name a guest.
 
 def _voices_path(slug: str) -> Path:
     return BASE_DIR / "campaigns" / slug / "voices.json"
@@ -4085,11 +4087,87 @@ async def worker_put_voices(slug: str, db: Session = Depends(get_db), request: R
     body = await request.json()
     if not isinstance(body, dict) or not isinstance(body.get("people", {}), dict):
         raise HTTPException(400, "Expected {\"people\": {...}}")
+    # The worker uploads the library it downloaded hours earlier, plus what it
+    # learned. Keep what the DM changed meanwhile: a reset profile stays gone
+    # (learned afresh from the next session), a name set on the site wins.
+    current = _read_voices(slug)
+    reset = current.get("reset", {})
+    people = body.get("people", {})
+    for key in list(people):
+        if key in reset:
+            del people[key]
+        elif key in current.get("people", {}) and current["people"][key].get("name_set"):
+            people[key]["name"] = current["people"][key]["name"]
+            people[key]["name_set"] = True
+    body["people"] = people
+    body.pop("reset", None)  # cleared: the next upload learns them afresh
+    _write_voices(slug, body)
+    return {"ok": True, "people": len(people)}
+
+
+def _read_voices(slug: str) -> dict:
+    path = _voices_path(slug)
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"people": {}}
+    except Exception:
+        return {"people": {}}
+
+
+def _write_voices(slug: str, data: dict) -> None:
     path = _voices_path(slug)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(body), encoding="utf-8")
+    tmp.write_text(json.dumps(data), encoding="utf-8")
     tmp.replace(path)
-    return {"ok": True, "people": len(body.get("people", {}))}
+
+
+# DM-facing: who has a profile (no vectors), reset one, name a guest.
+
+@app.get("/campaigns/{slug}/voices")
+def campaign_list_voices(slug: str, _member=Depends(require_campaign_member("dm"))):
+    data = _read_voices(slug)
+    players = load_config(slug).get("players") or {}
+    people = []
+    for key, p in data.get("people", {}).items():
+        guest = key.startswith("guest:")
+        people.append({
+            "key": key, "name": p.get("name") or key, "guest": guest,
+            "player": None if guest else key,
+            "minutes": round(p.get("windows", 0) * 1.5 / 60, 1),  # 1.5 s windows
+            "sessions": p.get("sessions", 0), "last_session": p.get("last_session"), "updated": p.get("updated"),
+        })
+    have = {p["key"] for p in people}
+    missing = [info.get("name", u) if info else u for u, info in players.items() if u not in have]
+    people.sort(key=lambda p: (p["guest"], p["name"].lower()))
+    return {"people": people, "players_without_profile": missing}
+
+
+@app.delete("/campaigns/{slug}/voices/{key}")
+def campaign_reset_voice(slug: str, key: str, _member=Depends(require_campaign_member("dm"))):
+    data = _read_voices(slug)
+    if key not in data.get("people", {}):
+        raise HTTPException(404, "No voice profile for that person")
+    del data["people"][key]
+    data.setdefault("reset", {})[key] = datetime.utcnow().isoformat()
+    _write_voices(slug, data)
+    return {"ok": True}
+
+
+class VoiceNameBody(BaseModel):
+    name: str
+
+
+@app.patch("/campaigns/{slug}/voices/{key}")
+def campaign_name_voice(slug: str, key: str, body: VoiceNameBody, _member=Depends(require_campaign_member("dm"))):
+    data = _read_voices(slug)
+    p = data.get("people", {}).get(key)
+    if not p:
+        raise HTTPException(404, "No voice profile for that person")
+    if not body.name.strip():
+        raise HTTPException(400, "Name cannot be empty")
+    p["name"] = body.name.strip()
+    p["name_set"] = True
+    _write_voices(slug, data)
+    return {"ok": True}
 
 
 # ─── Vault connection test ────────────────────────────────────────────────────
