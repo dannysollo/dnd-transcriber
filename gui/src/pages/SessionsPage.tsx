@@ -5,6 +5,7 @@ import { useApiUrl, useCampaign } from '../CampaignContext'
 import { useAuth } from '../AuthContext'
 
 const LAST_SESSION_KEY = 'codm-last-session'
+import WorkerOffline from '../WorkerOffline'
 import { useToast } from '../Toast'
 
 type SortKey = 'name' | 'date_added' | 'modified'
@@ -382,6 +383,7 @@ export default function SessionsPage() {
 
   return (
     <div className="page-content" style={{ padding: '40px 56px', maxWidth: '920px' }}>
+      <WorkerOffline waiting={Object.values(jobMap).some(j => j.status === 'pending')} what="queued transcriptions" />
       {/* Header */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: '28px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>

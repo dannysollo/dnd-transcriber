@@ -3898,6 +3898,7 @@ def get_worker_key(
 @app.get("/campaigns/{slug}/worker/jobs")
 def worker_list_pending_jobs(slug: str, db: Session = Depends(get_db), request: Request = None):
     campaign = require_worker_key(slug)(request, db)
+    _mark_worker_seen(db, campaign)
     jobs = crud.get_pending_jobs(db, campaign.id)
     return [_job_dict(j) for j in jobs]
 
@@ -3982,6 +3983,45 @@ def worker_report_error(
         raise HTTPException(404, "Job not found")
     crud.fail_job(db, job, body.error)
     return {"ok": True}
+
+
+# The worker's own heartbeat only goes out between jobs, so during a long
+# transcription it looks offline. Its polls (the job loop, and the summary loop,
+# which runs on its own thread every 15-30 s even mid-transcription) are a
+# better sign of life: each one marks it seen, at most every 30 s.
+WORKER_OFFLINE_AFTER = 180  # seconds without any contact
+_worker_seen_at: dict[int, float] = {}
+
+
+def _mark_worker_seen(db: Session, campaign) -> None:
+    import time
+    from datetime import datetime as dt, timezone
+    if time.time() - _worker_seen_at.get(campaign.id, 0) < 30:
+        return
+    _worker_seen_at[campaign.id] = time.time()
+    crud.update_campaign_settings(db, campaign, {"worker_last_seen": dt.now(timezone.utc).isoformat()})
+
+
+@app.get("/campaigns/{slug}/worker/status")
+def campaign_worker_status(
+    slug: str,
+    _member=Depends(require_campaign_member("spectator")),
+    db: Session = Depends(get_db),
+):
+    """Is the transcription worker around? For warnings on queued jobs."""
+    from datetime import datetime as dt, timezone
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    last_seen = (campaign.settings or {}).get("worker_last_seen")
+    seconds = None
+    if last_seen:
+        try:
+            seconds = int((dt.now(timezone.utc) - dt.fromisoformat(last_seen)).total_seconds())
+        except ValueError:
+            pass
+    return {"last_seen": last_seen, "seconds_ago": seconds,
+            "online": seconds is not None and seconds <= WORKER_OFFLINE_AFTER}
 
 
 @app.post("/campaigns/{slug}/worker/heartbeat")
@@ -4201,7 +4241,8 @@ def worker_list_analysis_jobs(slug: str, db: Session = Depends(get_db), request:
     queued transcript at once (24 queued legacy sessions) outlasted the
     worker's 30s read timeout. The worker polls again once it's done, and
     serving a job moves it to the back of the queue."""
-    require_worker_key(slug)(request, db)
+    campaign = require_worker_key(slug)(request, db)
+    _mark_worker_seen(db, campaign)
     sessions_dir = get_sessions_dir(slug)
     config = load_config(slug)
     corrections = config.get("corrections") or {}

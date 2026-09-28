@@ -1009,3 +1009,10 @@ input.written-line:focus {
 @keyframes throbber-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .throbber { animation-duration: 2.4s; } }
 .stats-updating { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+
+/* Something is queued but the worker isn't around (WorkerOffline.tsx). */
+.worker-offline {
+  margin: 0 0 14px; padding: 10px 14px; max-width: 820px;
+  border-left: 3px solid var(--ochre); background: color-mix(in srgb, var(--ochre) 9%, transparent);
+  font-size: 16px; color: var(--ink); line-height: 1.5;
+}

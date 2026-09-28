@@ -8,6 +8,7 @@ import { useToast } from '../Toast'
 import { RuleSuggestionBar, type SessionRuleSuggestion, addCorrectionRule } from '../RuleSuggestions'
 import ReactMarkdown from 'react-markdown'
 import { BarList, PaceChart } from '../Charts'
+import WorkerOffline from '../WorkerOffline'
 import { formatDuration, percent } from '../chartFormat'
 
 
@@ -953,6 +954,11 @@ export default function SessionView() {
           >
             Cancel
           </button>
+        </div>
+      )}
+      {analysisPending && (
+        <div style={{ padding: '10px 28px 0', flexShrink: 0 }}>
+          <WorkerOffline waiting what="the summary" />
         </div>
       )}
 
