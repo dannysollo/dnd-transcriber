@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, type SimulationNodeDatum } from 'd3-force'
+import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type SimulationNodeDatum } from 'd3-force'
 import { select } from 'd3-selection'
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom'
 import { drag } from 'd3-drag'
@@ -35,7 +35,8 @@ const colorOf = (kind: string) => {
   return k ? `var(--wg-${k.slot})` : 'var(--wg-other)'
 }
 const radius = (d: Node) => 4 + Math.sqrt(d.degree) * 1.7
-const LABEL_DEGREE = 8  // pages this well connected are always named
+const ALWAYS_LABELLED = 14   // the best-connected pages are always named; the rest when zoomed in or lit
+const LABEL_ZOOM = 1.8
 
 export default function WikiGraph({ slug, base, focus }: { slug: string; base: string; focus?: string | null }) {
   const navigate = useNavigate()
@@ -69,12 +70,15 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     }
 
     const sim = forceSimulation(nodes)
-      .force('link', forceLink<Node, Edge>(links).id(d => d.id).distance(60).strength(0.25))
-      .force('charge', forceManyBody().strength(-140))
+      .force('link', forceLink<Node, Edge>(links).id(d => d.id).distance(90).strength(0.12))
+      .force('charge', forceManyBody().strength(-360).distanceMax(700))
+      .force('x', forceX(width / 2).strength(0.035))
+      .force('y', forceY(height / 2).strength(0.035))
       .force('center', forceCenter(width / 2, height / 2))
-      .force('collide', forceCollide<Node>().radius(d => radius(d) + 3))
+      .force('collide', forceCollide<Node>().radius(d => radius(d) + 6))
       .stop()
-    for (let i = 0; i < 300; i++) sim.tick()   // lay out up front: no drifting animation
+    for (let i = 0; i < 450; i++) sim.tick()   // lay out up front: no drifting animation
+    const named = new Set([...nodes].sort((a, b) => b.degree - a.degree).slice(0, ALWAYS_LABELLED).map(n => n.id))
 
     const svg = select(svgEl)
     svg.selectAll('*').remove()
@@ -92,7 +96,7 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
         .attr('x2', d => (d.target as Node).x!).attr('y2', d => (d.target as Node).y!)
       dot.attr('cx', d => d.x!).attr('cy', d => d.y!)
       label.attr('x', d => d.x!).attr('y', d => d.y!)
-        .attr('class', d => 'wg-label' + (d.degree >= LABEL_DEGREE || scale >= 1.8 ? ' on' : ''))
+        .attr('class', d => 'wg-label' + (named.has(d.id) || scale >= LABEL_ZOOM ? ' on' : ''))
     }
     place()
 
@@ -107,7 +111,7 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     const zoomer = zoom<SVGSVGElement, unknown>().scaleExtent([0.25, 6]).on('zoom', e => {
       const t: ZoomTransform = e.transform
       g.attr('transform', t.toString())
-      if ((t.k >= 1.8) !== (scale >= 1.8)) { scale = t.k; place() } else scale = t.k
+      if ((t.k >= LABEL_ZOOM) !== (scale >= LABEL_ZOOM)) { scale = t.k; place() } else scale = t.k
     })
     svg.call(zoomer)
 
@@ -127,11 +131,22 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
         })
         .on('end', (_e, d) => { d.fx = null; d.fy = null }))
 
-    // Open centred on a page (from a page's "See it in the graph").
+    // Fit what matters in the window: the whole graph, or a page and its
+    // neighbours (from a page's "See it in the graph").
+    const fit = (subset: Node[], maxScale: number) => {
+      const xs = subset.map(n => n.x!), ys = subset.map(n => n.y!)
+      const pad = 40
+      const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad
+      const k = Math.min(maxScale, width / (x1 - x0), height / (y1 - y0))
+      svg.call(zoomer.transform, zoomIdentity.translate(width / 2 - k * (x0 + x1) / 2, height / 2 - k * (y0 + y1) / 2).scale(k))
+    }
     const f = focus ? nodes.find(n => n.id === focus) : null
     if (f) {
       highlight(f.id)
-      svg.call(zoomer.transform, zoomIdentity.translate(width / 2 - f.x! * 1.6, height / 2 - f.y! * 1.6).scale(1.6))
+      const near = neighbours.get(f.id) ?? new Set<string>()
+      fit(nodes.filter(n => n.id === f.id || near.has(n.id)), 2.2)
+    } else {
+      fit(nodes, 1.4)
     }
     return () => { sim.stop(); svg.on('.zoom', null) }
   }, [data, hidden, focus])
