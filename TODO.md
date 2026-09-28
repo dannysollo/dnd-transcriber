@@ -36,17 +36,15 @@ Still open:
 
 ## Wiki
 
-- **(In progress) Wiki inside the transcriber.** Replace the Netlify site
-  (campaign-vault/campaign-site/build.js: section nav, search, backlinks,
-  graph) with a Wiki page per campaign, rendered from the server's vault
-  checkout.
-- **(In progress) Generate a wiki for a new campaign.** A standard structure
-  and page format, seeded from the sessions, so every campaign gets one.
+- Wiki inside the transcriber and wiki generation: done 2026-09-28. The
+  Netlify deploy action is disabled (the old site stays up, frozen, until
+  it's deleted in Netlify). Not ported: the old site's relationship graph.
+  Generation hasn't had a real run yet (tested with Claude stubbed out).
 - **Clean up the As Above, So Below wiki** (the vault's ~124 pages).
   Character pages list nearly everything that ever happened to them; they
-  should read like encyclopedia articles: a short abstract, a timeline of
-  significant events, relationships, and so on. Fix the many broken
-  [[wikilinks]] too. Do after the standard page format exists.
+  should read like encyclopedia articles: WIKI_FORMAT.md is the target. Most
+  "broken links" were [[Folder/Page]] links the Netlify site couldn't
+  resolve; the new wiki resolves them (1 truly broken link was left).
 
 ## Review
 

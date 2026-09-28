@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useToast } from '../Toast'
+import WorkerOffline from '../WorkerOffline'
 
 // The campaign wiki: its vault's pages (server: /campaigns/{slug}/wiki, wiki.py),
 // read here instead of on the old Netlify site. [[Wikilinks]] resolve to pages
@@ -117,8 +118,10 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
           onCreated={s => { onChanged(); navigate(`${base}/${s}`) }} onCancel={() => setCreating(false)} />}
       </header>
 
-      {!index.has_wiki ? (
-        <p className="wiki-note">This campaign has no wiki yet.</p>
+      {index.can_edit && <WikiGenerate slug={slug} empty={!index.has_wiki || index.pages.length === 0} onDone={onChanged} />}
+
+      {!index.has_wiki || index.pages.length === 0 ? (
+        !index.can_edit && <p className="wiki-note">This campaign has no wiki yet.</p>
       ) : results ? (
         <ol className="wiki-results">
           {results.length === 0 && <li className="wiki-note">Nothing matches “{q}”.</li>}
@@ -143,6 +146,77 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
             </section>
           ))}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Generating the wiki from the sessions (worker/wiki_gen.py) ──────────────
+
+interface GenJob { state: 'none' | 'queued' | 'running' | 'done' | 'error'; mode?: string; done?: number; total?: number; message?: string; warning?: string | null; finished?: string }
+
+function WikiGenerate({ slug, empty, onDone }: { slug: string; empty: boolean; onDone: () => void }) {
+  const { toast } = useToast()
+  const [job, setJob] = useState<GenJob | null>(null)
+  const [confirm, setConfirm] = useState(false)
+  const load = () => fetch(`/campaigns/${slug}/wiki/generate`).then(r => (r.ok ? r.json() : null)).then(d => d && setJob(d)).catch(() => {})
+  useEffect(() => { load() }, [slug])
+  const active = job?.state === 'queued' || job?.state === 'running'
+  useEffect(() => {
+    if (!active) return
+    const id = window.setInterval(() => { load() }, 8000)
+    return () => window.clearInterval(id)
+  }, [active])
+  const prev = useRef(job?.state)
+  useEffect(() => {
+    if (prev.current && prev.current !== 'done' && job?.state === 'done') onDone()
+    prev.current = job?.state
+  }, [job?.state])
+
+  const start = async (mode: 'new' | 'fill') => {
+    setConfirm(false)
+    const r = await fetch(`/campaigns/${slug}/wiki/generate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }),
+    })
+    const d = await r.json().catch(() => ({}))
+    if (!r.ok) { toast(d.detail ?? 'Could not start', 'error'); return }
+    setJob(d)
+  }
+
+  if (!job) return null
+  if (active) {
+    const pct = job.total ? Math.round((job.done ?? 0) / job.total * 100) : 0
+    return (
+      <div className="wiki-gen" role="status">
+        <WorkerOffline waiting what="the wiki" />
+        <p className="wiki-gen-title">{job.state === 'queued' ? 'Waiting for the worker to start the wiki…' : job.message}</p>
+        {job.total ? <div className="upload-progress"><div style={{ width: `${pct}%` }} /><span>{job.done} of {job.total} pages</span></div> : <span className="throbber" aria-hidden="true" />}
+        <p className="wiki-note">Pages appear as they're written; you can leave this page.</p>
+      </div>
+    )
+  }
+  return (
+    <div className={empty ? 'wiki-gen' : 'wiki-gen quiet'}>
+      {job.state === 'done' && <p className="wiki-note">{job.message}{job.warning ? `. ${job.warning}` : '.'}</p>}
+      {job.state === 'error' && <p className="wiki-note">The last generation stopped: {job.message}</p>}
+      {empty ? (
+        <>
+          <p className="wiki-gen-title">Write this campaign's wiki from its sessions</p>
+          <p className="wiki-note">
+            Claude reads every session's summary and wiki notes, picks out the characters, places, factions,
+            events and items that matter, and writes a short page for each in the standard format: an abstract,
+            key facts, a timeline and relationships. It runs on the worker and takes a while.
+          </p>
+          <button type="button" className="btn-primary" onClick={() => start('new')}>Generate the wiki</button>
+        </>
+      ) : confirm ? (
+        <p className="wiki-note">
+          Write pages for anything in the sessions that doesn't have one yet? Existing pages aren't touched.{' '}
+          <button type="button" className="index-link" onClick={() => start('fill')}>Yes, fill them in</button>{' '}
+          <button type="button" className="index-link" onClick={() => setConfirm(false)}>Cancel</button>
+        </p>
+      ) : (
+        <button type="button" className="index-link" onClick={() => setConfirm(true)}>Fill in missing pages from the sessions</button>
       )}
     </div>
   )

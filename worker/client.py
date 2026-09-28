@@ -110,6 +110,20 @@ class WorkerClient:
                           headers=self.headers, json=data, timeout=30)
         r.raise_for_status()
 
+    def get_wiki_job(self) -> dict | None:
+        r = requests.get(self._url("/worker/wiki-job"), headers=self.headers, timeout=60)
+        r.raise_for_status()
+        return r.json().get("job")
+
+    def push_wiki_pages(self, pages: list[dict]) -> None:
+        r = requests.post(self._url("/worker/wiki-pages"), headers=self.headers, json={"pages": pages}, timeout=60)
+        r.raise_for_status()
+
+    def wiki_status(self, state: str, done: int, total: int, message: str) -> None:
+        r = requests.post(self._url("/worker/wiki-status"), headers=self.headers,
+                          json={"state": state, "done": done, "total": total, "message": message}, timeout=60)
+        r.raise_for_status()
+
     def get_voice_library(self) -> dict:
         """The campaign's voice profiles (worker/voices.py)."""
         r = requests.get(self._url("/worker/voices"), headers=self.headers, timeout=30)

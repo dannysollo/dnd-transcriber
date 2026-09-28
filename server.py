@@ -4445,6 +4445,146 @@ def campaign_wiki_create(slug: str, body: WikiPageBody,
     return {"ok": True, "slug": wiki.slugify(title), "warning": problem}
 
 
+# Generating a wiki from the sessions (worker/wiki_gen.py writes the pages with
+# Claude, in the format of WIKI_FORMAT.md). "new" writes every page it finds;
+# "fill" only adds pages the wiki doesn't have yet.
+WIKI_JOB_FILE = "wiki_generate.json"
+
+
+def _wiki_job_path(slug: str) -> Path:
+    return BASE_DIR / "campaigns" / slug / WIKI_JOB_FILE
+
+
+def _read_wiki_job(slug: str) -> dict:
+    try:
+        return json.loads(_wiki_job_path(slug).read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _write_wiki_job(slug: str, job: dict) -> None:
+    job["updated"] = datetime.utcnow().isoformat()
+    _wiki_job_path(slug).write_text(json.dumps(job), encoding="utf-8")
+
+
+class WikiGenerateBody(BaseModel):
+    mode: str = "fill"  # "fill": add missing pages; "new": write every page
+
+
+@app.post("/campaigns/{slug}/wiki/generate")
+def campaign_wiki_generate(slug: str, body: WikiGenerateBody,
+                           _member=Depends(require_campaign_member("dm")), db: Session = Depends(get_db)):
+    if body.mode not in ("fill", "new"):
+        raise HTTPException(400, "mode is fill or new")
+    job = _read_wiki_job(slug)
+    # A "running" job that's gone quiet for half an hour (the worker stopped) can be restarted.
+    stale = job.get("updated") and (datetime.utcnow() - datetime.fromisoformat(job["updated"])).total_seconds() > 1800
+    if job.get("state") in ("queued", "running") and not (job.get("state") == "running" and stale):
+        raise HTTPException(409, "The wiki is already being generated")
+    sessions_dir = get_sessions_dir(slug)
+    if not any((d / "summary.md").exists() for d in sessions_dir.iterdir() if d.is_dir()):
+        raise HTTPException(400, "No session has a summary yet: the wiki is written from the summaries")
+    _write_wiki_job(slug, {"state": "queued", "mode": body.mode, "requested": datetime.utcnow().isoformat(),
+                           "done": 0, "total": 0, "message": "Waiting for the worker"})
+    return _read_wiki_job(slug)
+
+
+@app.get("/campaigns/{slug}/wiki/generate")
+def campaign_wiki_generate_status(slug: str, _member=Depends(require_campaign_member("spectator"))):
+    return _read_wiki_job(slug) or {"state": "none"}
+
+
+@app.get("/campaigns/{slug}/worker/wiki-job")
+def worker_get_wiki_job(slug: str, db: Session = Depends(get_db), request: Request = None):
+    """The queued wiki generation, with everything the worker needs to write it."""
+    require_worker_key(slug)(request, db)
+    job = _read_wiki_job(slug)
+    if job.get("state") != "queued":
+        return {"job": None}
+    sessions = []
+    for s in _campaign_transcripts(slug):
+        d = get_sessions_dir(slug) / s["name"]
+        summary = (d / "summary.md").read_text(encoding="utf-8") if (d / "summary.md").exists() else ""
+        wiki_s = (d / "wiki_suggestions.md").read_text(encoding="utf-8") if (d / "wiki_suggestions.md").exists() else ""
+        if summary or wiki_s:
+            sessions.append({"name": s["name"], "date": (s["created_at"] or "")[:10], "summary": summary, "wiki": wiki_s})
+    vault = _wiki_vault(slug, db)
+    existing = [p.title for p in _wiki_index(slug, vault).pages.values()] if vault else []
+    fmt = (Path(__file__).parent / "WIKI_FORMAT.md")
+    job.update(state="running", message="Reading the sessions")
+    _write_wiki_job(slug, job)
+    return {"job": {"mode": job["mode"], "sessions": sessions, "existing": existing,
+                    "players": load_config(slug).get("players") or {},
+                    "format": fmt.read_text(encoding="utf-8") if fmt.exists() else ""}}
+
+
+class WikiGenPages(BaseModel):
+    pages: list[dict]   # [{title, section, markdown}]
+
+
+@app.post("/campaigns/{slug}/worker/wiki-pages")
+def worker_push_wiki_pages(slug: str, body: WikiGenPages, db: Session = Depends(get_db), request: Request = None):
+    require_worker_key(slug)(request, db)
+    job = _read_wiki_job(slug)
+    vault = _wiki_vault(slug, db) or (BASE_DIR / "vaults" / slug)
+    vault.mkdir(parents=True, exist_ok=True)
+    existing = {p.title.lower() for p in _wiki_index(slug, vault).pages.values()}
+    written = []
+    with _wiki_lock:
+        for pg in body.pages:
+            title = str(pg.get("title", "")).strip()
+            if not title or any(c in title for c in '/\\:*?"<>|#[]'):
+                continue
+            if job.get("mode") == "fill" and title.lower() in existing:
+                continue
+            section = "/".join(part for part in str(pg.get("section", "")).split("/") if part and part not in ("..", "."))
+            rel = Path(section) / f"{title}.md"
+            (vault / rel).parent.mkdir(parents=True, exist_ok=True)
+            (vault / rel).write_text(str(pg.get("markdown", "")).rstrip() + "\n", encoding="utf-8")
+            written.append(str(rel))
+    job.setdefault("written", []).extend(written)
+    _write_wiki_job(slug, job)
+    return {"written": len(written)}
+
+
+class WikiGenStatus(BaseModel):
+    state: str          # running | done | error
+    done: int = 0
+    total: int = 0
+    message: str = ""
+
+
+@app.post("/campaigns/{slug}/worker/wiki-status")
+def worker_wiki_status(slug: str, body: WikiGenStatus, db: Session = Depends(get_db), request: Request = None):
+    import wiki
+    require_worker_key(slug)(request, db)
+    job = _read_wiki_job(slug)
+    job.update(state=body.state, done=body.done, total=body.total, message=body.message)
+    if body.state == "done":
+        vault = _wiki_vault(slug, db) or (BASE_DIR / "vaults" / slug)
+        with _wiki_lock:
+            idx = wiki.scan(vault)
+            lines = ["# Index", ""]
+            section = None
+            for p in idx.summary():
+                if p["section"] != section:
+                    section = p["section"]
+                    lines += ["", f"## {section or 'Other'}", ""]
+                lines.append(f"- [[{p['title']}]]")
+            # A hand-made Index.md (it also feeds the transcriber's vocabulary) is
+            # only replaced when the whole wiki was generated.
+            paths = list(job.get("written", []))
+            if job.get("mode") == "new" or not (vault / "Index.md").exists():
+                (vault / "Index.md").write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+                paths.append("Index.md")
+            problem = _vault_commit(slug, vault, paths,
+                                    f"Wiki generated from the sessions ({len(job.get('written', []))} pages)")
+        job["warning"] = problem
+        job["finished"] = datetime.utcnow().isoformat()
+    _write_wiki_job(slug, job)
+    return {"ok": True}
+
+
 class WikiSettingsBody(BaseModel):
     public: bool
 

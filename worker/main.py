@@ -498,6 +498,16 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
     print("[analysis] Poll loop started.")
 
     while not stop_event.is_set():
+        # A wiki generation asked for on the site (worker/wiki_gen.py); rare, long.
+        try:
+            wiki_job = client.get_wiki_job()
+            if wiki_job:
+                from wiki_gen import generate
+                print("\n[wiki] Generating the campaign wiki...")
+                generate(wiki_job, client, config)
+        except Exception as e:
+            print(f"[wiki] Error: {e}")
+
         try:
             jobs = client.get_pending_analysis_jobs()
         except Exception as e:

@@ -1119,3 +1119,6 @@ button.wiki-missing { cursor: pointer; }
 .wiki-body ul ul { list-style: circle; }
 .wiki-body ol { list-style: decimal; }
 .wiki-body li::marker { color: var(--ink-faint); }
+.wiki-gen { max-width: 680px; margin: 0 0 26px; padding: 16px 18px; border: 1px solid var(--rule-strong); border-left: 3px solid var(--gilt); border-radius: 3px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.wiki-gen.quiet { padding: 0; border: none; margin-bottom: 18px; }
+.wiki-gen-title { margin: 0; font-size: 19px; color: var(--ink); }
