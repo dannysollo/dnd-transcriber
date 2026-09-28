@@ -41,11 +41,11 @@ Still open:
   it's deleted in Netlify). The relationship graph and the Index.md front page
   were ported too.
   Generation hasn't had a real run yet (tested with Claude stubbed out).
-- **Clean up the As Above, So Below wiki** (the vault's ~124 pages).
-  Character pages list nearly everything that ever happened to them; they
-  should read like encyclopedia articles: WIKI_FORMAT.md is the target. Most
-  "broken links" were [[Folder/Page]] links the Netlify site couldn't
-  resolve; the new wiki resolves them (1 truly broken link was left).
+- As Above, So Below wiki cleanup: done 2026-09-28. All 123 pages follow
+  WIKI_FORMAT.md (properties for key facts, abstract, timeline by story arc,
+  relationships); ~66k words down to ~18k; no broken links. The two Malkuth
+  pages were merged, and The Gardener got a page. Worth a read-through by the
+  DMs for anything misremembered.
 
 ## Review
 
