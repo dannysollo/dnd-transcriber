@@ -79,7 +79,9 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
       .force('collide', forceCollide<Node>().radius(d => radius(d) + 6))
       .stop()
     for (let i = 0; i < 450; i++) sim.tick()   // lay out up front: no drifting animation
-    const named = new Set([...nodes].sort((a, b) => b.degree - a.degree).slice(0, ALWAYS_LABELLED).map(n => n.id))
+    // fewer standing labels on a narrow screen, where they'd pile up in the middle
+    const standing = width < 600 ? 5 : ALWAYS_LABELLED
+    const named = new Set([...nodes].sort((a, b) => b.degree - a.degree).slice(0, standing).map(n => n.id))
 
     const svg = select(svgEl)
     svg.selectAll('*').remove()
