@@ -34,6 +34,20 @@ Still open:
   reconstruction is the test. Profiles fill in as Craig sessions come in (Sue
   had none yet); guests are learned too.
 
+## Wiki
+
+- **(In progress) Wiki inside the transcriber.** Replace the Netlify site
+  (campaign-vault/campaign-site/build.js: section nav, search, backlinks,
+  graph) with a Wiki page per campaign, rendered from the server's vault
+  checkout.
+- **(In progress) Generate a wiki for a new campaign.** A standard structure
+  and page format, seeded from the sessions, so every campaign gets one.
+- **Clean up the As Above, So Below wiki** (the vault's ~124 pages).
+  Character pages list nearly everything that ever happened to them; they
+  should read like encyclopedia articles: a short abstract, a timeline of
+  significant events, relationships, and so on. Fix the many broken
+  [[wikilinks]] too. Do after the standard page format exists.
+
 ## Review
 
 - Keyboard shortcuts in the transcript: j/k between lines, space to
