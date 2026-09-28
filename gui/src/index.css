@@ -1122,3 +1122,43 @@ button.wiki-missing { cursor: pointer; }
 .wiki-gen { max-width: 680px; margin: 0 0 26px; padding: 16px 18px; border: 1px solid var(--rule-strong); border-left: 3px solid var(--gilt); border-radius: 3px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .wiki-gen.quiet { padding: 0; border: none; margin-bottom: 18px; }
 .wiki-gen-title { margin: 0; font-size: 19px; color: var(--ink); }
+
+/* ─── Wiki relationship graph (WikiGraph.tsx) ─────────────────────────────
+   Colour slots per kind of page, validated (dataviz six checks) on both page
+   colours: light vs #F5F0E6, dark vs #1F1914. Four light slots sit under 3:1
+   contrast, so identity is also carried by the legend, labels and tooltip. */
+:root {
+  --wg-1: #2a78d6; --wg-2: #eb6834; --wg-3: #1baf7a; --wg-4: #eda100;
+  --wg-5: #e87ba4; --wg-6: #008300; --wg-7: #4a3aa7; --wg-8: #e34948; --wg-other: #8a7d6d;
+}
+:root[data-theme="dark"] {
+  --wg-1: #3987e5; --wg-2: #d95926; --wg-3: #199e70; --wg-4: #c98500;
+  --wg-5: #d55181; --wg-6: #008300; --wg-7: #9085e9; --wg-8: #e66767; --wg-other: #8f8172;
+}
+.wiki-wide { max-width: none; }
+.wiki-graph { display: flex; flex-direction: column; gap: 10px; }
+.wiki-graph-head .wiki-note { max-width: 70ch; }
+.wg-legend { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.wg-legend button { display: inline-flex; align-items: center; gap: 7px; background: none; border: none; padding: 2px 0; font: inherit; font-size: 16px; color: var(--ink); cursor: pointer; }
+.wg-legend button.off { color: var(--ink-faint); text-decoration: line-through; }
+.wg-legend button.off .wg-swatch { opacity: 0.3; }
+.wg-legend button:focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
+.wg-swatch { width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 0 2px var(--page); outline: 1px solid var(--rule-strong); }
+.wg-count { color: var(--ink-faint); font-size: 14px; font-variant-numeric: lining-nums tabular-nums; }
+.wg-svg { width: 100%; height: calc(100vh - 230px); min-height: 420px; border: 1px solid var(--rule); border-radius: 3px; background: var(--page-raised); cursor: grab; touch-action: none; }
+.wg-svg:active { cursor: grabbing; }
+.wg-links line { stroke: var(--rule-strong); stroke-width: 1; stroke-opacity: 0.7; transition: stroke-opacity 0.15s; }
+.wg-links line.hot { stroke: var(--ink-soft); stroke-opacity: 1; stroke-width: 1.5; }
+.wg-links line.dim { stroke-opacity: 0.12; }
+.wg-node { stroke: var(--page-raised); stroke-width: 2; cursor: pointer; transition: opacity 0.15s; }
+.wg-node.dim { opacity: 0.18; }
+.wg-node:focus-visible { outline: none; stroke: var(--gilt); stroke-width: 3; }
+.wg-labels text { font-family: var(--font-journal); font-size: 12px; fill: var(--ink); text-anchor: middle; pointer-events: none;
+  paint-order: stroke; stroke: var(--page-raised); stroke-width: 3px; stroke-linejoin: round; display: none; }
+.wg-labels text.on, .wg-labels text.hot { display: block; }
+.wg-labels text.hot { font-weight: 600; }
+.wg-labels text.dim { display: none; }
+.wiki-backlinks > .index-link { display: inline-block; margin-bottom: 14px; }
+@media (max-width: 768px) {
+  .wg-svg { height: calc(100vh - 300px); }
+}

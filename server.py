@@ -4356,6 +4356,26 @@ def campaign_wiki_search(slug: str, q: str = "", user: Optional[User] = Depends(
     return {"results": _wiki_index(slug, vault).search(q) if vault else []}
 
 
+@app.get("/campaigns/{slug}/wiki/graph")
+def campaign_wiki_graph(slug: str, user: Optional[User] = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Pages and the links between them, for the relationship graph (the index page left out)."""
+    _wiki_reader(slug, user, db)
+    vault = _wiki_vault(slug, db)
+    if vault is None:
+        return {"nodes": [], "links": []}
+    idx = _wiki_index(slug, vault)
+    skip = {"index"}
+    edges = sorted({tuple(sorted((p.slug, t))) for p in idx.pages.values() if p.slug not in skip
+                    for t in p.links if t != p.slug and t not in skip})
+    degree: dict[str, int] = {}
+    for a, b in edges:
+        degree[a] = degree.get(a, 0) + 1
+        degree[b] = degree.get(b, 0) + 1
+    nodes = [{"id": p.slug, "title": p.title, "section": p.section, "degree": degree.get(p.slug, 0)}
+             for p in idx.pages.values() if p.slug not in skip]
+    return {"nodes": nodes, "links": [{"source": a, "target": b} for a, b in edges]}
+
+
 @app.get("/campaigns/{slug}/wiki/pages/{page}")
 def campaign_wiki_page(slug: str, page: str, user: Optional[User] = Depends(get_current_user), db: Session = Depends(get_db)):
     _wiki_reader(slug, user, db)

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useToast } from '../Toast'
 import WorkerOffline from '../WorkerOffline'
+import WikiGraph from '../WikiGraph'
 
 // The campaign wiki: its vault's pages (server: /campaigns/{slug}/wiki, wiki.py),
 // read here instead of on the old Netlify site. [[Wikilinks]] resolve to pages
@@ -15,6 +16,32 @@ interface WikiIndex { name: string; public: boolean; can_edit: boolean; has_wiki
 interface WikiPageData { title: string; slug: string; section: string; path: string; markdown: string; hash: string; broken: string[]; backlinks: { title: string; slug: string }[] }
 
 const WIKILINK = /\[\[([^\]\n]+)\]\]/g
+const GRAPH_PAGE = '_graph'   // the relationship graph's route (not a page slug: those never start with _)
+const INDEX_SLUG = 'index'    // the vault's Index.md: the wiki's front page
+
+/** A page's markdown, with [[wikilinks]] as links (or, for a DM, a way to create a missing page). */
+function WikiMarkdown({ markdown, bySlug, base, canEdit, onMissing }: {
+  markdown: string; bySlug: Map<string, string>; base: string; canEdit: boolean; onMissing: (title: string) => void
+}) {
+  const components = {
+    a: ({ href, children }: { href?: string; children?: ReactNode }) => {
+      if (href?.startsWith('#missing:')) {
+        const name = decodeURIComponent(href.slice(9))
+        return canEdit
+          ? <button type="button" className="wiki-missing" title={`No page for ${name} yet: create it`} onClick={() => onMissing(name)}>{children}</button>
+          : <span className="wiki-missing" title="No page yet">{children}</span>
+      }
+      if (href?.startsWith('/campaigns/')) return <Link to={href} className="wiki-link">{children}</Link>
+      return <a href={href} target="_blank" rel="noreferrer">{children}</a>
+    },
+  }
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{linkify(markdown, bySlug, base)}</ReactMarkdown>
+}
+
+/** The file usually starts with its own "# Title"; the page shows the title already. */
+function withoutTitle(md: string, title: string): string {
+  return md.replace(new RegExp(`^\\s*#\\s+[^\\n]*${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\n]*\\n`, 'i'), '')
+}
 
 function linkTarget(inner: string): [string, string] {
   const [target, shown] = inner.split('|')
@@ -47,6 +74,7 @@ function useWikiIndex(slug: string) {
 
 export default function WikiPage() {
   const { slug = '', page } = useParams()
+  const [params] = useSearchParams()
   const { index, error, reload } = useWikiIndex(slug)
   const base = `/campaigns/${slug}/wiki`
 
@@ -61,6 +89,7 @@ export default function WikiPage() {
     )
   }
   if (!index) return <div className="page-content wiki"><div className="skeleton" style={{ height: 240, maxWidth: 820 }} /></div>
+  if (page === GRAPH_PAGE) return <div className="page-content wiki wiki-wide"><WikiGraph slug={slug} base={base} focus={params.get('focus')} /></div>
   return page
     ? <WikiArticle slug={slug} page={page} index={index} base={base} onChanged={reload} />
     : <WikiHome slug={slug} index={index} base={base} onChanged={reload} />
@@ -74,6 +103,15 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
   const [q, setQ] = useState('')
   const [results, setResults] = useState<{ title: string; slug: string; section: string; snippet: string }[] | null>(null)
   const [creating, setCreating] = useState(false)
+  const hasIndexPage = index.pages.some(p => p.slug === INDEX_SLUG)
+  const [showAll, setShowAll] = useState(false)
+  const [front, setFront] = useState<string | null>(null)
+  const [creatingTitle, setCreatingTitle] = useState<string | null>(null)
+  const bySlug = useMemo(() => new Map(index.pages.map(p => [p.title.toLowerCase(), p.slug])), [index.pages])
+  useEffect(() => {
+    if (!hasIndexPage) return
+    fetch(`/campaigns/${slug}/wiki/pages/${INDEX_SLUG}`).then(r => (r.ok ? r.json() : null)).then(d => d && setFront(d.markdown)).catch(() => {})
+  }, [slug, hasIndexPage, index])
 
   useEffect(() => {
     if (!q.trim()) { setResults(null); return }
@@ -86,6 +124,7 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
   const sections = useMemo(() => {
     const groups = new Map<string, PageSummary[]>()
     for (const p of index.pages) {
+      if (p.slug === INDEX_SLUG) continue
       const key = p.section || 'Other'
       groups.set(key, [...(groups.get(key) ?? []), p])
     }
@@ -112,7 +151,13 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
         <div className="wiki-tools">
           <input className="written-line wiki-search" value={q} onChange={e => setQ(e.target.value)}
             placeholder="Search the wiki" aria-label="Search the wiki" />
+          {index.has_wiki && index.pages.length > 0 && <>
+            <Link to={`${base}/${GRAPH_PAGE}`} className="btn-ghost">Relationship graph</Link>
+            {hasIndexPage && <button type="button" className="btn-ghost" aria-expanded={showAll} onClick={() => setShowAll(v => !v)}>
+              {showAll ? 'Hide all pages' : 'All pages'}</button>}
+          </>}
           {index.can_edit && <button type="button" className="btn-ghost" onClick={() => setCreating(c => !c)}>New page</button>}
+          {index.can_edit && hasIndexPage && <Link to={`${base}/${INDEX_SLUG}`} className="index-link">Edit the front page</Link>}
         </div>
         {creating && <NewPageForm slug={slug} sections={sections.map(([s]) => s)}
           onCreated={s => { onChanged(); navigate(`${base}/${s}`) }} onCancel={() => setCreating(false)} />}
@@ -133,6 +178,18 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
             </li>
           ))}
         </ol>
+      ) : hasIndexPage && !showAll ? (
+        <>
+          {creatingTitle && (
+            <NewPageForm slug={slug} sections={sections.map(([s]) => s)} initialTitle={creatingTitle}
+              onCreated={s => { onChanged(); navigate(`${base}/${s}`) }} onCancel={() => setCreatingTitle(null)} />
+          )}
+          {front === null ? <div className="skeleton" style={{ height: 320, maxWidth: 820 }} /> : (
+            <article className="wiki-body wiki-front">
+              <WikiMarkdown markdown={withoutTitle(front, 'Index')} bySlug={bySlug} base={base} canEdit={index.can_edit} onMissing={setCreatingTitle} />
+            </article>
+          )}
+        </>
       ) : (
         <div className="wiki-sections">
           {sections.map(([section, pages]) => (
@@ -277,8 +334,7 @@ function WikiArticle({ slug, page, index, base, onChanged }: { slug: string; pag
   if (missing) return <div className="page-content wiki"><p className="wiki-note">There's no page here. <Link to={base}>Back to the wiki</Link></p></div>
   if (!data) return <div className="page-content wiki"><div className="skeleton" style={{ height: 320, maxWidth: 820 }} /></div>
 
-  // The file usually starts with its own "# Title"; the page shows the title already.
-  const body = data.markdown.replace(new RegExp(`^\\s*#\\s+${data.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n`, 'i'), '')
+  const body = withoutTitle(data.markdown, data.title)
 
   const save = async () => {
     setSaving(true)
@@ -294,19 +350,6 @@ function WikiArticle({ slug, page, index, base, onChanged }: { slug: string; pag
       await load()
       onChanged()
     } finally { setSaving(false) }
-  }
-
-  const components = {
-    a: ({ href, children }: { href?: string; children?: ReactNode }) => {
-      if (href?.startsWith('#missing:')) {
-        const name = decodeURIComponent(href.slice(9))
-        return index.can_edit
-          ? <button type="button" className="wiki-missing" title={`No page for ${name} yet: create it`} onClick={() => setCreatingTitle(name)}>{children}</button>
-          : <span className="wiki-missing" title="No page yet">{children}</span>
-      }
-      if (href?.startsWith('/campaigns/')) return <Link to={href} className="wiki-link">{children}</Link>
-      return <a href={href} target="_blank" rel="noreferrer">{children}</a>
-    },
   }
 
   return (
@@ -338,14 +381,15 @@ function WikiArticle({ slug, page, index, base, onChanged }: { slug: string; pag
       ) : (
         <div className="wiki-layout">
           <article className="wiki-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{linkify(body, bySlug, base)}</ReactMarkdown>
+            <WikiMarkdown markdown={body} bySlug={bySlug} base={base} canEdit={index.can_edit} onMissing={setCreatingTitle} />
           </article>
-          {data.backlinks.length > 0 && (
-            <aside className="wiki-backlinks" aria-label="What links here">
+          <aside className="wiki-backlinks" aria-label="What links here">
+            <Link to={`${base}/${GRAPH_PAGE}?focus=${data.slug}`} className="index-link">See it in the graph</Link>
+            {data.backlinks.length > 0 && <>
               <h2 className="sc">What links here</h2>
               <ul>{data.backlinks.map(b => <li key={b.slug}><Link to={`${base}/${b.slug}`}>{b.title}</Link></li>)}</ul>
-            </aside>
-          )}
+            </>}
+          </aside>
         </div>
       )}
     </div>
