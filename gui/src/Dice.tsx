@@ -103,6 +103,48 @@ export function DicePanel({ data, isDm, onShift }: {
   )
 }
 
+/** The "Send to Co-DM" bookmarklet. Run on a Roll20 campaign page (or its Chat
+ * Archive), it loads the one-page archive (same-origin, which Roll20's
+ * content-security policy allows), opens this site's /roll20-import in a new
+ * tab and hands the page over by postMessage once that tab says it's ready. */
+function bookmarklet(origin: string): string {
+  // String.raw: the regexes' backslashes must reach the bookmarklet as written.
+  const code = String.raw`(async()=>{
+const T=${JSON.stringify(origin)};
+const m=location.href.match(/^https:\/\/app\.roll20\.net\/campaigns\/[a-z]+\/(\d+)/);
+if(!m){alert('Co-DM: open your Roll20 campaign page (or its Chat Archive) first, then click this bookmark.');return}
+const w=window.open(T+'/roll20-import','codm-roll20');
+if(!w){alert('Co-DM: the browser blocked the new tab. Allow pop-ups for roll20.net and click again.');return}
+let html=null,done=false;
+addEventListener('message',e=>{if(e.origin!==T||!e.data)return;
+if(e.data.type==='codm-roll20-received')done=true;
+if(e.data.type==='codm-ready'&&html&&!done)w.postMessage({type:'codm-roll20-archive',campaign:m[1],html},T)});
+try{if(/chatarchive/.test(location.pathname)&&/onePage=true/.test(location.search))html=document.documentElement.outerHTML;
+else{const r=await fetch('/campaigns/chatarchive/'+m[1]+'?p=1&onePage=true&hidewhispers=&hiderollresults=',{credentials:'include'});
+if(!r.ok)throw new Error('HTTP '+r.status);html=await r.text()}}
+catch(e){alert('Co-DM: could not load the chat archive ('+e.message+').');w.close()}
+})()`
+  return 'javascript:' + encodeURIComponent(code.replace(/\n/g, ''))
+}
+
+/** The bookmarklet as a link to drag to the bookmarks bar. React won't render a
+ * javascript: href, so it's set on the element directly. */
+function BookmarkletLink() {
+  const ref = useRef<HTMLAnchorElement>(null)
+  const { toast } = useToast()
+  const href = bookmarklet(window.location.origin)
+  useEffect(() => { ref.current?.setAttribute('href', href) }, [href])
+  return (
+    <div className="dice-bookmarklet">
+      <a ref={ref} className="btn-secondary" onClick={e => { e.preventDefault(); toast('Drag this button to your bookmarks bar, then click it on your Roll20 campaign page.', 'info') }}
+        draggable title="Drag me to your bookmarks bar">Send to Co-DM</a>
+      <button type="button" className="btn-ghost" onClick={() => navigator.clipboard.writeText(href).then(() => toast('Copied. Make a new bookmark and paste this as its URL.', 'success'))}>
+        Copy as a bookmark URL
+      </button>
+    </div>
+  )
+}
+
 interface Roll20Status {
   imported: string | null; total: number
   players: { id: string; names: string[]; count: number; username: string | null }[]
@@ -153,6 +195,14 @@ export function Roll20Settings({ slug }: { slug: string }) {
         In Roll20, open the campaign's <strong>Chat Archive</strong>, choose <strong>Show on One Page</strong>, save the
         page (Ctrl+S, "Webpage, HTML only") and upload it here. Upload a newer one any time: only new rolls are added.
       </p>
+      <h3 className="sc dice-h">After each session</h3>
+      <p className="voice-detail" style={{ margin: '0 0 10px' }}>
+        Drag <strong>Send to Co-DM</strong> to your browser's bookmarks bar once. After a session, open your campaign on
+        roll20.net (in a browser where you're logged into Co-DM as the DM) and click the bookmark: it opens a Co-DM tab that
+        imports the new rolls.
+      </p>
+      <BookmarkletLink />
+      <h3 className="sc dice-h">Or upload a saved archive</h3>
       <div className="dice-upload">
         <input ref={input} type="file" accept=".html,.htm" hidden onChange={e => { const f = e.target.files?.[0]; if (f) upload(f) }} />
         <button type="button" className="btn-primary" disabled={busy} onClick={() => input.current?.click()}>

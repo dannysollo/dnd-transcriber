@@ -18,6 +18,7 @@ import SearchPage from './pages/SearchPage'
 import ShareView from './pages/ShareView'
 import SettingsPage from './pages/SettingsPage'
 import QuotesPage from './pages/QuotesPage'
+import Roll20ImportPage from './pages/Roll20ImportPage'
 import { useAuth, avatarUrl } from './AuthContext'
 import WikiPage from './pages/WikiPage'
 import { useCampaign } from './CampaignContext'
@@ -473,6 +474,7 @@ export default function App() {
           <Route path="/edit-queue" element={<EditQueuePage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/quotes" element={<QuotesPage />} />
+          <Route path="/roll20-import" element={<Roll20ImportPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

@@ -5134,6 +5134,10 @@ async def campaign_roll20_import(slug: str, file: UploadFile = File(...),
     for pid, u in guessed.items():
         data["players"].setdefault(pid, u)  # a mapping the DM set stays
     data["imported"] = datetime.utcnow().isoformat(timespec="seconds")
+    # Which Roll20 campaign this is, so the "Send to Co-DM" bookmarklet finds its way here.
+    rid = re.search(r"campaigns/chatarchive/(\d+)", raw)
+    if rid:
+        data["roll20_campaign"] = rid[1]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data), encoding="utf-8")
     return {"added": added, "total": len(data["rolls"])}
@@ -5145,7 +5149,7 @@ def campaign_roll20_status(slug: str, _member=Depends(require_campaign_member("d
     import roll20
     data = roll20.load(_roll20_path(slug))
     if not data.get("rolls"):
-        return {"imported": None, "total": 0, "players": [], "sessions": []}
+        return {"imported": None, "total": 0, "players": [], "sessions": [], "roll20_campaign": None}
     seen: dict[str, dict] = {}
     for r in data["rolls"]:
         p = seen.setdefault(r.get("player") or "", {"id": r.get("player"), "names": {}, "count": 0})
@@ -5161,7 +5165,7 @@ def campaign_roll20_status(slug: str, _member=Depends(require_campaign_member("d
         if v["count"]:
             sessions.append({"name": d.name, "count": v["count"], "state": v["state"], "trusted": v.get("trusted"),
                              "forced": v.get("forced", False), "shift": v.get("shift", 0)})
-    return {"imported": data.get("imported"), "total": len(data["rolls"]),
+    return {"imported": data.get("imported"), "total": len(data["rolls"]), "roll20_campaign": data.get("roll20_campaign"),
             "players": sorted(players, key=lambda p: -p["count"]), "sessions": sessions}
 
 
