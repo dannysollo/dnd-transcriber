@@ -325,9 +325,18 @@ def vault_index_block(campaign_vault: Path) -> str:
     return vault_index_block
 
 
-def run_claude(system_prompt: str, message: str, config: dict) -> str:
+class UsageLimitError(RuntimeError):
+    """Claude's usage limit (or out of credits): the job should stay queued, not fail."""
+
+
+USAGE_LIMIT_RE = re.compile(r"(session|usage|rate) limit|credit balance|out of credits|resets \d", re.IGNORECASE)
+
+
+def run_claude(system_prompt: str, message: str, config: dict, tools: str | None = "Read",
+               model: str | None = None) -> str:
     """`claude -p` with this system prompt and message, allowed to Read files
-    (the vault). Returns its text output; raises on failure."""
+    (the vault) unless tools=None. Returns its text output; raises
+    UsageLimitError when the account is out of usage, RuntimeError otherwise."""
     # A scratch dir with no CLAUDE.md, cross-platform (was hardcoded to
     # "/tmp", which doesn't exist on Windows). Deliberately NOT relying on
     # tempfile.gettempdir()'s default candidate search (nor mkdtemp() without
@@ -358,7 +367,8 @@ def run_claude(system_prompt: str, message: str, config: dict) -> str:
             ["claude", "-p",
              "--system-prompt-file", str(prompt_file),
              "--no-session-persistence",
-             "--allowedTools", "Read",
+             *(["--allowedTools", tools] if tools else ["--tools", ""]),
+             *(["--model", model] if model else []),
              "--output-format", "text"],
             input=message,
             stdout=subprocess.PIPE,
@@ -378,6 +388,8 @@ def run_claude(system_prompt: str, message: str, config: dict) -> str:
     if result.returncode != 0:
         stderr_snippet = (result.stderr or "").strip()[-1000:] if result.stderr else "(empty)"
         stdout_snippet = (result.stdout or "").strip()[:200] if result.stdout else "(empty)"
+        if USAGE_LIMIT_RE.search(f"{result.stdout or ''} {result.stderr or ''}"):
+            raise UsageLimitError(stdout_snippet if stdout_snippet != "(empty)" else stderr_snippet)
         raise RuntimeError(
             f"claude -p failed (code {result.returncode})\n"
             f"  stderr: {stderr_snippet}\n"
@@ -509,8 +521,16 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
     poll_interval = config.get("analysis_poll_interval", config.get("poll_interval", 30))
 
     print("[analysis] Poll loop started.")
+    # Out of Claude usage: jobs stay queued on the server and are tried again later
+    # (failing them would take them off the queue, as happened to a whole
+    # "check every session" run).
+    LIMIT_PAUSE = 30 * 60
+    paused_until = 0.0
 
     while not stop_event.is_set():
+        if time.time() < paused_until:
+            stop_event.wait(min(poll_interval, paused_until - time.time()))
+            continue
         # A wiki generation asked for on the site (worker/wiki_gen.py); rare, long.
         try:
             wiki_job = client.get_wiki_job()
@@ -551,6 +571,10 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
                 if summary and not wiki_only: parts.append("summary")
                 if wiki: parts.append("wiki")
                 print(f"[analysis]   [DONE] {session_name} — wrote: {', '.join(parts) or 'nothing'}")
+            except UsageLimitError as e:
+                print(f"[analysis]   Claude usage limit ({e}); {session_name} stays queued. Trying again in 30 min.")
+                paused_until = time.time() + LIMIT_PAUSE
+                break
             except Exception as e:
                 print(f"[analysis]   [ERROR] {session_name}: {e}")
                 print(traceback.format_exc())
@@ -563,7 +587,7 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
 
         # A continuity check (worker/continuity.py): one per poll, after any analysis,
         # since a fresh analysis queues one for its session.
-        if not stop_event.is_set():
+        if not stop_event.is_set() and time.time() >= paused_until:
             try:
                 job = client.get_continuity_job()
             except Exception as e:
@@ -574,9 +598,12 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
                 name = job["session_name"]
                 print(f"\n[continuity] [JOB] {name}")
                 try:
-                    items = continuity.run_job(job, config, _resolve_campaign_vault(config), vault_index_block, run_claude)
+                    items = continuity.run_job(job, config, _resolve_campaign_vault(config), run_claude)
                     client.push_continuity_result(name, items)
                     print(f"[continuity]   [DONE] {name}: {len(items)} to check")
+                except UsageLimitError as e:
+                    print(f"[continuity]   Claude usage limit ({e}); {name} stays queued. Trying again in 30 min.")
+                    paused_until = time.time() + LIMIT_PAUSE
                 except Exception as e:
                     print(f"[continuity]   [ERROR] {name}: {e}")
                     try:

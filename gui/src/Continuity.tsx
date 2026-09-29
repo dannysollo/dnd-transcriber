@@ -210,12 +210,13 @@ export function PageContinuity({ slug, path, onChanged }: { slug: string; path: 
   )
 }
 
-/** Wiki DM tools: queue a check of every session, oldest first. */
+/** Wiki DM tools: queue a check of every session not checked yet, oldest first.
+ * Meant to be rare: once to catch a wiki up, then every dozen sessions or so. */
 export function ContinuityCheckAll({ slug }: { slug: string }) {
   const { toast } = useToast()
-  const [state, setState] = useState<{ open: number; queued: number } | null>(null)
+  const [state, setState] = useState<{ open: number; queued: number; unchecked: number } | null>(null)
   const load = () => fetch(`/campaigns/${slug}/continuity`).then(r => (r.ok ? r.json() : null))
-    .then(d => d && setState({ open: d.items.length, queued: d.queued })).catch(() => {})
+    .then(d => d && setState({ open: d.items.length, queued: d.queued, unchecked: d.unchecked ?? 0 })).catch(() => {})
   useEffect(() => { load() }, [slug])
   useEffect(() => {
     if (!state?.queued) return
@@ -226,7 +227,7 @@ export function ContinuityCheckAll({ slug }: { slug: string }) {
     const r = await fetch(`/campaigns/${slug}/continuity/run-all`, { method: 'POST' })
     if (!r.ok) { toast('Could not queue the checks', 'error'); return }
     const d = await r.json()
-    toast(`Checking ${d.queued} sessions against the wiki, oldest first. Findings show on each page and session.`, 'success')
+    toast(`Checking ${d.queued} session${d.queued !== 1 ? 's' : ''} against the wiki on the worker, oldest first. Findings show on each page and session.`, 'success')
     load()
   }
   if (!state) return null
@@ -236,8 +237,9 @@ export function ContinuityCheckAll({ slug }: { slug: string }) {
         Continuity: {state.open ? `${state.open} finding${state.open !== 1 ? 's' : ''} to check` : 'nothing open'}
         {state.queued ? `, ${state.queued} session${state.queued !== 1 ? 's' : ''} still queued` : ''}
       </span>
-      {!state.queued && <button type="button" className="btn-ghost" onClick={runAll}
-        title="Check the wiki against every session, oldest first (one at a time on the worker)">Check every session</button>}
+      {!state.queued && state.unchecked > 0 && <button type="button" className="btn-ghost" onClick={runAll}
+        title="Check the wiki against each session that hasn't been checked, oldest first (one at a time on the worker). Worth doing once, then every dozen sessions or so.">
+        Check {state.unchecked} unchecked session{state.unchecked !== 1 ? 's' : ''}</button>}
     </div>
   )
 }

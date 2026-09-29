@@ -4866,9 +4866,6 @@ def worker_push_analysis_result(
     flag = session_dir / ANALYSIS_FLAG
     if flag.exists():
         flag.unlink()
-    # A new summary: check the wiki against this session (worker/continuity.py).
-    if "summary" in wrote:
-        (session_dir / CONTINUITY_FLAG).touch()
     log_queue.put(f"[analysis] {name}: wrote {', '.join(wrote) or 'nothing'}")
     return {"ok": True, "wrote": wrote}
 
@@ -4894,8 +4891,9 @@ def cancel_analysis_pending(slug: str, name: str, _member=Depends(require_campai
 
 
 # ─── Continuity checks (worker/continuity.py) ────────────────────────────────
-# Where the wiki disagrees with a session. Queued by a `continuity_pending` flag
-# (after each analysis, or by the DM), run by the worker one session at a time,
+# Where the wiki disagrees with a session. On demand only (a session's Wiki tab,
+# or every unchecked session from the wiki): queued by a `continuity_pending` flag,
+# run by the worker one session at a time,
 # stored as continuity.json: {generated, error, items: [{id, title, page, kind,
 # wiki, session, ts, fix, status}]}, status open | fixed | dismissed.
 
@@ -4948,7 +4946,8 @@ def worker_get_continuity_job(slug: str, db: Session = Depends(get_db), request:
     if transcript and (corrections or patterns):
         transcript, _ = RuleSet(corrections, patterns).apply(transcript)
     summary = (d / "summary.md").read_text(encoding="utf-8") if (d / "summary.md").exists() else ""
-    return {"job": {"session_name": d.name, "summary": summary, "transcript": transcript}}
+    wiki = (d / "wiki_suggestions.md").read_text(encoding="utf-8") if (d / "wiki_suggestions.md").exists() else ""
+    return {"job": {"session_name": d.name, "summary": summary, "transcript": transcript, "wiki": wiki}}
 
 
 class ContinuityResultBody(BaseModel):
@@ -5018,14 +5017,23 @@ def campaign_set_continuity_status(slug: str, name: str, item_id: int, body: Con
     return {"ok": True}
 
 
+def _continuity_checked(session_dir: Path) -> bool:
+    """Checked successfully at least once (a failed or never-run check doesn't count)."""
+    data = _read_continuity(session_dir)
+    return bool(data.get("generated")) and not data.get("error")
+
+
 @app.post("/campaigns/{slug}/continuity/run-all")
 def campaign_run_continuity_all(slug: str, _member=Depends(require_campaign_member("dm"))):
-    """Queue a check of every session with a summary, oldest session first."""
+    """Queue a check of every session with a summary that hasn't been checked
+    successfully yet, oldest first. Meant to be run rarely: once to catch up a
+    wiki, then every dozen sessions or so for edge cases."""
     sessions_dir = get_sessions_dir(slug)
     def date_key(d: Path):
         m = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{4})", d.name)
         return (int(m[3]), int(m[1]), int(m[2])) if m else (9999, 0, 0)
-    dirs = sorted((d for d in sessions_dir.iterdir() if d.is_dir() and (d / "summary.md").exists()), key=date_key)
+    dirs = sorted((d for d in sessions_dir.iterdir() if d.is_dir() and (d / "summary.md").exists()
+                   and not _continuity_checked(d)), key=date_key)
     now = time.time()
     for i, d in enumerate(dirs):
         flag = d / CONTINUITY_FLAG
@@ -5040,15 +5048,16 @@ def campaign_continuity(slug: str, page: Optional[str] = None,
     """Open items across sessions (optionally for one vault page), and how many sessions are still queued."""
     sessions_dir = get_sessions_dir(slug)
     slugs = _continuity_page_slugs(slug, db)
-    items, queued = [], 0
+    items, queued, unchecked = [], 0, 0
     for d in (sessions_dir.iterdir() if sessions_dir.exists() else []):
         if not d.is_dir():
             continue
         queued += (d / CONTINUITY_FLAG).exists()
+        unchecked += (d / "summary.md").exists() and not _continuity_checked(d) and not (d / CONTINUITY_FLAG).exists()
         for it in _read_continuity(d).get("items", []):
             if it.get("status") == "open" and (page is None or it.get("page") == page):
                 items.append({**it, "session": d.name, "claim": it.get("session"), "page_slug": slugs.get(it.get("page", ""))})
-    return {"items": items, "queued": queued}
+    return {"items": items, "queued": queued, "unchecked": unchecked}
 
 
 # ─── Roll20 dice (roll20.py) ─────────────────────────────────────────────────
