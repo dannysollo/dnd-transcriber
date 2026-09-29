@@ -86,9 +86,10 @@ function linkTarget(inner: string): [string, string] {
   return [clean.split('/').pop()!.trim(), (shown ?? clean).trim()]
 }
 
-/** [[Page|text]] -> markdown links: to the page, or to #missing when there's no such page. */
+/** [[Page|text]] -> markdown links: to the page, or to #missing when there's no such page.
+ * HTML comments (Obsidian hides them; Index.md's page-list markers) are dropped. */
 function linkify(md: string, bySlug: Map<string, string>, base: string): string {
-  return md.replace(WIKILINK, (_, inner: string) => {
+  return md.replace(/<!--[\s\S]*?-->\n?/g, '').replace(WIKILINK, (_, inner: string) => {
     const [name, shown] = linkTarget(inner)
     const slug = bySlug.get(name.toLowerCase())
     const text = shown.replace(/[[\]]/g, '')

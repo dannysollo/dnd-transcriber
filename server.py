@@ -4469,7 +4469,8 @@ def campaign_wiki_create(slug: str, body: WikiPageBody,
         (vault / rel).parent.mkdir(parents=True, exist_ok=True)
         (vault / rel).write_text(body.markdown or f"# {title}\n", encoding="utf-8")
         who = user.username if user else "the site"
-        problem = _vault_commit(slug, vault, [str(rel)], f"Add {title} (by {who} on the site)")
+        wiki.update_index(vault)  # the new page goes into the index's lists
+        problem = _vault_commit(slug, vault, [str(rel), "Index.md"], f"Add {title} (by {who} on the site)")
     return {"ok": True, "slug": wiki.slugify(title), "warning": problem}
 
 
@@ -4591,20 +4592,10 @@ def worker_wiki_status(slug: str, body: WikiGenStatus, db: Session = Depends(get
     if body.state == "done":
         vault = _wiki_vault(slug, db) or (BASE_DIR / "vaults" / slug)
         with _wiki_lock:
-            idx = wiki.scan(vault)
-            lines = ["# Index", ""]
-            section = None
-            for p in idx.summary():
-                if p["section"] != section:
-                    section = p["section"]
-                    lines += ["", f"## {section or 'Other'}", ""]
-                lines.append(f"- [[{p['title']}]]")
-            # A hand-made Index.md (it also feeds the transcriber's vocabulary) is
-            # only replaced when the whole wiki was generated.
-            paths = list(job.get("written", []))
-            if job.get("mode") == "new" or not (vault / "Index.md").exists():
-                (vault / "Index.md").write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
-                paths.append("Index.md")
+            # The index's page lists are rebuilt (new pages included, major/minor
+            # split); the rest of a hand-made Index.md is kept (wiki.update_index).
+            wiki.update_index(vault)
+            paths = list(job.get("written", [])) + ["Index.md"]
             problem = _vault_commit(slug, vault, paths,
                                     f"Wiki generated from the sessions ({len(job.get('written', []))} pages)")
         job["warning"] = problem

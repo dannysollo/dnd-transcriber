@@ -206,3 +206,78 @@ def fingerprint(vault: Path) -> tuple:
         st = f.stat()
         stamps.append((str(rel), st.st_mtime_ns, st.st_size))
     return tuple(sorted(stamps))
+
+
+# ── The index's page lists ───────────────────────────────────────────────────
+# Index.md is hand-written (title, epigraph, "Current State"), but its page
+# lists are kept by the program: rebuilt from the vault after a wiki generation
+# and whenever a page is created, so no page is left off. Big sections are
+# split into major and minor by how many pages link to each one.
+
+NAV_START = "<!-- page lists: kept up to date by Co-DM; edit the pages, not these lists -->"
+NAV_END = "<!-- end of page lists -->"
+NAV_HEADING = "## 🗺️ Navigation"
+# (folder, list heading, split into major/minor). Folders not listed get their own heading.
+NAV_GROUPS = [
+    ("Characters/PCs", "Player Characters", False),
+    ("Characters/Sephirot", "Sephirot", False),
+    ("Characters/NPCs", "NPCs", True),
+    ("Locations", "Locations", True),
+    ("Mechanics", "Core Mechanics", False),
+    ("Items", "Items & Artifacts", True),
+    ("Factions", "Factions", False),
+    ("Events", "Events", False),
+]
+MAJOR_SHARE, MAJOR_MIN = 0.25, 5   # major: linked from at least a quarter as many pages as the section's top, and 5
+
+
+def _links(pages: list[Page]) -> str:
+    return " · ".join(f"[[{p.title}]]" for p in pages)
+
+
+def navigation(idx: WikiIndex) -> str:
+    """The page lists, as markdown: the most-linked first in each list; minor lists alphabetical."""
+    by_section: dict[str, list[Page]] = {}
+    for p in idx.pages.values():
+        if p.slug == "index":
+            continue
+        by_section.setdefault(p.section or "Other", []).append(p)
+    # Links from the index itself don't count: it links everything, and counting
+    # it would make each rebuild shift the split.
+    incoming = lambda p: len([b for b in idx.backlinks.get(p.slug, []) if b != "index"])
+    known = {folder for folder, _, _ in NAV_GROUPS}
+    groups = NAV_GROUPS + [(s, s.split("/")[-1], False) for s in sorted(by_section) if s not in known]
+    out = []
+    for folder, heading, split in groups:
+        pages = sorted(by_section.get(folder, []), key=lambda p: (-incoming(p), p.title.lower()))
+        if not pages:
+            continue
+        if split and len(pages) > 12:
+            cut = max(MAJOR_MIN, MAJOR_SHARE * incoming(pages[0]))
+            major = [p for p in pages if incoming(p) >= cut]
+            minor = sorted((p for p in pages if incoming(p) < cut), key=lambda p: p.title.lower())
+            out += [f"### {heading}", f"- **Major:** {_links(major)}", f"- **Minor:** {_links(minor)}", ""]
+        else:
+            out += [f"### {heading}", _links(pages), ""]
+    return "\n".join(out).strip()
+
+
+def update_index(vault: Path, title: str = "Index") -> str:
+    """Rewrite Index.md's page lists from the vault (creating Index.md if there's none).
+    Everything else in it is kept. Returns the new text."""
+    path = vault / "Index.md"
+    nav = f"{NAV_START}\n{navigation(scan(vault))}\n{NAV_END}"
+    text = path.read_text(encoding="utf-8") if path.exists() else f"# {title}\n"
+    if NAV_START in text and NAV_END in text:
+        a, b = text.index(NAV_START), text.index(NAV_END) + len(NAV_END)
+        text = text[:a] + nav + text[b:]
+    elif NAV_HEADING in text:
+        # The hand-made lists: from the heading to the next rule or level-2 heading.
+        a = text.index(NAV_HEADING) + len(NAV_HEADING)
+        m = re.compile(r"^(---\s*$|## )", re.M).search(text, a)
+        b = m.start() if m else len(text)
+        text = text[:a] + "\n\n" + nav + "\n\n" + text[b:]
+    else:
+        text = text.rstrip() + f"\n\n{NAV_HEADING}\n\n{nav}\n"
+    path.write_text(text, encoding="utf-8")
+    return text
