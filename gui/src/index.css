@@ -1269,3 +1269,10 @@ span.continuity-ts { cursor: default; color: var(--ink-faint); }
 .roll20-note { font-size: 16px !important; color: var(--ink-faint) !important; }
 .roll20-error { color: var(--rubric) !important; }
 .roll20-choose { display: flex; gap: 10px; flex-wrap: wrap; }
+.continuity-all-wrap { margin: -6px 0 18px; }
+.continuity-all-wrap .continuity-all { margin: 0 0 12px; }
+.continuity-review { max-width: 820px; margin-bottom: 28px; }
+.continuity-group { margin-top: 10px; }
+.continuity-group-title { margin: 12px 0 2px; font-size: 20px; font-weight: 500; color: var(--ink); }
+.continuity-group-title a { color: var(--ink); text-decoration: none; }
+.continuity-group-title a:hover { color: var(--rubric); text-decoration: underline; text-underline-offset: 3px; }

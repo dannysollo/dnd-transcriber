@@ -212,12 +212,28 @@ export function PageContinuity({ slug, path, onChanged }: { slug: string; path: 
 
 /** Wiki DM tools: queue a check of every session not checked yet, oldest first.
  * Meant to be rare: once to catch a wiki up, then every dozen sessions or so. */
+type CampaignItem = ContinuityItem & { sessionName: string }
+
+/** Oldest session first ("M-D-YYYY -- Title"). */
+const sessionKey = (name: string) => {
+  const m = name.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/)
+  return m ? Number(m[3]) * 10000 + Number(m[1]) * 100 + Number(m[2]) : 99999999
+}
+
 export function ContinuityCheckAll({ slug }: { slug: string }) {
   const { toast } = useToast()
-  const [state, setState] = useState<{ open: number; queued: number; unchecked: number } | null>(null)
+  const [state, setState] = useState<{ queued: number; unchecked: number } | null>(null)
+  const [items, setItems] = useState<CampaignItem[]>([])
+  const [reviewing, setReviewing] = useState(false)
   const load = () => fetch(`/campaigns/${slug}/continuity`).then(r => (r.ok ? r.json() : null))
-    .then(d => d && setState({ open: d.items.length, queued: d.queued, unchecked: d.unchecked ?? 0 })).catch(() => {})
+    .then(d => {
+      if (!d) return
+      setState({ queued: d.queued, unchecked: d.unchecked ?? 0 })
+      // The campaign endpoint names the session "session" and the finding's text "claim".
+      setItems(d.items.map((it: ContinuityItem & { session: string; claim: string }) => ({ ...it, sessionName: it.session, session: it.claim })))
+    }).catch(() => {})
   useEffect(() => { load() }, [slug])
+  // While sessions are queued, new findings keep arriving: look again every 30 s.
   useEffect(() => {
     if (!state?.queued) return
     const t = window.setInterval(load, 30000)
@@ -230,16 +246,64 @@ export function ContinuityCheckAll({ slug }: { slug: string }) {
     toast(`Checking ${d.queued} session${d.queued !== 1 ? 's' : ''} against the wiki on the worker, oldest first. Findings show on each page and session.`, 'success')
     load()
   }
+  const setStatus = async (it: CampaignItem, status: ContinuityItem['status']) => {
+    const r = await fetch(`/campaigns/${slug}/sessions/${encodeURIComponent(it.sessionName)}/continuity/${it.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
+    })
+    if (!r.ok) { toast('Could not update it', 'error'); return }
+    // Dealt with: it leaves the list (it's still on its session, under "dealt with").
+    if (status !== 'open') setItems(prev => prev.filter(x => !(x.sessionName === it.sessionName && x.id === it.id)))
+  }
   if (!state) return null
+
+  // Grouped by page, the page with the most findings first; within a page, oldest session first.
+  const groups = new Map<string, CampaignItem[]>()
+  for (const it of items) groups.set(it.page, [...(groups.get(it.page) ?? []), it])
+  const pages = [...groups.entries()]
+    .map(([page, list]) => [page, list.sort((a, b) => sessionKey(a.sessionName) - sessionKey(b.sessionName))] as const)
+    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+
   return (
-    <div className="continuity-all">
-      <span>
-        Continuity: {state.open ? `${state.open} finding${state.open !== 1 ? 's' : ''} to check` : 'nothing open'}
-        {state.queued ? `, ${state.queued} session${state.queued !== 1 ? 's' : ''} still queued` : ''}
-      </span>
-      {!state.queued && state.unchecked > 0 && <button type="button" className="btn-ghost" onClick={runAll}
-        title="Check the wiki against each session that hasn't been checked, oldest first (one at a time on the worker). Worth doing once, then every dozen sessions or so.">
-        Check {state.unchecked} unchecked session{state.unchecked !== 1 ? 's' : ''}</button>}
+    <div className="continuity-all-wrap">
+      <div className="continuity-all">
+        <span>
+          Continuity: {items.length ? `${items.length} finding${items.length !== 1 ? 's' : ''} to check` : 'nothing open'}
+          {state.queued ? `, ${state.queued} session${state.queued !== 1 ? 's' : ''} still queued` : ''}
+        </span>
+        {items.length > 0 && (
+          <button type="button" className="btn-ghost" aria-expanded={reviewing} onClick={() => { setReviewing(v => !v); if (!reviewing) load() }}>
+            {reviewing ? 'Hide findings' : `Review ${items.length} finding${items.length !== 1 ? 's' : ''}`}
+          </button>
+        )}
+        {!state.queued && state.unchecked > 0 && <button type="button" className="btn-ghost" onClick={runAll}
+          title="Check the wiki against each session that hasn't been checked, oldest first (one at a time on the worker). Worth doing once, then every dozen sessions or so.">
+          Check {state.unchecked} unchecked session{state.unchecked !== 1 ? 's' : ''}</button>}
+      </div>
+      {reviewing && (
+        <section className="continuity continuity-review" aria-label="Continuity findings">
+          <p className="continuity-note">
+            Grouped by page. Apply fix replaces the struck-through wording on the page; Dismiss if it isn't a real
+            problem. Dealt-with findings leave this list{state.queued ? '; new ones appear as the queued sessions are checked' : ''}.
+          </p>
+          {pages.map(([page, list]) => {
+            const title = page.split('/').pop()?.replace(/\.md$/, '')
+            const pageSlug = list[0].page_slug
+            return (
+              <div key={page} className="continuity-group">
+                <h3 className="continuity-group-title">
+                  {pageSlug ? <Link to={`/campaigns/${slug}/wiki/${pageSlug}`}>{title}</Link> : title}
+                  <span className="continuity-count">{list.length}</span>
+                </h3>
+                <ul className="continuity-list">
+                  {list.map(it => (
+                    <ItemRow key={`${it.sessionName}|${it.id}`} it={it} slug={slug} canEdit sessionLink onStatus={st => setStatus(it, st)} />
+                  ))}
+                </ul>
+              </div>
+            )
+          })}
+        </section>
+      )}
     </div>
   )
 }
