@@ -39,8 +39,10 @@ def ask_claude(system: str, message: str, scratch_base: str | None = None, timeo
         prompt = Path(scratch) / "system_prompt.txt"
         prompt.write_text(system, encoding="utf-8")
         r = subprocess.run(
+            # No tools: with them, Claude sometimes tried to write the page to a file
+            # and answered with a request for permission instead of the page.
             ["claude", "-p", "--system-prompt-file", str(prompt), "--no-session-persistence",
-             "--output-format", "text"],
+             "--tools", "", "--output-format", "text"],
             input=message, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             encoding="utf-8", timeout=timeout, cwd=scratch,
         )
@@ -129,7 +131,17 @@ def write_page(entity: dict, sessions: list[dict], titles: list[str], fmt: str, 
            f"What it is: {entity['note'] or '-'}\n\nPages that exist (link only to these):\n"
            + ", ".join(titles) + "\n\nNotes from the sessions that mention it, oldest first:\n\n" + (ctx or "(none yet)"))
     md = ask_claude(PAGE_SYSTEM % fmt, msg, scratch)
-    md = re.sub(r"^```(?:markdown)?\s*|\s*```$", "", md.strip())
+    # The page itself, if it came wrapped in explanation and a code fence.
+    fenced = re.search(r"```(?:markdown)?\s*\n(.*?)\n```", md, re.S)
+    md = (fenced[1] if fenced and not md.lstrip().startswith(("#", "---")) else md).strip()
+    md = re.sub(r"^```(?:markdown)?\s*|\s*```$", "", md)
+    # Links only to pages that exist (or are being written): others, such as
+    # session titles, become plain text rather than broken links.
+    known = {t.lower() for t in titles}
+    def unlink(m: re.Match) -> str:
+        target, _, shown = m[1].partition("|")
+        return m[0] if target.strip().lower() in known else (shown or target)
+    md = re.sub(r"\[\[([^\]\n]+)\]\]", unlink, md)
     if not md.startswith(("#", "---")):
         md = f"# {entity['title']}\n\n{md}"
     return {"title": entity["title"], "section": entity["folder"], "markdown": md}
