@@ -5051,6 +5051,162 @@ def campaign_continuity(slug: str, page: Optional[str] = None,
     return {"items": items, "queued": queued}
 
 
+# ─── Roll20 dice (roll20.py) ─────────────────────────────────────────────────
+# The DM uploads the campaign's Roll20 chat archive; its rolls are kept per
+# campaign (roll20.json, merged by message id) and placed in each session's
+# recording by matching rolls to numbers said out loud. A session can be nudged
+# by hand (rolls_shift.json: {"shift": seconds, "force": placed even if unsure}).
+
+ROLL20_FILE = "roll20.json"
+ROLLS_SHIFT_FILE = "rolls_shift.json"
+
+
+def _roll20_path(slug: str) -> Path:
+    return BASE_DIR / "campaigns" / slug / ROLL20_FILE
+
+
+def _roll_label(r: dict, mapping: dict, players: dict) -> tuple[str | None, str]:
+    """(campaign username, transcript-style label) for a roll's roller."""
+    u = mapping.get(r.get("player") or "")
+    info = players.get(u) if u else None
+    if not info:
+        return None, (r.get("by") or "Someone")
+    name = info.get("name", u)
+    if info.get("role") == "dm":
+        return u, f"DM ({name})"
+    return u, f"{info['character']} [{name}]" if info.get("character") else name
+
+
+def _session_rolls_view(slug: str, name: str, is_dm: bool, data: dict | None = None) -> dict:
+    import roll20
+    data = data if data is not None else roll20.load(_roll20_path(slug))
+    session_dir = get_sessions_dir(slug) / name
+    rolls = roll20.session_rolls(data.get("rolls", []), name)
+    if not rolls:
+        return {"state": "none", "count": 0, "rolls": []}
+    tp = session_dir / "transcript.md"
+    lines = roll20.transcript_lines(tp.read_text(encoding="utf-8")) if tp.exists() else []
+    a = roll20.align(lines, rolls)
+    try:
+        manual = json.loads((session_dir / ROLLS_SHIFT_FILE).read_text(encoding="utf-8"))
+    except Exception:
+        manual = {}
+    if not a:
+        return {"state": "unplaced", "count": len(rolls), "rolls": []}
+    placed = a["trusted"] or manual.get("force")
+    view = {"state": "placed" if placed else "unplaced", "count": len(rolls), "trusted": a["trusted"],
+            "score": a["score"], "runner_up": a["runner_up"], "shift": manual.get("shift", 0),
+            "forced": bool(manual.get("force")), "rolls": []}
+    if not placed:
+        return view
+    players = load_config(slug).get("players") or {}
+    mapping = data.get("players", {})
+    for r in roll20.place(lines, rolls, a["start"] - float(manual.get("shift", 0))):
+        if r["private"] and not is_dm:
+            continue
+        u, label = _roll_label(r, mapping, players)
+        d20 = [v for d, v in r["dice"] if d == 20]
+        view["rolls"].append({
+            "id": r["id"], "at": r["at"], "line_ts": r["line_ts"], "said": r["said"], "private": r["private"],
+            "username": u, "label": label, "formula": r["formula"], "total": r["total"],
+            "d20": d20[0] if len(d20) == 1 else None, "dice": r["dice"],
+        })
+    return view
+
+
+def _is_dm(member) -> bool:
+    return (not AUTH_ENABLED) or (member is not None and member.role == "dm")
+
+
+@app.post("/campaigns/{slug}/roll20/import")
+async def campaign_roll20_import(slug: str, file: UploadFile = File(...),
+                                 _member=Depends(require_campaign_member("dm"))):
+    import roll20
+    raw = (await file.read()).decode("utf-8", errors="replace")
+    new = roll20.parse_archive(raw)
+    if not new:
+        raise HTTPException(400, "No rolls found. Save the Chat Archive page (Show on One Page) as HTML and upload that file.")
+    path = _roll20_path(slug)
+    data, added = roll20.merge(roll20.load(path), new)
+    players = load_config(slug).get("players") or {}
+    guessed = roll20.guess_players(data["rolls"], players)
+    data.setdefault("players", {})
+    for pid, u in guessed.items():
+        data["players"].setdefault(pid, u)  # a mapping the DM set stays
+    data["imported"] = datetime.utcnow().isoformat(timespec="seconds")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return {"added": added, "total": len(data["rolls"])}
+
+
+@app.get("/campaigns/{slug}/roll20")
+def campaign_roll20_status(slug: str, _member=Depends(require_campaign_member("dm"))):
+    """Who rolled (and who they are in the campaign), and how each session's rolls were placed."""
+    import roll20
+    data = roll20.load(_roll20_path(slug))
+    if not data.get("rolls"):
+        return {"imported": None, "total": 0, "players": [], "sessions": []}
+    seen: dict[str, dict] = {}
+    for r in data["rolls"]:
+        p = seen.setdefault(r.get("player") or "", {"id": r.get("player"), "names": {}, "count": 0})
+        p["count"] += 1
+        if r.get("by"):
+            p["names"][r["by"]] = p["names"].get(r["by"], 0) + 1
+    players = [{"id": p["id"], "names": [n for n, _ in sorted(p["names"].items(), key=lambda x: -x[1])],
+                "count": p["count"], "username": data.get("players", {}).get(p["id"])} for p in seen.values() if p["id"]]
+    sessions = []
+    sessions_dir = get_sessions_dir(slug)
+    for d in sorted((x for x in sessions_dir.iterdir() if x.is_dir()), key=lambda x: roll20.session_date(x.name) or datetime.max):
+        v = _session_rolls_view(slug, d.name, True, data)
+        if v["count"]:
+            sessions.append({"name": d.name, "count": v["count"], "state": v["state"], "trusted": v.get("trusted"),
+                             "forced": v.get("forced", False), "shift": v.get("shift", 0)})
+    return {"imported": data.get("imported"), "total": len(data["rolls"]),
+            "players": sorted(players, key=lambda p: -p["count"]), "sessions": sessions}
+
+
+class Roll20PlayersBody(BaseModel):
+    players: dict[str, Optional[str]]
+
+
+@app.put("/campaigns/{slug}/roll20/players")
+def campaign_roll20_players(slug: str, body: Roll20PlayersBody, _member=Depends(require_campaign_member("dm"))):
+    import roll20
+    path = _roll20_path(slug)
+    data = roll20.load(path)
+    for pid, u in body.players.items():
+        if u:
+            data.setdefault("players", {})[pid] = u
+        else:
+            data.setdefault("players", {}).pop(pid, None)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return {"ok": True}
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/rolls")
+def campaign_session_rolls(slug: str, name: str, member=Depends(require_campaign_member("spectator"))):
+    if not (get_sessions_dir(slug) / name).exists():
+        raise HTTPException(404, "Session not found")
+    return _session_rolls_view(slug, name, _is_dm(member))
+
+
+class RollsShiftBody(BaseModel):
+    shift: float = 0
+    force: bool = False
+
+
+@app.put("/campaigns/{slug}/sessions/{name}/rolls/shift")
+def campaign_session_rolls_shift(slug: str, name: str, body: RollsShiftBody,
+                                 member=Depends(require_campaign_member("dm"))):
+    """Move this session's rolls by `shift` seconds (later in the recording when
+    positive), or place them although the match was unsure (`force`)."""
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    (session_dir / ROLLS_SHIFT_FILE).write_text(json.dumps({"shift": body.shift, "force": body.force}), encoding="utf-8")
+    return _session_rolls_view(slug, name, True)
+
+
 # ─── Static frontend (SPA catch-all) ─────────────────────────────────────────
 # Serves built React app. Any path not matched by API routes returns index.html
 # so that client-side routing (e.g. /sessions/foo, /campaigns/bar) works on reload.

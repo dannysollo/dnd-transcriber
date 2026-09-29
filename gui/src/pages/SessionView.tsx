@@ -11,6 +11,7 @@ import { BarList, PaceChart } from '../Charts'
 import WorkerOffline from '../WorkerOffline'
 import WhoIsThis from '../WhoIsThis'
 import { SessionContinuity } from '../Continuity'
+import { DicePanel, RollChip, type Roll, type SessionRolls } from '../Dice'
 import { formatDuration, percent } from '../chartFormat'
 
 
@@ -262,6 +263,11 @@ export default function SessionView() {
   const [descriptionDraft, setDescriptionDraft] = useState('')
   const [search, setSearch] = useState('')
   const [confidence, setConfidence] = useState<ConfidenceMap | null>(null)
+  // Roll20 rolls placed in this recording (Dice.tsx), shown under their lines.
+  const [rolls, setRolls] = useState<SessionRolls | null>(null)
+  const [showRolls, setShowRolls] = useState(() => {
+    try { return localStorage.getItem('dnd-show-rolls') !== 'false' } catch { return true }
+  })
   const [showConfidence, setShowConfidence] = useState(() => {
     try { return localStorage.getItem('dnd-show-lowconf') !== 'false' } catch { return true }
   })
@@ -503,6 +509,10 @@ export default function SessionView() {
         .then(r => (r.ok ? r.json() : null))
         .then(setConfidence)
         .catch(() => setConfidence(null))
+      fetch(apiUrl(`/sessions/${name}/rolls`))
+        .then(r => (r.ok ? r.json() : null))
+        .then(setRolls)
+        .catch(() => setRolls(null))
     }
     setTranscript(t.status === 'fulfilled' && t.value ? t.value.content : null)
     setSummary(s.status === 'fulfilled' && s.value ? s.value.content : null)
@@ -1461,6 +1471,24 @@ export default function SessionView() {
                     <span style={{ color: 'var(--ink-faint)', marginLeft: 6 }}>{showConfidence ? 'shown' : 'hidden'}</span>
                   </button>
                 )}
+                {rolls?.state === 'placed' && rolls.rolls.length > 0 && (
+                  <button
+                    className="tb-phone-hide"
+                    onClick={() => setShowRolls(v => {
+                      try { localStorage.setItem('dnd-show-rolls', String(!v)) } catch { /* private mode */ }
+                      return !v
+                    })}
+                    aria-pressed={showRolls}
+                    title="Roll20 rolls under the line they go with"
+                    style={{
+                      background: 'none', border: 'none', padding: '4px 2px', cursor: 'pointer', flexShrink: 0,
+                      fontSize: '17px', color: showRolls ? 'var(--ink)' : 'var(--ink-faint)',
+                    }}
+                  >
+                    <span style={showRolls ? undefined : { textDecoration: 'line-through' }}>Dice</span>
+                    <span style={{ color: 'var(--ink-faint)', marginLeft: 6 }}>{showRolls ? 'shown' : 'hidden'}</span>
+                  </button>
+                )}
                 {canEditTranscript && reviewItems.length > 0 && (
                   <button
                     type="button"
@@ -1680,6 +1708,8 @@ export default function SessionView() {
                 confidence={confidence}
                 showConfidence={showConfidence && !editMode}
                 onReviewWord={canEditTranscript ? (lineIdx, start) => openWalk({ lineIdx, start }) : undefined}
+                rolls={showRolls && !editMode && rolls?.state === 'placed' ? rolls.rolls : undefined}
+                isDm={canEditNames}
               />
             </>
           ) : (
@@ -1731,7 +1761,16 @@ export default function SessionView() {
             onJump={ts => jumpToTime(parseTimestampToSeconds(ts))}
           />
         ) : tab === 'stats' ? (
-          transcript ? <SessionStatsPanel sessionName={name!} onJump={jumpToTime} /> : (
+          transcript ? <>
+            {rolls && rolls.state !== 'none' && <DicePanel data={rolls} isDm={canEditNames} onShift={async (shift, force) => {
+              const r = await fetch(apiUrl(`/sessions/${name}/rolls/shift`), {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shift, force }),
+              })
+              if (r.ok) setRolls(await r.json())
+              else toast('Could not move the rolls', 'error')
+            }} />}
+            <SessionStatsPanel sessionName={name!} onJump={jumpToTime} />
+          </> : (
             <EmptyTabState title="No transcript yet" message="Talk time is counted once there's a transcript." />
           )
         ) : tab === 'names' ? (
@@ -1873,6 +1912,8 @@ function TranscriptView({
   confidence,
   showConfidence,
   onReviewWord,
+  rolls,
+  isDm = false,
 }: {
   content: string | null
   search: string
@@ -1891,6 +1932,9 @@ function TranscriptView({
   showConfidence?: boolean
   /** Clicking an underlined word opens the unsure-word review there (editors only). */
   onReviewWord?: (lineIdx: number, start: number) => void
+  /** Roll20 rolls, each shown under the line with its line_ts. */
+  rolls?: Roll[]
+  isDm?: boolean
 }) {
   const apiUrl = useApiUrl()
   const activeLineRef = useRef<HTMLDivElement | null>(null)
@@ -2025,6 +2069,17 @@ function TranscriptView({
   }, [visibleLines, search])
   // Low-confidence words per line, looked up once (a fresh [] per line on every
   // render would make every memoised line look changed on every audio tick).
+  const rollsPerLine = useMemo(() => {
+    if (!rolls?.length) return null
+    const byTs = new Map<string, Roll[]>()
+    for (const r of rolls) if (r.line_ts) byTs.set(r.line_ts, [...(byTs.get(r.line_ts) ?? []), r])
+    const seen = new Set<string>()  // a timestamp shared by two lines: the rolls go under the first
+    return visibleLines.map(l => {
+      if (l.type !== 'speech' || !l.timestamp || seen.has(l.timestamp)) return NO_ROLLS
+      seen.add(l.timestamp)
+      return byTs.get(l.timestamp) ?? NO_ROLLS
+    })
+  }, [rolls, visibleLines])
   const lowConfPerLine = useMemo(() => visibleLines.map(l => {
     if (!showConfidence || l.type !== 'speech') return NO_LOW_CONF
     const w = confByLine.get(l.lineIdx)
@@ -2407,6 +2462,8 @@ function TranscriptView({
           canSeek={!!onSeek}
           canQuote={canQuote}
           canReview={!!onReviewWord}
+          rolls={rollsPerLine?.[i] ?? NO_ROLLS}
+          isDm={isDm}
           quoteSaved={canQuote && line.type === 'speech' ? !!quoteFor(line) : false}
           actions={readActions}
           activeRef={activeLineRef}
@@ -5002,6 +5059,7 @@ interface ReadLineActions {
   reviewWord: (lineIdx: number, start: number) => void
 }
 const NO_LOW_CONF: LowConfWord[] = []
+const NO_ROLLS: Roll[] = []
 const SESSION_TITLE_RE = /^#\s*session transcript\s*$/i
 
 /**
@@ -5010,9 +5068,10 @@ const SESSION_TITLE_RE = /^#\s*session transcript\s*$/i
  * the lines whose highlight changes, not the whole transcript.
  */
 const ReadLine = React.memo(function ReadLine({ line, isActive, isTarget, isFlash, silenceBefore, continued, nextTs, lowConf, search,
-  canSeek, canQuote, canReview, quoteSaved, actions, activeRef, targetRef }: {
+  canSeek, canQuote, canReview, quoteSaved, actions, activeRef, targetRef, rolls = NO_ROLLS, isDm = false }: {
   line: ParsedLine; isActive: boolean; isTarget: boolean; isFlash: boolean; silenceBefore: boolean; continued: boolean; nextTs?: string
   lowConf: LowConfWord[]; search: string; canSeek: boolean; canQuote: boolean; canReview: boolean; quoteSaved: boolean
+  rolls?: Roll[]; isDm?: boolean
   actions: ReadLineActions
   activeRef: React.MutableRefObject<HTMLDivElement | null>; targetRef: React.MutableRefObject<HTMLDivElement | null>
 }) {
@@ -5080,6 +5139,9 @@ const ReadLine = React.memo(function ReadLine({ line, isActive, isTarget, isFlas
             </button>
           )}
         </p>
+        {rolls.length > 0 && (
+          <div className="roll-row">{rolls.map(r => <RollChip key={r.id} roll={r} isDm={isDm} />)}</div>
+        )}
       </div>
     </>
   )
