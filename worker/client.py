@@ -90,6 +90,19 @@ class WorkerClient:
         )
         r.raise_for_status()
 
+    def get_continuity_job(self) -> dict | None:
+        """The next session waiting for a continuity check (worker/continuity.py), or None."""
+        r = requests.get(self._url("/worker/continuity-job"), headers=self.headers, timeout=60)
+        if r.status_code == 404:
+            return None  # a server from before continuity checks
+        r.raise_for_status()
+        return r.json().get("job")
+
+    def push_continuity_result(self, session_name: str, items: list[dict], error: str | None = None) -> None:
+        r = requests.post(self._url(f"/worker/sessions/{session_name}/continuity-result"),
+                          headers=self.headers, json={"items": items, "error": error}, timeout=60)
+        r.raise_for_status()
+
     def download_recording(self, session_name: str, dest_dir) -> "Path":
         """The uploaded recording for a reconstruction job, streamed to dest_dir."""
         from pathlib import Path

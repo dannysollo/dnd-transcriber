@@ -265,29 +265,10 @@ Start your response directly with ## [1] for the first wiki suggestion.
 """
 
 
-def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool = False) -> tuple[str, str, str]:
-    """
-    Run analysis via `claude -p` with ANALYZE_SESSION.md as the system prompt.
-    Runs from a scratch temp dir so no CLAUDE.md is auto-loaded. Vault path
-    passed explicitly.
-    Returns (summary, wiki, blurb) strings. When wiki_only=True, summary and blurb are empty.
-    """
-    if not ANALYZE_SESSION_MD.exists():
-        raise RuntimeError(f"ANALYZE_SESSION.md not found at {ANALYZE_SESSION_MD}")
-
-    campaign_vault = _resolve_campaign_vault(config)
-    if not campaign_vault.is_dir():
-        print(f"[analysis] Warning: vault not found at {campaign_vault} — "
-              f"proceeding without existing-pages context (set vault_path in "
-              f"worker.yaml to point at a local checkout, if you have one).")
-
-    system_prompt = ANALYZE_SESSION_MD.read_text(encoding="utf-8")
-    # Patch the vault path reference so the agent can find it by absolute path
-    system_prompt = system_prompt.replace(
-        "../campaign-vault/", str(campaign_vault) + "/"
-    )
-
-    # Inject existing vault page index so Claude knows exactly what already exists
+def vault_index_block(campaign_vault: Path) -> str:
+    """The vault's pages and their subsections, as a prompt section, so Claude
+    knows exactly what already exists (analysis and the continuity check)."""
+    # The existing vault page index so Claude knows exactly what already exists
     # and doesn't suggest NEW PAGE for pages that are already there.
     header_re = re.compile(r'^#{2,}\s+(.+)', re.MULTILINE)
     vault_pages = []
@@ -341,16 +322,12 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
         "\n\n**Match by the bold name. "
         "If the name appears in either list above, it is already documented — do NOT use NEW PAGE for it.**"
     )
-    system_prompt = system_prompt + "\n\n" + vault_index_block
+    return vault_index_block
 
-    if wiki_only:
-        system_prompt = system_prompt + "\n\n" + WIKI_ONLY_PROMPT_OVERRIDE
 
-    message = transcript
-    if notes and notes.strip():
-        message = f"## DM Notes for this session\n{notes.strip()}\n\n---\n\n{transcript}"
-
-    print(f"[analysis] system prompt: {len(system_prompt)} chars, message: {len(message)} chars")
+def run_claude(system_prompt: str, message: str, config: dict) -> str:
+    """`claude -p` with this system prompt and message, allowed to Read files
+    (the vault). Returns its text output; raises on failure."""
     # A scratch dir with no CLAUDE.md, cross-platform (was hardcoded to
     # "/tmp", which doesn't exist on Windows). Deliberately NOT relying on
     # tempfile.gettempdir()'s default candidate search (nor mkdtemp() without
@@ -410,6 +387,42 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
     full_text = result.stdout.strip()
     if not full_text:
         raise RuntimeError("claude -p returned empty output")
+    return full_text
+
+
+def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool = False) -> tuple[str, str, str]:
+    """
+    Run analysis via `claude -p` with ANALYZE_SESSION.md as the system prompt.
+    Runs from a scratch temp dir so no CLAUDE.md is auto-loaded. Vault path
+    passed explicitly.
+    Returns (summary, wiki, blurb) strings. When wiki_only=True, summary and blurb are empty.
+    """
+    if not ANALYZE_SESSION_MD.exists():
+        raise RuntimeError(f"ANALYZE_SESSION.md not found at {ANALYZE_SESSION_MD}")
+
+    campaign_vault = _resolve_campaign_vault(config)
+    if not campaign_vault.is_dir():
+        print(f"[analysis] Warning: vault not found at {campaign_vault} — "
+              f"proceeding without existing-pages context (set vault_path in "
+              f"worker.yaml to point at a local checkout, if you have one).")
+
+    system_prompt = ANALYZE_SESSION_MD.read_text(encoding="utf-8")
+    # Patch the vault path reference so the agent can find it by absolute path
+    system_prompt = system_prompt.replace(
+        "../campaign-vault/", str(campaign_vault) + "/"
+    )
+
+    system_prompt = system_prompt + "\n\n" + vault_index_block(campaign_vault)
+
+    if wiki_only:
+        system_prompt = system_prompt + "\n\n" + WIKI_ONLY_PROMPT_OVERRIDE
+
+    message = transcript
+    if notes and notes.strip():
+        message = f"## DM Notes for this session\n{notes.strip()}\n\n---\n\n{transcript}"
+
+    print(f"[analysis] system prompt: {len(system_prompt)} chars, message: {len(message)} chars")
+    full_text = run_claude(system_prompt, message, config)
 
     # Strip any conversational preamble before the real content starts.
     # Full analysis starts with "**TL;DR**" (not a ## heading, since the summary
@@ -547,6 +560,29 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
                     client.push_analysis_result(session_name, "", "", "")
                 except Exception:
                     pass
+
+        # A continuity check (worker/continuity.py): one per poll, after any analysis,
+        # since a fresh analysis queues one for its session.
+        if not stop_event.is_set():
+            try:
+                job = client.get_continuity_job()
+            except Exception as e:
+                job = None
+                print(f"[continuity] Error fetching jobs: {e}")
+            if job:
+                import continuity
+                name = job["session_name"]
+                print(f"\n[continuity] [JOB] {name}")
+                try:
+                    items = continuity.run_job(job, config, _resolve_campaign_vault(config), vault_index_block, run_claude)
+                    client.push_continuity_result(name, items)
+                    print(f"[continuity]   [DONE] {name}: {len(items)} to check")
+                except Exception as e:
+                    print(f"[continuity]   [ERROR] {name}: {e}")
+                    try:
+                        client.push_continuity_result(name, [], error=str(e)[:500])
+                    except Exception:
+                        pass
 
         stop_event.wait(poll_interval)
 

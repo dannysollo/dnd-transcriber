@@ -10,6 +10,7 @@ import ReactMarkdown from 'react-markdown'
 import { BarList, PaceChart } from '../Charts'
 import WorkerOffline from '../WorkerOffline'
 import WhoIsThis from '../WhoIsThis'
+import { SessionContinuity } from '../Continuity'
 import { formatDuration, percent } from '../chartFormat'
 
 
@@ -1727,6 +1728,7 @@ export default function SessionView() {
             notesSaving={notesSaving}
             analysisPending={analysisPending}
             onCancelAnalysis={cancelAnalysis}
+            onJump={ts => jumpToTime(parseTimestampToSeconds(ts))}
           />
         ) : tab === 'stats' ? (
           transcript ? <SessionStatsPanel sessionName={name!} onJump={jumpToTime} /> : (
@@ -3166,8 +3168,10 @@ function SpeakersPanel({ sessionName, onRename }: { sessionName: string; onRenam
 
 // ─── Wiki tab ─────────────────────────────────────────────────────────────────
 
-function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generating, generateLog, generateDone, onGenerate, notes, onNotesChange, onNotesBlur, notesSaving, analysisPending, onCancelAnalysis }: {
+function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generating, generateLog, generateDone, onGenerate, notes, onNotesChange, onNotesBlur, notesSaving, analysisPending, onCancelAnalysis, onJump }: {
   sessionName: string
+  /** Jump to a transcript timestamp (continuity findings cite one). */
+  onJump?: (ts: string) => void
   wikiMarkdown: string | null
   onRemerge?: () => void
   onWikiSaved?: () => void
@@ -3263,6 +3267,9 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
 
   const isDm = !authEnabled || activeCampaign?.role === 'dm'
   const requiresApproval = authEnabled && !isDm && activeCampaign?.settings?.require_edit_approval
+  const continuity = activeCampaign && !wikiEditMode
+    ? <SessionContinuity slug={activeCampaign.slug} sessionName={sessionName} canEdit={isDm} onJump={onJump} />
+    : null
 
   const saveWikiEdit = async () => {
     setWikiSaving(true)
@@ -3359,6 +3366,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
     return (
       <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {wikiEditToolbar}
+        {continuity}
         {/* Generate button */}
         <GenerateWikiPanel
           generating={generating}
@@ -3396,6 +3404,7 @@ function WikiView({ sessionName, wikiMarkdown, onRemerge, onWikiSaved, generatin
   return (
     <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {wikiEditToolbar}
+      {continuity}
 
       {/* Edit mode textarea — shown instead of suggestions */}
       {wikiEditMode && (

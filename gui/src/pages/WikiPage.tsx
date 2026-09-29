@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { useToast } from '../Toast'
 import WorkerOffline from '../WorkerOffline'
 import WikiGraph from '../WikiGraph'
+import { ContinuityCheckAll, PageContinuity } from '../Continuity'
 
 // The campaign wiki: its vault's pages (server: /campaigns/{slug}/wiki, wiki.py),
 // read here instead of on the old Netlify site. [[Wikilinks]] resolve to pages
@@ -207,6 +208,7 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
       </header>
 
       {index.can_edit && <WikiGenerate slug={slug} empty={!index.has_wiki || index.pages.length === 0} onDone={onChanged} />}
+      {index.can_edit && index.has_wiki && index.pages.length > 0 && <ContinuityCheckAll slug={slug} />}
 
       {!index.has_wiki || index.pages.length === 0 ? (
         !index.can_edit && <p className="wiki-note">This campaign has no wiki yet.</p>
@@ -422,6 +424,7 @@ function WikiArticle({ slug, page, index, base, onChanged }: { slug: string; pag
           {data.facts.map(f => <div key={f.label}><dt>{f.label}</dt><dd>{md(f.value, true)}</dd></div>)}
         </dl>
       )}
+      {index.can_edit && !editing && <PageContinuity slug={slug} path={data.path} onChanged={() => { load(); onChanged() }} />}
       {creatingTitle && (
         <NewPageForm slug={slug} sections={[...new Set(index.pages.map(p => p.section))]} initialTitle={creatingTitle}
           onCreated={s => { onChanged(); navigate(`${base}/${s}`) }} onCancel={() => setCreatingTitle(null)} />

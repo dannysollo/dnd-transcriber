@@ -14,6 +14,7 @@ from collections import OrderedDict
 import shutil
 import subprocess
 import sys
+import time
 import tempfile
 import threading
 import zipfile
@@ -4865,6 +4866,9 @@ def worker_push_analysis_result(
     flag = session_dir / ANALYSIS_FLAG
     if flag.exists():
         flag.unlink()
+    # A new summary: check the wiki against this session (worker/continuity.py).
+    if "summary" in wrote:
+        (session_dir / CONTINUITY_FLAG).touch()
     log_queue.put(f"[analysis] {name}: wrote {', '.join(wrote) or 'nothing'}")
     return {"ok": True, "wrote": wrote}
 
@@ -4887,6 +4891,164 @@ def cancel_analysis_pending(slug: str, name: str, _member=Depends(require_campai
         log_queue.put(f"[analysis] {name}: cancelled by user")
         return {"ok": True, "cancelled": True}
     return {"ok": True, "cancelled": False}
+
+
+# ─── Continuity checks (worker/continuity.py) ────────────────────────────────
+# Where the wiki disagrees with a session. Queued by a `continuity_pending` flag
+# (after each analysis, or by the DM), run by the worker one session at a time,
+# stored as continuity.json: {generated, error, items: [{id, title, page, kind,
+# wiki, session, ts, fix, status}]}, status open | fixed | dismissed.
+
+CONTINUITY_FLAG = "continuity_pending"
+CONTINUITY_FILE = "continuity.json"
+
+
+def _read_continuity(session_dir: Path) -> dict:
+    try:
+        return json.loads((session_dir / CONTINUITY_FILE).read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _continuity_page_slugs(slug: str, db: Session) -> dict[str, str]:
+    """Vault path -> wiki page slug, so items can link to their page."""
+    try:
+        vault = _wiki_vault(slug, db)
+        return {p.path: p.slug for p in _wiki_index(slug, vault).pages.values()} if vault else {}
+    except Exception:
+        return {}
+
+
+def _continuity_view(slug: str, session_dir: Path, db: Session) -> dict:
+    data = _read_continuity(session_dir)
+    slugs = _continuity_page_slugs(slug, db)
+    items = [{**it, "page_slug": slugs.get(it.get("page", ""))} for it in data.get("items", [])]
+    return {"pending": (session_dir / CONTINUITY_FLAG).exists(), "generated": data.get("generated"),
+            "error": data.get("error"), "items": items}
+
+
+@app.get("/campaigns/{slug}/worker/continuity-job")
+def worker_get_continuity_job(slug: str, db: Session = Depends(get_db), request: Request = None):
+    """The oldest session waiting for a continuity check, once its analysis is done."""
+    campaign = require_worker_key(slug)(request, db)
+    _mark_worker_seen(db, campaign)
+    sessions_dir = get_sessions_dir(slug)
+    flagged = sorted(
+        (d for d in sessions_dir.iterdir() if d.is_dir() and (d / CONTINUITY_FLAG).exists()
+         and not (d / ANALYSIS_FLAG).exists()),
+        key=lambda d: (d / CONTINUITY_FLAG).stat().st_mtime,
+    ) if sessions_dir.exists() else []
+    if not flagged:
+        return {"job": None}
+    d = flagged[0]
+    os.utime(d / CONTINUITY_FLAG)  # to the back of the queue, so a failing one can't block the rest
+    config = load_config(slug)
+    transcript = (d / "transcript.md").read_text(encoding="utf-8") if (d / "transcript.md").exists() else ""
+    corrections, patterns = config.get("corrections") or {}, config.get("patterns") or []
+    if transcript and (corrections or patterns):
+        transcript, _ = RuleSet(corrections, patterns).apply(transcript)
+    summary = (d / "summary.md").read_text(encoding="utf-8") if (d / "summary.md").exists() else ""
+    return {"job": {"session_name": d.name, "summary": summary, "transcript": transcript}}
+
+
+class ContinuityResultBody(BaseModel):
+    items: list[dict] = []
+    error: Optional[str] = None
+
+
+@app.post("/campaigns/{slug}/worker/sessions/{name}/continuity-result")
+def worker_push_continuity_result(slug: str, name: str, body: ContinuityResultBody,
+                                  db: Session = Depends(get_db), request: Request = None):
+    require_worker_key(slug)(request, db)
+    name = _current_session_name(slug, name)
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    # A finding already dismissed or fixed stays that way when it comes up again.
+    before = {(it.get("page"), it.get("wiki")): it.get("status") for it in _read_continuity(session_dir).get("items", [])}
+    items = []
+    for i, it in enumerate(body.items, start=1):
+        if not it.get("page") or not it.get("wiki"):
+            continue
+        keep = {k: it.get(k) for k in ("title", "page", "kind", "wiki", "session", "ts", "fix")}
+        items.append({"id": i, **keep, "status": before.get((it.get("page"), it.get("wiki"))) or "open"})
+    (session_dir / CONTINUITY_FILE).write_text(json.dumps({
+        "generated": datetime.utcnow().isoformat(timespec="seconds"), "error": body.error, "items": items,
+    }), encoding="utf-8")
+    (session_dir / CONTINUITY_FLAG).unlink(missing_ok=True)
+    log_queue.put(f"[continuity] {name}: {len(items)} to check" + (f" (error: {body.error})" if body.error else ""))
+    return {"ok": True, "items": len(items)}
+
+
+@app.get("/campaigns/{slug}/sessions/{name}/continuity")
+def campaign_session_continuity(slug: str, name: str, _member=Depends(require_campaign_member("spectator")),
+                                db: Session = Depends(get_db)):
+    session_dir = get_sessions_dir(slug) / name
+    if not session_dir.exists():
+        raise HTTPException(404, "Session not found")
+    return _continuity_view(slug, session_dir, db)
+
+
+@app.post("/campaigns/{slug}/sessions/{name}/continuity/run")
+def campaign_run_continuity(slug: str, name: str, _member=Depends(require_campaign_member("dm")),
+                            db: Session = Depends(get_db)):
+    session_dir = get_sessions_dir(slug) / name
+    if not (session_dir / "transcript.md").exists():
+        raise HTTPException(404, "No transcript to check")
+    (session_dir / CONTINUITY_FLAG).touch()
+    return _continuity_view(slug, session_dir, db)
+
+
+class ContinuityStatusBody(BaseModel):
+    status: str
+
+
+@app.patch("/campaigns/{slug}/sessions/{name}/continuity/{item_id}")
+def campaign_set_continuity_status(slug: str, name: str, item_id: int, body: ContinuityStatusBody,
+                                   _member=Depends(require_campaign_member("dm"))):
+    if body.status not in ("open", "fixed", "dismissed"):
+        raise HTTPException(400, "status must be open, fixed or dismissed")
+    session_dir = get_sessions_dir(slug) / name
+    data = _read_continuity(session_dir)
+    item = next((it for it in data.get("items", []) if it.get("id") == item_id), None)
+    if not item:
+        raise HTTPException(404, "No such item")
+    item["status"] = body.status
+    (session_dir / CONTINUITY_FILE).write_text(json.dumps(data), encoding="utf-8")
+    return {"ok": True}
+
+
+@app.post("/campaigns/{slug}/continuity/run-all")
+def campaign_run_continuity_all(slug: str, _member=Depends(require_campaign_member("dm"))):
+    """Queue a check of every session with a summary, oldest session first."""
+    sessions_dir = get_sessions_dir(slug)
+    def date_key(d: Path):
+        m = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{4})", d.name)
+        return (int(m[3]), int(m[1]), int(m[2])) if m else (9999, 0, 0)
+    dirs = sorted((d for d in sessions_dir.iterdir() if d.is_dir() and (d / "summary.md").exists()), key=date_key)
+    now = time.time()
+    for i, d in enumerate(dirs):
+        flag = d / CONTINUITY_FLAG
+        flag.touch()
+        os.utime(flag, (now + i, now + i))  # the queue runs in flag-time order
+    return {"queued": len(dirs)}
+
+
+@app.get("/campaigns/{slug}/continuity")
+def campaign_continuity(slug: str, page: Optional[str] = None,
+                        _member=Depends(require_campaign_member("spectator")), db: Session = Depends(get_db)):
+    """Open items across sessions (optionally for one vault page), and how many sessions are still queued."""
+    sessions_dir = get_sessions_dir(slug)
+    slugs = _continuity_page_slugs(slug, db)
+    items, queued = [], 0
+    for d in (sessions_dir.iterdir() if sessions_dir.exists() else []):
+        if not d.is_dir():
+            continue
+        queued += (d / CONTINUITY_FLAG).exists()
+        for it in _read_continuity(d).get("items", []):
+            if it.get("status") == "open" and (page is None or it.get("page") == page):
+                items.append({**it, "session": d.name, "claim": it.get("session"), "page_slug": slugs.get(it.get("page", ""))})
+    return {"items": items, "queued": queued}
 
 
 # ─── Static frontend (SPA catch-all) ─────────────────────────────────────────
