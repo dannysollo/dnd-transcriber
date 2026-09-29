@@ -234,7 +234,9 @@ def _owner(filename: str, players: dict) -> str | None:
 def _guest_key(filename: str) -> str | None:
     """A guest's library key from their Craig track ("3-somebody.flac" -> "guest:somebody")."""
     stem = Path(filename).stem
-    name = re.sub(r"^\d+-", "", stem).split("_")[0].strip().lower()
+    # Usernames can contain underscores ("sad_bois_hours"); only an old-style
+    # numeric discriminator ("somebody_1234") is dropped.
+    name = re.sub(r"_\d+$", "", re.sub(r"^\d+-", "", stem)).strip().lower()
     return f"guest:{name}" if name else None
 
 

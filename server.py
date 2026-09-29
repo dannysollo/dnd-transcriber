@@ -4214,6 +4214,10 @@ async def worker_put_voices(slug: str, db: Session = Depends(get_db), request: R
         elif key in current.get("people", {}) and current["people"][key].get("name_set"):
             people[key]["name"] = current["people"][key]["name"]
             people[key]["name_set"] = True
+    # The worker knows a session by the name it was queued under; a rename since is followed.
+    for p in people.values():
+        if isinstance(p, dict) and p.get("last_session"):
+            p["last_session"] = _current_session_name(slug, p["last_session"])
     body["people"] = people
     body.pop("reset", None)  # cleared: the next upload learns them afresh
     _write_voices(slug, body)
@@ -4248,7 +4252,9 @@ def campaign_list_voices(slug: str, _member=Depends(require_campaign_member("dm"
             "key": key, "name": p.get("name") or key, "guest": guest,
             "player": None if guest else key,
             "minutes": round(p.get("windows", 0) * 1.5 / 60, 1),  # 1.5 s windows
-            "sessions": p.get("sessions", 0), "last_session": p.get("last_session"), "updated": p.get("updated"),
+            "sessions": p.get("sessions", 0), "updated": p.get("updated"),
+            # Stored under the name the session had then; show what it's called now.
+            "last_session": _current_session_name(slug, p["last_session"]) if p.get("last_session") else None,
         })
     have = {p["key"] for p in people}
     missing = [info.get("name", u) if info else u for u, info in players.items() if u not in have]
