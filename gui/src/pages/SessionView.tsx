@@ -95,34 +95,54 @@ const ribbonKey = (campaign: string, session: string) => `dnd-ribbon:${campaign}
 // The worker records words Whisper decoded with low probability, keyed by the
 // transcript line's timestamp + speaker (line numbers shift with edits).
 
+const LINE_PARTS = /^(\*\*\[([^\]]+)\] ([^:]+):\*\* )(.*)$/
 interface LowConfWord { word: string; prob: number; t?: number }  // t: the word's start, seconds (newer transcripts)
 interface ConfidenceMap { version: number; lines: { ts: string; speaker: string; words: LowConfWord[] }[] }
-type ConfidenceIndex = Map<string, { speaker: string; words: LowConfWord[] }[]>
 
-function indexConfidence(map: ConfidenceMap | null): ConfidenceIndex {
-  const idx: ConfidenceIndex = new Map()
-  for (const line of map?.lines ?? []) {
-    const bucket = idx.get(line.ts) ?? []
-    bucket.push({ speaker: line.speaker, words: line.words })
-    idx.set(line.ts, bucket)
+/** Which transcript line each confidence entry belongs to, by line index. The
+ * underlines and the unsure-word review both use this, so they always agree.
+ * Entries are keyed by timestamp + speaker, but several lines can share a
+ * timestamp, one speaker can have two lines in the same second, and a speaker
+ * renamed since no longer matches: then the entry goes to the line at that
+ * timestamp where most of its words are found. */
+function assignConfidence(parsed: ParsedLine[], confidence: ConfidenceMap | null): Map<number, LowConfWord[]> {
+  const out = new Map<number, LowConfWord[]>()
+  if (!confidence) return out
+  const byTs = new Map<string, ParsedLine[]>()
+  for (const l of parsed) {
+    if (l.type !== 'speech' || !l.timestamp || !LINE_PARTS.test(l.raw)) continue
+    byTs.set(l.timestamp, [...(byTs.get(l.timestamp) ?? []), l])
   }
-  return idx
+  const taken = new Set<number>()
+  for (const entry of confidence.lines) {
+    const cands = byTs.get(entry.ts)
+    if (!cands) continue
+    const free = cands.filter(c => !taken.has(c.lineIdx))
+    let line = free.find(c => c.speaker === entry.speaker)
+    if (!line) {
+      let best = -1
+      for (const c of free.length ? free : cands) {
+        const found = locateLowConf(c.text ?? '', entry.words).length
+        if (found > best) { best = found; line = c }
+      }
+      if (!best) continue  // none of its words are in any line here (edited since)
+    }
+    taken.add(line!.lineIdx)
+    out.set(line!.lineIdx, [...(out.get(line!.lineIdx) ?? []), ...entry.words])
+  }
+  return out
 }
 
-function lowConfWordsFor(idx: ConfidenceIndex, ts?: string, speaker?: string): LowConfWord[] {
-  if (!ts) return []
-  const entries = idx.get(ts)
-  if (!entries) return []
-  // Prefer the exact speaker; fall back to anything at this timestamp so a
-  // speaker rename doesn't silently drop the highlights.
-  const same = entries.filter(e => e.speaker === speaker)
-  return (same.length ? same : entries).flatMap(e => e.words)
-}
+type Mark = { start: number; end: number; prob?: number; search?: boolean; word?: LowConfWord }
 
-type Mark = { start: number; end: number; prob?: number; search?: boolean }
+/** Words below this are underlined, and the unsure-word review visits exactly
+ * those (the worker stores everything under 0.6; the 0.5-0.6 band was mostly
+ * right, and underlining words the review then skipped made it jump). */
+const UNSURE_THRESHOLD = 0.5
+const isUnsure = (w: LowConfWord) => w.prob < UNSURE_THRESHOLD && w.word.length >= 2
 
-/** Locate each low-confidence word in order, so a shaky "the" doesn't flag every "the". */
-function lowConfRanges(text: string, words: LowConfWord[]): Mark[] {
+/** Locate each recorded word in order, so a shaky "the" doesn't flag every "the". */
+function locateLowConf(text: string, words: LowConfWord[]): Mark[] {
   const lower = text.toLowerCase()
   const out: Mark[] = []
   let cursor = 0
@@ -139,13 +159,19 @@ function lowConfRanges(text: string, words: LowConfWord[]): Mark[] {
     // A word that was corrected or hand-edited since won't be found — fine,
     // it no longer needs flagging.
     if (at < 0) continue
-    out.push({ start: at, end: at + needle.length, prob: w.prob })
+    out.push({ start: at, end: at + needle.length, prob: w.prob, word: w })
     cursor = at + needle.length
   }
   return out
 }
 
-function renderMarked(text: string, marks: Mark[]) {
+/** The underlined words of a line: located among all recorded words (so each
+ * lands on the right occurrence), then only the unsure ones. */
+function lowConfRanges(text: string, words: LowConfWord[]): Mark[] {
+  return locateLowConf(text, words).filter(m => isUnsure(m.word!))
+}
+
+function renderMarked(text: string, marks: Mark[], onReview?: (start: number) => void) {
   if (marks.length === 0) return text
   const cuts = new Set<number>([0, text.length])
   for (const m of marks) { cuts.add(m.start); cuts.add(m.end) }
@@ -162,7 +188,12 @@ function renderMarked(text: string, marks: Mark[]) {
         key={a}
         className={[low ? 'lowconf-word' : '', hit ? 'search-hit' : ''].join(' ').trim() || undefined}
         data-strong={low && low.prob! < 0.35 ? '' : undefined}
-        title={low ? `Whisper was ${Math.round(low.prob! * 100)}% sure of this word` : undefined}
+        title={low ? `Whisper was ${Math.round(low.prob! * 100)}% sure of this word${onReview ? '. Click to review it' : ''}` : undefined}
+        data-review={low && onReview ? '' : undefined}
+        role={low && onReview ? 'button' : undefined}
+        tabIndex={low && onReview ? 0 : undefined}
+        onClick={low && onReview ? e => { e.stopPropagation(); onReview(low.start) } : undefined}
+        onKeyDown={low && onReview ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onReview(low.start) } } : undefined}
       >
         {piece}
       </span>
@@ -236,6 +267,8 @@ export default function SessionView() {
   const [namesKey, setNamesKey] = useState(0)
   const [namesPending, setNamesPending] = useState(0)
   const [walkItems, setWalkItems] = useState<WalkItem[] | null>(null)
+  // Where the review opens, and a key to restart it when another word is clicked.
+  const [walk, setWalk] = useState({ start: 0, key: 0 })
   const walkStopRef = useRef<number | null>(null)
   const canEditTranscript = !activeCampaign || activeCampaign.role !== 'spectator'
   const unsureCount = useMemo(
@@ -254,6 +287,23 @@ export default function SessionView() {
   const stopMoment = () => {
     if (walkStopRef.current) window.clearTimeout(walkStopRef.current)
     audioRef.current?.pause()
+  }
+  /** Start the unsure-word review, at the first word or at an underlined word that was clicked. */
+  const openWalk = (at?: { lineIdx: number; start: number }) => {
+    if (!transcript) return
+    const items = buildWalkItems(transcript, confidence)
+    let start = 0
+    if (at) {
+      const text = transcript.split('\n')[at.lineIdx]?.match(LINE_PARTS)?.[4] ?? ''
+      start = items.findIndex(it => it.lineIdx === at.lineIdx && it.at === at.start)
+      // A word repeated in a line is one stop in the review.
+      if (start < 0) start = items.findIndex(it => it.lineIdx === at.lineIdx
+        && text.slice(at.start, at.start + it.word.length).toLowerCase() === it.word.toLowerCase())
+      if (start < 0) return
+    }
+    setSearch('')
+    setWalk(w => ({ start, key: w.key + 1 }))
+    setWalkItems(items)
   }
   const tabsRowRef = useRef<HTMLDivElement | null>(null)
   const openShare = async () => {
@@ -355,6 +405,9 @@ export default function SessionView() {
   const [importingTranscript, setImportingTranscript] = useState(false)
   const [audioDuration, setAudioDuration] = useState(0)
   const [audioPlaying, setAudioPlaying] = useState(false)
+  // The recording itself failed to load: offer a retry rather than a dead player.
+  const [audioError, setAudioError] = useState(false)
+  const [audioAttempt, setAudioAttempt] = useState(0)
   const [mainAudioVisible, setMainAudioVisible] = useState(true)
   const importInputRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -468,14 +521,26 @@ export default function SessionView() {
     }
   }
 
+  // A dropped request (a patchy phone connection, the server waking up) used to
+  // leave the session with no player until a reload, so it's retried a few times.
   const loadAudioFiles = async () => {
-    try {
-      const r = await fetch(apiUrl(`/sessions/${name}/audio-files`))
-      const data = await r.json()
-      const files: AudioFile[] = data.files || []
-      setAudioFiles(files)
-      if (files.length > 0 && !selectedAudio) setSelectedAudio(files[0].filename)
-    } catch (_) {}
+    const forSession = name
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (attempt) await new Promise(res => setTimeout(res, 1500 * 2 ** (attempt - 1)))
+      if (sessionNameRef.current !== forSession) return  // moved to another session meanwhile
+      try {
+        const r = await fetch(apiUrl(`/sessions/${forSession}/audio-files`))
+        if (r.ok) {
+          const data = await r.json()
+          if (sessionNameRef.current !== forSession) return
+          const files: AudioFile[] = data.files || []
+          setAudioFiles(files)
+          if (files.length > 0 && !selectedAudio) setSelectedAudio(files[0].filename)
+          return
+        }
+        if (r.status < 500) return  // not found / not allowed: retrying won't help
+      } catch { /* network error: retry */ }
+    }
   }
 
   const loadPlayers = async () => {
@@ -514,7 +579,10 @@ export default function SessionView() {
     }
   }
 
+  const sessionNameRef = useRef(name)
+  sessionNameRef.current = name
   useEffect(() => {
+    setAudioError(false)
     load()
     loadAudioFiles()
     loadPlayers()
@@ -799,8 +867,14 @@ export default function SessionView() {
     const from = parseTimestampToSeconds(timestamp)
     // A Names example: play around the word itself (a long line's later words
     // used to fall after the clip ended).
-    if (word && text) { playMoment(...wordClip(from, text, word)); return }
-    const next = lineStarts.find(l => l.seconds > from)?.seconds ?? from + 8
+    const lineEnd = lineStarts.find(l => l.seconds > from)?.seconds
+    if (word && text) {
+      const m = wordRegex(word).exec(text)
+      const at = m ? m.index + m[1].length : 0
+      playMoment(...wordClip({ lineIdx: -1, ts: timestamp, seconds: from, lineEnd, speaker: '', word, prob: 0, at }, text, at))
+      return
+    }
+    const next = lineEnd ?? from + 8
     playMoment(Math.max(0, from - 0.5), Math.min(next + 0.8, from + 20))
   }
 
@@ -884,7 +958,7 @@ export default function SessionView() {
               </SheetItem>
             )}
             {canEditTranscript && unsureCount > 0 && !editMode && (
-              <SheetItem onClick={() => { setActionsOpen(false); setSearch(''); setWalkItems(buildWalkItems(transcript!, confidence)) }}
+              <SheetItem onClick={() => { setActionsOpen(false); openWalk() }}
                 note="Step through each one with the audio">
                 Review {unsureCount} unsure word{unsureCount !== 1 ? 's' : ''}
               </SheetItem>
@@ -1370,7 +1444,7 @@ export default function SessionView() {
                   <button
                     type="button"
                     className="btn-ghost tb-phone-hide"
-                    onClick={() => { setSearch(''); setWalkItems(buildWalkItems(transcript!, confidence)) }}
+                    onClick={() => openWalk()}
                     title="Step through each word Whisper wasn't sure about, with the audio"
                     style={{ flexShrink: 0 }}
                   >
@@ -1469,11 +1543,13 @@ export default function SessionView() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
               <audio
                 ref={audioRef}
-                key={selectedAudio}
+                key={`${selectedAudio}|${audioAttempt}`}
                 src={apiUrl(`/sessions/${encodeURIComponent(name!)}/merged-audio`)}
                 preload="metadata"
+                onError={() => setAudioError(true)}
                 onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
                 onLoadedMetadata={() => {
+                  setAudioError(false)
                   if (audioRef.current) {
                     audioRef.current.playbackRate = playbackRate
                     setAudioDuration(audioRef.current.duration || 0)
@@ -1504,7 +1580,14 @@ export default function SessionView() {
                 {formatTime(currentTime)}
                 <span style={{ color: 'var(--ink-faint)' }}> / {audioDuration > 0 ? formatTime(audioDuration) : '…'}</span>
               </span>
+              {audioError && (
+                <button type="button" className="btn-ghost" style={{ whiteSpace: 'nowrap' }}
+                  onClick={() => { setAudioError(false); setAudioAttempt(a => a + 1) }}>
+                  Recording didn't load. Retry
+                </button>
+              )}
               <input
+                hidden={audioError}
                 type="range"
                 className="journal-scrubber"
                 min={0}
@@ -1573,6 +1656,7 @@ export default function SessionView() {
                 }}
                 confidence={confidence}
                 showConfidence={showConfidence && !editMode}
+                onReviewWord={canEditTranscript ? (lineIdx, start) => openWalk({ lineIdx, start }) : undefined}
               />
             </>
           ) : (
@@ -1653,7 +1737,9 @@ export default function SessionView() {
 
       {walkItems && transcript && tab === 'transcript' && (
         <UnsureWalkthrough
+          key={walk.key}
           items={walkItems}
+          startIdx={walk.start}
           transcript={transcript}
           sessionName={name!}
           onClose={() => { stopMoment(); setWalkItems(null) }}
@@ -1759,6 +1845,7 @@ function TranscriptView({
   initialEditLine = null,
   confidence,
   showConfidence,
+  onReviewWord,
 }: {
   content: string | null
   search: string
@@ -1775,6 +1862,8 @@ function TranscriptView({
   initialEditLine?: number | null
   confidence?: ConfidenceMap | null
   showConfidence?: boolean
+  /** Clicking an underlined word opens the unsure-word review there (editors only). */
+  onReviewWord?: (lineIdx: number, start: number) => void
 }) {
   const apiUrl = useApiUrl()
   const activeLineRef = useRef<HTMLDivElement | null>(null)
@@ -1793,7 +1882,6 @@ function TranscriptView({
   // A line added with "+" that isn't on the server yet (only one at a time).
   const newLineIdxRef = useRef<number | null>(null)
   const [ruleSuggestions, setRuleSuggestions] = useState<SessionRuleSuggestion[]>([])
-  const confidenceIdx = useMemo(() => indexConfidence(confidence ?? null), [confidence])
   // Ribbon bookmark: remember the first visible line while reading, and on the
   // next visit offer to continue from there.
   const pageRef = useRef<HTMLDivElement | null>(null)
@@ -1869,6 +1957,7 @@ function TranscriptView({
 
   // Compute parsed lines + activeIdx via useMemo so they're stable for the useEffect below
   const parsedLines = useMemo(() => (content ? parseTranscript(content) : []), [content])
+  const confByLine = useMemo(() => assignConfidence(parsedLines, confidence ?? null), [parsedLines, confidence])
   const searchLower = search.toLowerCase()
   const visibleLines = useMemo(
     () => parsedLines.filter(line => !search || line.raw.toLowerCase().includes(searchLower)),
@@ -1911,9 +2000,9 @@ function TranscriptView({
   // render would make every memoised line look changed on every audio tick).
   const lowConfPerLine = useMemo(() => visibleLines.map(l => {
     if (!showConfidence || l.type !== 'speech') return NO_LOW_CONF
-    const w = lowConfWordsFor(confidenceIdx, l.timestamp, l.speaker)
-    return w.length ? w : NO_LOW_CONF
-  }), [visibleLines, confidenceIdx, showConfidence])
+    const w = confByLine.get(l.lineIdx)
+    return w?.length ? w : NO_LOW_CONF
+  }), [visibleLines, confByLine, showConfidence])
 
   const activeIdx = useMemo(() => {
     if (currentTime === undefined) return -1
@@ -2121,6 +2210,7 @@ function TranscriptView({
   const readActions = useMemo<ReadLineActions>(() => ({
     seek: (t, sp) => readActionsRef.current.seek(t, sp),
     toggleQuote: (l, n) => readActionsRef.current.toggleQuote(l, n),
+    reviewWord: (i, at) => readActionsRef.current.reviewWord(i, at),
   }), [])
 
   // Stable callbacks for the memoised rows: they read the latest closures via a ref.
@@ -2260,6 +2350,7 @@ function TranscriptView({
   readActionsRef.current = {
     seek: (t, speaker) => onSeek?.(t, speaker),
     toggleQuote: (line, nextTs) => toggleQuote(line, nextTs),
+    reviewWord: (lineIdx, start) => onReviewWord?.(lineIdx, start),
   }
 
   return (
@@ -2288,6 +2379,7 @@ function TranscriptView({
           search={searchLower}
           canSeek={!!onSeek}
           canQuote={canQuote}
+          canReview={!!onReviewWord}
           quoteSaved={canQuote && line.type === 'speech' ? !!quoteFor(line) : false}
           actions={readActions}
           activeRef={activeLineRef}
@@ -3828,28 +3920,46 @@ function ChangesView({
 // the moment, shows the word in its line, and lets the reviewer keep it or fix
 // it (optionally also saving the fix as a correction rule).
 
-const WALK_THRESHOLD = 0.5
-const LINE_PARTS = /^(\*\*\[([^\]]+)\] ([^:]+):\*\* )(.*)$/
+// at: where the word starts in the line's text when the review was built (a fix
+// earlier in the same line can shift it, so it's re-found nearest this spot).
+// lineEnd: when the next line starts, for placing words that have no stored time.
+interface WalkItem { lineIdx: number; ts: string; seconds: number; lineEnd?: number; speaker: string; word: string; prob: number; t?: number; at: number }
 
-interface WalkItem { lineIdx: number; ts: string; seconds: number; speaker: string; word: string; prob: number; t?: number }
-
-/** Roughly where a word falls in a line, in seconds from the line's start, at
- * an ordinary speaking pace. For older transcripts that don't store word times. */
-function wordOffsetSeconds(text: string, word: string): number {
-  const m = wordRegex(word).exec(text)
-  if (!m) return 0
-  return text.slice(0, m.index).split(/\s+/).filter(Boolean).length / 2.5
+/** Where a word falls in its line, in seconds from the line's start, for older
+ * transcripts that don't store word times. Spread across the line's own span
+ * (up to the next line) when that's a plausible speaking pace, else at an
+ * ordinary 2.5 words a second. */
+function wordOffsetSeconds(text: string, at: number, span?: number): number {
+  const wordsBefore = text.slice(0, Math.max(0, at)).split(/\s+/).filter(Boolean).length
+  const total = text.split(/\s+/).filter(Boolean).length
+  if (span && total > 0) {
+    const rate = total / span
+    if (rate >= 1.2 && rate <= 5) return span * (wordsBefore / total)
+  }
+  return wordsBefore / 2.5
 }
 
-/** A short clip around a word: a little before it to a few seconds after. */
-function wordClip(lineStart: number, text: string, word: string, t?: number): [number, number] {
-  const at = t ?? lineStart + wordOffsetSeconds(text, word)
-  const from = Math.max(lineStart - 0.5, at - 2, 0)
-  return [from, Math.max(at + 4, from + 5)]
+/** A short clip around a word: a little before it to a few seconds after
+ * (wider when its time is only estimated). */
+function wordClip(it: WalkItem, text: string, at: number): [number, number] {
+  const estimated = it.t === undefined
+  const when = it.t ?? it.seconds + wordOffsetSeconds(text, at, it.lineEnd !== undefined ? it.lineEnd - it.seconds : undefined)
+  const from = Math.max(it.seconds - 0.5, when - (estimated ? 3 : 2), 0)
+  return [from, Math.max(when + (estimated ? 5 : 4), from + 5)]
 }
 
-function wordRegex(word: string) {
-  return new RegExp(`(^|[^A-Za-z0-9'])(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?![A-Za-z0-9'])`, 'i')
+function wordRegex(word: string, flags = 'i') {
+  return new RegExp(`(^|[^A-Za-z0-9'])(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?![A-Za-z0-9'])`, flags)
+}
+
+/** The whole-word occurrence of `word` in `text` nearest to `near`, or -1. */
+function findNear(text: string, word: string, near: number): number {
+  let best = -1
+  for (const m of text.matchAll(wordRegex(word, 'gi'))) {
+    const at = m.index! + m[1].length
+    if (best < 0 || Math.abs(at - near) < Math.abs(best - near)) best = at
+  }
+  return best
 }
 
 /** The line from a little before the word's first whole-word match, so the
@@ -3866,37 +3976,51 @@ function excerptAround(line: string, word: string, before = 40): { text: string;
   return { text: '…' + line.slice(from), start: at - from + 1 }
 }
 
+/** Every underlined word, in order: the same words, and the same occurrences,
+ * that the transcript underlines. Keep clears a word from its whole line, so a
+ * word repeated in one line is visited once. */
 function buildWalkItems(transcript: string, confidence: ConfidenceMap | null): WalkItem[] {
   if (!confidence) return []
-  const lines = transcript.split('\n')
-  const byTs = new Map<string, number[]>()
-  lines.forEach((l, i) => {
-    const m = l.match(LINE_PARTS)
-    if (m) byTs.set(m[2], [...(byTs.get(m[2]) ?? []), i])
-  })
+  const parsed = parseTranscript(transcript)
+  const starts = parsed.filter(l => l.type === 'speech' && l.timestamp)
+    .map(l => ({ i: l.lineIdx, s: parseTimestampToSeconds(l.timestamp!) }))
+  const nextStart = (lineIdx: number, from: number) =>
+    starts.find(x => x.i > lineIdx && x.s > from)?.s
   const items: WalkItem[] = []
-  const seen = new Set<string>()
-  for (const entry of confidence.lines) {
-    const candidates = byTs.get(entry.ts) ?? []
-    const lineIdx = candidates.find(i => lines[i].includes(`] ${entry.speaker}:**`)) ?? candidates[0]
-    if (lineIdx === undefined) continue
-    const m = lines[lineIdx].match(LINE_PARTS)!
-    for (const w of entry.words) {
-      if (w.prob >= WALK_THRESHOLD || w.word.length < 2) continue
-      if (!wordRegex(w.word).test(m[4])) continue // already corrected since
-      const key = `${lineIdx}|${w.word.toLowerCase()}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      items.push({ lineIdx, ts: m[2], seconds: parseTimestampToSeconds(m[2]), speaker: m[3], word: w.word, prob: w.prob, t: w.t })
+  for (const [lineIdx, words] of assignConfidence(parsed, confidence)) {
+    const m = parsed[lineIdx].raw.match(LINE_PARTS)!
+    const seconds = parseTimestampToSeconds(m[2])
+    const seen = new Set<string>()
+    for (const mark of lowConfRanges(m[4], words)) {
+      const w = mark.word!
+      if (seen.has(w.word.toLowerCase())) continue
+      seen.add(w.word.toLowerCase())
+      items.push({ lineIdx, ts: m[2], seconds, lineEnd: nextStart(lineIdx, seconds), speaker: m[3], word: w.word, prob: w.prob, t: w.t, at: mark.start })
     }
   }
-  return items.sort((a, b) => a.seconds - b.seconds || a.lineIdx - b.lineIdx)
+  return items.sort((a, b) => a.seconds - b.seconds || a.lineIdx - b.lineIdx || a.at - b.at)
+}
+
+/** A button label that keeps the width of the wider of its two texts, so
+ * switching between them doesn't shift the buttons beside it. Both are also
+ * sized at the heavier weight some button styles (btn-danger) use. */
+function SteadyLabel({ show, other }: { show: string; other: string }) {
+  const sizer = { gridArea: '1 / 1', visibility: 'hidden', fontWeight: 600 } as const
+  return (
+    <span style={{ display: 'inline-grid', justifyItems: 'center' }}>
+      <span style={{ gridArea: '1 / 1' }}>{show}</span>
+      <span style={sizer} aria-hidden>{show}</span>
+      <span style={sizer} aria-hidden>{other}</span>
+    </span>
+  )
 }
 
 function UnsureWalkthrough({
-  items, transcript, sessionName, onClose, onShowLine, onPlay, onStop, onChanged,
+  items, startIdx = 0, transcript, sessionName, onClose, onShowLine, onPlay, onStop, onChanged,
 }: {
   items: WalkItem[]
+  /** Open at this item (clicking an underlined word). */
+  startIdx?: number
   transcript: string
   sessionName: string
   onClose: () => void
@@ -3908,8 +4032,8 @@ function UnsureWalkthrough({
   const apiUrl = useApiUrl()
   const { activeCampaign } = useCampaign()
   const { toast } = useToast()
-  const [idx, setIdx] = useState(0)
-  const [value, setValue] = useState(items[0]?.word ?? '')
+  const [idx, setIdx] = useState(startIdx)
+  const [value, setValue] = useState(items[startIdx]?.word ?? '')
   const [addRule, setAddRule] = useState(false)
   const [busy, setBusy] = useState(false)
   const [fixed, setFixed] = useState(0)
@@ -3921,7 +4045,11 @@ function UnsureWalkthrough({
   // (its stored time when the transcript has one, else estimated from its
   // position in the line). Playing from the line's start missed words late in
   // long lines.
-  const clipFor = (it: WalkItem) => wordClip(it.seconds, lines[it.lineIdx]?.match(LINE_PARTS)?.[4] ?? '', it.word, it.t)
+  const textOf = (it: WalkItem) => lines[it.lineIdx]?.match(LINE_PARTS)?.[4] ?? ''
+  const clipFor = (it: WalkItem) => {
+    const text = textOf(it)
+    return wordClip(it, text, findNear(text, it.word, it.at))
+  }
   useEffect(() => {
     if (!item) return
     setValue(item.word)
@@ -3940,11 +4068,14 @@ function UnsureWalkthrough({
     )
   }
 
-  const text = lines[item.lineIdx]?.match(LINE_PARTS)?.[4] ?? ''
-  const hit = wordRegex(item.word).exec(text)
-  const at = hit ? hit.index + hit[1].length : -1
-  const before = at >= 0 ? text.slice(Math.max(0, at - 90), at) : text
-  const after = at >= 0 ? text.slice(at + item.word.length, at + item.word.length + 90) : ''
+  const text = textOf(item)
+  const at = findNear(text, item.word, item.at)
+  // Up to ~90 characters either side, cut back to whole words.
+  let before = at >= 0 ? text.slice(Math.max(0, at - 90), at) : text
+  if (at > 90 && before.includes(' ')) before = before.slice(before.indexOf(' ') + 1)
+  let after = at >= 0 ? text.slice(at + item.word.length, at + item.word.length + 90) : ''
+  const afterCut = at >= 0 && at + item.word.length + 90 < text.length
+  if (afterCut && after.includes(' ')) after = after.slice(0, after.lastIndexOf(' '))
   const changed = value.trim() !== '' && value.trim() !== item.word
 
   const advance = () => { setConfirmDelete(false); setIdx(i => i + 1) }
@@ -3993,7 +4124,10 @@ function UnsureWalkthrough({
     const m = lines[item.lineIdx]?.match(LINE_PARTS)
     if (!m || !changed) return
     const replacement = value.trim()
-    const newText = m[4].replace(wordRegex(item.word), (_all, pre) => `${pre}${replacement}`)
+    // This occurrence, not the line's first one of the same word.
+    const at = findNear(m[4], item.word, item.at)
+    if (at < 0) return
+    const newText = m[4].slice(0, at) + replacement + m[4].slice(at + item.word.length)
     setBusy(true)
     try {
       const r = await fetch(apiUrl(`/sessions/${sessionName}/transcript/line/${item.lineIdx + 1}`), {
@@ -4022,7 +4156,10 @@ function UnsureWalkthrough({
       onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
       <div className="walkthrough-head">
         <span>Unsure word {idx + 1} of {items.length}</span>
-        <span style={{ color: 'var(--ink-faint)' }}>at {item.ts}, Whisper was {Math.round(item.prob * 100)}% sure</span>
+        <span style={{ color: 'var(--ink-faint)' }}>
+          at {item.ts}, Whisper was {Math.round(item.prob * 100)}% sure
+          {item.t === undefined && <span title="This session was transcribed before word times were kept, so the clip is placed by the word's position in the line"> (timing estimated)</span>}
+        </span>
         <span style={{ flex: 1 }} />
         <button type="button" className="entry-action" onClick={onClose} aria-label="Close walkthrough"><CloseIcon /></button>
       </div>
@@ -4030,7 +4167,7 @@ function UnsureWalkthrough({
         <span className="speaker-name" style={{ marginRight: 6 }}>{splitSpeaker(item.speaker).name}</span>
         {before.length < at ? '…' : ''}{before}
         <mark className="search-hit">{at >= 0 ? text.slice(at, at + item.word.length) : item.word}</mark>
-        {after}{at + item.word.length + 90 < text.length ? '…' : ''}
+        {after}{afterCut ? '…' : ''}
       </p>
       <form
         className="walkthrough-actions"
@@ -4054,12 +4191,12 @@ function UnsureWalkthrough({
         <button type="button" className="btn-ghost" onClick={advance} title="Leave it flagged and move on">Skip</button>
         <button type="button" className={confirmDelete ? 'btn-danger' : 'btn-ghost'} onClick={deleteLine} disabled={busy}
           title="Remove the whole line (for a line nobody actually said)">
-          {confirmDelete ? 'Confirm delete' : 'Delete line'}
+          <SteadyLabel show={confirmDelete ? 'Confirm delete' : 'Delete line'} other={confirmDelete ? 'Delete line' : 'Confirm delete'} />
         </button>
         <button type="button" className="btn-ghost"
           onClick={() => onPlay(...clipFor(item))}>Play again</button>
         <button type="submit" className={changed ? 'btn-primary' : 'btn-secondary'} disabled={busy}>
-          {changed ? 'Fix' : 'Keep'}
+          <SteadyLabel show={changed ? 'Fix' : 'Keep'} other={changed ? 'Keep' : 'Fix'} />
         </button>
       </form>
       <div style={{ fontSize: 14, color: 'var(--ink-faint)' }}>Keep marks the word as checked; Skip leaves it flagged. Enter keeps the word (or applies your fix). Esc closes.</div>
@@ -4632,6 +4769,8 @@ function UnknownWordsPanel({
 interface ReadLineActions {
   seek: (seconds: number, speaker?: string) => void
   toggleQuote: (line: ParsedLine, nextTs?: string) => void
+  /** Open the unsure-word review at the word starting at `start` in this line's text. */
+  reviewWord: (lineIdx: number, start: number) => void
 }
 const NO_LOW_CONF: LowConfWord[] = []
 const SESSION_TITLE_RE = /^#\s*session transcript\s*$/i
@@ -4642,9 +4781,9 @@ const SESSION_TITLE_RE = /^#\s*session transcript\s*$/i
  * the lines whose highlight changes, not the whole transcript.
  */
 const ReadLine = React.memo(function ReadLine({ line, isActive, isTarget, isFlash, silenceBefore, continued, nextTs, lowConf, search,
-  canSeek, canQuote, quoteSaved, actions, activeRef, targetRef }: {
+  canSeek, canQuote, canReview, quoteSaved, actions, activeRef, targetRef }: {
   line: ParsedLine; isActive: boolean; isTarget: boolean; isFlash: boolean; silenceBefore: boolean; continued: boolean; nextTs?: string
-  lowConf: LowConfWord[]; search: string; canSeek: boolean; canQuote: boolean; quoteSaved: boolean
+  lowConf: LowConfWord[]; search: string; canSeek: boolean; canQuote: boolean; canReview: boolean; quoteSaved: boolean
   actions: ReadLineActions
   activeRef: React.MutableRefObject<HTMLDivElement | null>; targetRef: React.MutableRefObject<HTMLDivElement | null>
 }) {
@@ -4694,7 +4833,7 @@ const ReadLine = React.memo(function ReadLine({ line, isActive, isTarget, isFlas
         <p className="read-text">
           {who.name && <span className="speaker-name inline-speaker">{who.name}</span>}
           {who.player && <span className="speaker-player inline-speaker">{who.player}</span>}
-          {renderMarked(text, marks)}
+          {renderMarked(text, marks, canReview ? start => actions.reviewWord(line.lineIdx, start) : undefined)}
           {canSeek && tsSeconds !== null && (
             <button className="transcript-ts line-ts-inline" onClick={() => actions.seek(tsSeconds, line.speaker)} title={`Play from ${line.timestamp}`}>
               {line.timestamp}

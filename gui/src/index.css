@@ -344,6 +344,10 @@ select:focus {
   text-underline-offset: 4px;
   cursor: help;
 }
+/* Editors can click an underlined word to review it. */
+.lowconf-word[data-review] { cursor: pointer; border-radius: 2px; }
+.lowconf-word[data-review]:hover { background: color-mix(in srgb, var(--rubric) 10%, transparent); }
+.lowconf-word[data-review]:focus-visible { outline: 2px solid var(--rubric); outline-offset: 1px; }
 .lowconf-word[data-strong] {
   text-decoration-color: var(--rubric);
 }
