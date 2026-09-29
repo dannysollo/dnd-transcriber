@@ -7,6 +7,7 @@ import { AuthProvider } from './AuthContext.tsx'
 import { CampaignProvider } from './CampaignContext.tsx'
 import { ToastProvider } from './Toast.tsx'
 import { ThemeProvider } from './ThemeContext.tsx'
+import UpdateNotice from './UpdateNotice.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -16,6 +17,7 @@ createRoot(document.getElementById('root')!).render(
           <CampaignProvider>
             <ToastProvider>
               <App />
+              <UpdateNotice />
             </ToastProvider>
           </CampaignProvider>
         </AuthProvider>

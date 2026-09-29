@@ -1276,3 +1276,14 @@ span.continuity-ts { cursor: default; color: var(--ink-faint); }
 .continuity-group-title { margin: 12px 0 2px; font-size: 20px; font-weight: 500; color: var(--ink); }
 .continuity-group-title a { color: var(--ink); text-decoration: none; }
 .continuity-group-title a:hover { color: var(--rubric); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── A newer build is live (UpdateNotice.tsx) ──────────────────────────────── */
+.update-notice {
+  position: fixed; right: 20px; bottom: 20px; z-index: 1000;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--page); border: 1px solid var(--rule-strong); border-radius: 3px;
+  box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.35); padding: 10px 14px; font-size: 16px; color: var(--ink);
+}
+@media (max-width: 768px) {
+  .update-notice { left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+}
