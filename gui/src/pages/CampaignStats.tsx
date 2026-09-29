@@ -392,11 +392,12 @@ function Attendance({ profiles, sessions }: { profiles: Profile[]; sessions: str
                   const n = i + 1
                   const label = sessions.length <= 20 || n === 1 || n % 5 === 0 || n === sessions.length
                   return <th key={s} scope="col" title={`${n}. ${s}`}>{label ? n : ''}</th>
-                })}<th scope="col" className="attendance-missed-col">Missed</th></tr>
+                })}<th scope="col" className="attendance-missed-col" title="Sessions attended">Attended</th></tr>
               </thead>
               <tbody>
                 {profiles.map(p => {
-                  const missed = p.share_by_session.filter(s => s.share === null).length
+                  // Counted as sessions attended, not missed: a guest didn't "miss" the rest.
+                  const attended = p.share_by_session.filter(s => s.share !== null).length
                   return (
                     <tr key={p.person}>
                       <th scope="row">{p.person}</th>
@@ -405,7 +406,7 @@ function Attendance({ profiles, sessions }: { profiles: Profile[]; sessions: str
                           <span className={s.share === null ? 'gap' : 'mark'} aria-label={s.share === null ? 'absent' : 'present'} />
                         </td>
                       ))}
-                      <td>{missed}</td>
+                      <td>{attended}</td>
                     </tr>
                   )
                 })}

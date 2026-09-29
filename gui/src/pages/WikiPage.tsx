@@ -150,6 +150,9 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
   const hasIndexPage = index.pages.some(p => p.slug === INDEX_SLUG)
   const [showAll, setShowAll] = useState(false)
   const [front, setFront] = useState<string | null>(null)
+  // ?section=Mechanics (a page's breadcrumb): the list of all pages, at that section.
+  const [params] = useSearchParams()
+  const focusSection = params.get('section')
   const [creatingTitle, setCreatingTitle] = useState<string | null>(null)
   const bySlug = useMemo(() => linkMap(index.pages), [index.pages])
   useEffect(() => {
@@ -174,6 +177,17 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
     }
     return [...groups.entries()]
   }, [index.pages])
+
+  useEffect(() => {
+    if (!focusSection) return
+    setShowAll(true)
+    const id = window.requestAnimationFrame(() => {
+      const el = [...document.querySelectorAll<HTMLElement>('.wiki-section[data-section]')]
+        .find(e => e.dataset.section === focusSection || e.dataset.section!.startsWith(focusSection + '/'))
+      el?.scrollIntoView({ block: 'start' })
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [focusSection, sections.length, showAll])
 
   const togglePublic = async () => {
     const r = await fetch(`/campaigns/${slug}/wiki/settings`, {
@@ -238,7 +252,7 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
       ) : (
         <div className="wiki-sections">
           {sections.map(([section, pages]) => (
-            <section key={section} className="wiki-section" aria-label={section}>
+            <section key={section} className="wiki-section" aria-label={section} data-section={section}>
               <h2 className="sc">{section.split('/').join(' · ')}</h2>
               <ul>
                 {pages.map(p => (
@@ -403,7 +417,10 @@ function WikiArticle({ slug, page, index, base, onChanged }: { slug: string; pag
     <div className="page-content wiki" ref={topRef}>
       <nav className="wiki-crumbs" aria-label="Breadcrumb">
         <Link to={base}>Wiki</Link>
-        {data.section && <span> / {data.section.split('/').join(' / ')}</span>}
+        {/* Each part of the section links to its place in the list of all pages. */}
+        {data.section && data.section.split('/').map((part, i, parts) => (
+          <span key={i}> / <Link to={`${base}?section=${encodeURIComponent(parts.slice(0, i + 1).join('/'))}`}>{part}</Link></span>
+        ))}
       </nav>
       <header className="wiki-article-head">
         <div>

@@ -1,7 +1,7 @@
 import { useToast } from '../Toast'
 import CampaignStats from './CampaignStats'
 import { CloseIcon } from '../Icons'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import VoiceLibrary from '../VoiceLibrary'
 import { Roll20Settings } from '../Dice'
@@ -55,7 +55,20 @@ export default function CampaignSettingsPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [invites, setInvites] = useState<Invite[]>([])
   const [loading, setLoading] = useState(true)
+  // The tab row scrolls on narrow screens: fade the ends that have more tabs past
+  // them, and keep the chosen tab in view (as on a session).
+  const tabsRowRef = useRef<HTMLDivElement | null>(null)
+  const [tabEdges, setTabEdges] = useState('none')
+  const updateTabEdges = () => {
+    const el = tabsRowRef.current
+    if (!el) return
+    const left = el.scrollLeft > 4, right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+    setTabEdges(left && right ? 'both' : left ? 'start' : right ? 'end' : 'none')
+  }
   const [tab, setTab] = useState<'settings' | 'config' | 'people' | 'stats' | 'voices' | 'dice' | 'worker'>('settings')
+  useEffect(() => {
+    tabsRowRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center' })
+  }, [tab])
 
   // Config tab state (mirrors SettingsPage)
   const [config, setConfig] = useState<Record<string, any> | null>(null)
@@ -83,6 +96,13 @@ export default function CampaignSettingsPage() {
   const [workerKeyVisible, setWorkerKeyVisible] = useState(false)
   const [generatingKey, setGeneratingKey] = useState(false)
   const [myRole, setMyRole] = useState<string | null>(null)
+  // Measured after every render: the row only exists once the page has loaded,
+  // and the DM's extra tabs appear once the role is known. (No change, no re-render.)
+  useEffect(() => { updateTabEdges() })
+  useEffect(() => {
+    window.addEventListener('resize', updateTabEdges)
+    return () => window.removeEventListener('resize', updateTabEdges)
+  }, [])
 
   // Invite form state
   const [inviteRole, setInviteRole] = useState('player')
@@ -347,8 +367,9 @@ export default function CampaignSettingsPage() {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div role="tablist" style={{ display: 'flex', gap: '28px', marginBottom: '28px', borderBottom: '1px solid var(--rule)' }}>
+      {/* Tabs: a row that scrolls sideways on narrow screens, like a session's. */}
+      <div ref={tabsRowRef} role="tablist" className="session-tabs-row" data-edges={tabEdges} onScroll={updateTabEdges}
+        style={{ display: 'flex', gap: '28px', marginBottom: '28px', borderBottom: '1px solid var(--rule)', overflowX: 'auto', scrollbarWidth: 'none' }}>
         {(['settings', 'config', 'people', 'stats', ...(myRole === 'dm' ? ['voices', 'dice', 'worker'] : [])] as ('settings' | 'config' | 'people' | 'stats' | 'voices' | 'dice' | 'worker')[]).map(t => (
           <button
             key={t}
@@ -361,7 +382,7 @@ export default function CampaignSettingsPage() {
               padding: '10px 0', fontSize: '19px', fontWeight: tab === t ? 600 : 500,
               color: tab === t ? 'var(--rubric)' : 'var(--ink-faint)',
               boxShadow: tab === t ? 'inset 0 -2px 0 var(--rubric)' : 'none',
-              textTransform: 'capitalize',
+              textTransform: 'capitalize', flexShrink: 0, whiteSpace: 'nowrap',
             }}
           >
             {t}
