@@ -266,15 +266,25 @@ export default function SessionView() {
   })
   const [namesKey, setNamesKey] = useState(0)
   const [namesPending, setNamesPending] = useState(0)
-  const [walkItems, setWalkItems] = useState<WalkItem[] | null>(null)
+  // The Names tab's words (likely-misheard names), which the review goes through first.
+  const [names, setNames] = useState<UnknownWord[]>([])
+  const [walkItems, setWalkItems] = useState<ReviewItem[] | null>(null)
   // Where the review opens, and a key to restart it when another word is clicked.
   const [walk, setWalk] = useState({ start: 0, key: 0 })
   const walkStopRef = useRef<number | null>(null)
   const canEditTranscript = !activeCampaign || activeCampaign.role !== 'spectator'
-  const unsureCount = useMemo(
-    () => (transcript && confidence ? buildWalkItems(transcript, confidence).length : 0),
-    [transcript, confidence],
+  // Name fixes (rules, ignores) are the DM's.
+  const canEditNames = !authEnabled || activeCampaign?.role === 'dm'
+  const reviewItems = useMemo(
+    () => (transcript ? buildReviewItems(transcript, confidence, canEditNames ? names : []) : []),
+    [transcript, confidence, names, canEditNames],
   )
+  const reviewNames = reviewItems.filter(it => it.kind === 'name').length
+  const reviewWords = reviewItems.length - reviewNames
+  const reviewLabel = reviewNames && reviewWords
+    ? `Review ${reviewNames} name${reviewNames !== 1 ? 's' : ''}, ${reviewWords} unsure word${reviewWords !== 1 ? 's' : ''}`
+    : reviewNames ? `Review ${reviewNames} name${reviewNames !== 1 ? 's' : ''}`
+    : `Review ${reviewWords} unsure word${reviewWords !== 1 ? 's' : ''}`
   /** Play [from, until) of the recording, for the walkthrough. */
   const playMoment = (from: number, until: number) => {
     const el = audioRef.current
@@ -288,19 +298,26 @@ export default function SessionView() {
     if (walkStopRef.current) window.clearTimeout(walkStopRef.current)
     audioRef.current?.pause()
   }
-  /** Start the unsure-word review, at the first word or at an underlined word that was clicked. */
+  /** Start the review (names first, then unsure words), or open it at an underlined word that was clicked. */
   const openWalk = (at?: { lineIdx: number; start: number }) => {
     if (!transcript) return
-    const items = buildWalkItems(transcript, confidence)
+    const items = reviewItems
     let start = 0
     if (at) {
       const text = transcript.split('\n')[at.lineIdx]?.match(LINE_PARTS)?.[4] ?? ''
-      start = items.findIndex(it => it.lineIdx === at.lineIdx && it.at === at.start)
+      const isWord = (it: ReviewItem, test: (w: WalkItem) => boolean) => it.kind === 'word' && test(it.w)
+      start = items.findIndex(it => isWord(it, w => w.lineIdx === at.lineIdx && w.at === at.start))
       // A word repeated in a line is one stop in the review.
-      if (start < 0) start = items.findIndex(it => it.lineIdx === at.lineIdx
-        && text.slice(at.start, at.start + it.word.length).toLowerCase() === it.word.toLowerCase())
+      if (start < 0) start = items.findIndex(it => isWord(it, w => w.lineIdx === at.lineIdx
+        && text.slice(at.start, at.start + w.word.length).toLowerCase() === w.word.toLowerCase()))
+      // A word the names part covers opens at its name.
+      if (start < 0) {
+        const clicked = text.slice(at.start).match(/^[A-Za-z0-9']+/)?.[0] ?? ''
+        start = items.findIndex(it => it.kind === 'name' && ignoreKey(it.name.word) === ignoreKey(clicked))
+      }
       if (start < 0) return
     }
+    setTab('transcript')
     setSearch('')
     setWalk(w => ({ start, key: w.key + 1 }))
     setWalkItems(items)
@@ -476,8 +493,11 @@ export default function SessionView() {
       // Names tab badge: how many likely-misheard names are waiting for a decision.
       fetch(apiUrl(`/sessions/${name}/unknown-words`))
         .then(r => (r.ok ? r.json() : null))
-        .then(d => setNamesPending(d ? d.words.filter((w: { suggestion: string | null }) => w.suggestion).length : 0))
-        .catch(() => setNamesPending(0))
+        .then(d => {
+          setNames(d?.words ?? [])
+          setNamesPending(d ? d.words.filter((w: UnknownWord) => w.suggestion).length : 0)
+        })
+        .catch(() => { setNames([]); setNamesPending(0) })
       fetch(apiUrl(`/sessions/${name}/confidence`))
         .then(r => (r.ok ? r.json() : null))
         .then(setConfidence)
@@ -957,10 +977,10 @@ export default function SessionView() {
                 {showConfidence ? 'Hide unsure words' : 'Show unsure words'}
               </SheetItem>
             )}
-            {canEditTranscript && unsureCount > 0 && !editMode && (
+            {canEditTranscript && reviewItems.length > 0 && !editMode && (
               <SheetItem onClick={() => { setActionsOpen(false); openWalk() }}
-                note="Step through each one with the audio">
-                Review {unsureCount} unsure word{unsureCount !== 1 ? 's' : ''}
+                note={reviewNames ? 'Likely-misheard names first, then unsure words, with the audio' : 'Step through each one with the audio'}>
+                {reviewLabel}
               </SheetItem>
             )}
             <SheetItem onClick={() => { setActionsOpen(false); handleDownloadTranscript() }}>Download the transcript</SheetItem>
@@ -1440,15 +1460,17 @@ export default function SessionView() {
                     <span style={{ color: 'var(--ink-faint)', marginLeft: 6 }}>{showConfidence ? 'shown' : 'hidden'}</span>
                   </button>
                 )}
-                {canEditTranscript && unsureCount > 0 && (
+                {canEditTranscript && reviewItems.length > 0 && (
                   <button
                     type="button"
                     className="btn-ghost tb-phone-hide"
                     onClick={() => openWalk()}
-                    title="Step through each word Whisper wasn't sure about, with the audio"
+                    title={reviewNames
+                      ? 'Step through likely-misheard names first, then each word Whisper wasn\'t sure about, with the audio'
+                      : 'Step through each word Whisper wasn\'t sure about, with the audio'}
                     style={{ flexShrink: 0 }}
                   >
-                    Review {unsureCount} unsure word{unsureCount !== 1 ? 's' : ''}
+                    {reviewLabel}
                   </button>
                 )}
                 {search && transcript && (() => {
@@ -1721,6 +1743,7 @@ export default function SessionView() {
               onStop={stopMoment}
               audioPlaying={audioPlaying}
               onRuleAdded={() => { load({ silent: true }); setChangesLoaded(false); setChangesReport(null) }}
+              onReview={reviewNames > 0 ? () => openWalk() : undefined}
             />
           ) : (
             <EmptyTabState title="No transcript yet" message="Names are scanned once there's a transcript." />
@@ -1736,7 +1759,7 @@ export default function SessionView() {
       </div>
 
       {walkItems && transcript && tab === 'transcript' && (
-        <UnsureWalkthrough
+        <ReviewWalkthrough
           key={walk.key}
           items={walkItems}
           startIdx={walk.start}
@@ -1745,8 +1768,10 @@ export default function SessionView() {
           onClose={() => { stopMoment(); setWalkItems(null) }}
           onShowLine={ts => setTargetTimestamp(ts)}
           onPlay={playMoment}
+          onPlayLine={audioFiles.length > 0 ? playLine : undefined}
           onStop={stopMoment}
-          onChanged={() => load({ silent: true })}
+          onChanged={() => { load({ silent: true }); setChangesLoaded(false); setChangesReport(null) }}
+          onNamesChanged={() => setNamesKey(k => k + 1)}
         />
       )}
 
@@ -4015,191 +4040,375 @@ function SteadyLabel({ show, other }: { show: string; other: string }) {
   )
 }
 
-function UnsureWalkthrough({
-  items, startIdx = 0, transcript, sessionName, onClose, onShowLine, onPlay, onStop, onChanged,
+// The review steps through names first (the Names tab's words, for the DM:
+// likely-misheard names are the fixes that matter most, and one rule fixes
+// every instance), then unsure words.
+type ReviewItem = { kind: 'name'; name: UnknownWord } | { kind: 'word'; w: WalkItem }
+
+function buildReviewItems(transcript: string, confidence: ConfidenceMap | null, names: UnknownWord[]): ReviewItem[] {
+  // Near misses of a known name first, then other unrecognized words.
+  const ordered = [...names.filter(n => n.suggestion), ...names.filter(n => !n.suggestion)]
+  const nameKeys = new Set(ordered.map(n => ignoreKey(n.word)))
+  return [
+    ...ordered.map(name => ({ kind: 'name' as const, name })),
+    // A word a name step already covers isn't asked about again.
+    ...buildWalkItems(transcript, confidence)
+      .filter(w => !nameKeys.has(ignoreKey(w.word)))
+      .map(w => ({ kind: 'word' as const, w })),
+  ]
+}
+
+function ReviewWalkthrough({
+  items, startIdx = 0, transcript, sessionName, onClose, onShowLine, onPlay, onPlayLine, onStop, onChanged, onNamesChanged,
 }: {
-  items: WalkItem[]
-  /** Open at this item (clicking an underlined word). */
+  items: ReviewItem[]
+  /** Open at this item (clicking an underlined word, or the Names tab's Review). */
   startIdx?: number
   transcript: string
   sessionName: string
   onClose: () => void
   onShowLine: (ts: string) => void
   onPlay: (from: number, until: number) => void
+  /** Play around a word in a line (the Names tab's example clips). */
+  onPlayLine?: (ts: string, word: string, text: string) => void
   onStop: () => void
   onChanged: () => void
+  onNamesChanged: () => void
 }) {
   const apiUrl = useApiUrl()
   const { activeCampaign } = useCampaign()
   const { toast } = useToast()
   const [idx, setIdx] = useState(startIdx)
-  const [value, setValue] = useState(items[startIdx]?.word ?? '')
+  // Which way the last move went, so a step that no longer applies is passed over in that direction.
+  const [dir, setDir] = useState<1 | -1>(1)
+  const [value, setValue] = useState('')
   const [addRule, setAddRule] = useState(false)
   const [busy, setBusy] = useState(false)
   const [fixed, setFixed] = useState(0)
+  const [namesDone, setNamesDone] = useState(0)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [lineDraft, setLineDraft] = useState<string | null>(null)
+  // Names ignored or replaced during this review (by ignore key): later steps for them are passed over.
+  const [handled, setHandled] = useState<Set<string>>(() => new Set())
   const lines = useMemo(() => transcript.split('\n'), [transcript])
   const item = items[idx]
+  const nameCount = items.filter(it => it.kind === 'name').length
+  const wordCount = items.length - nameCount
 
-  // Each stop: bring the line into view and play a few seconds around the word
-  // (its stored time when the transcript has one, else estimated from its
-  // position in the line). Playing from the line's start missed words late in
-  // long lines.
   const textOf = (it: WalkItem) => lines[it.lineIdx]?.match(LINE_PARTS)?.[4] ?? ''
   const clipFor = (it: WalkItem) => {
     const text = textOf(it)
     return wordClip(it, text, findNear(text, it.word, it.at))
   }
+  // A step that no longer applies: its word was changed (a rule, a line edit)
+  // or its name was dealt with earlier in this review.
+  const stale = (it: ReviewItem | undefined) => !!it && (it.kind === 'name'
+    ? handled.has(ignoreKey(it.name.word))
+    : findNear(textOf(it.w), it.w.word, it.w.at) < 0)
+
+  const go = (to: number) => {
+    setDir(to < idx ? -1 : 1)
+    setConfirmDelete(false)
+    setLineDraft(null)
+    setIdx(Math.max(0, to))
+  }
+  const advance = () => go(idx + 1)
+
+  // Pass over stale steps (also when a reload makes the current one stale).
   useEffect(() => {
-    if (!item) return
-    setValue(item.word)
+    if (!item || !stale(item)) return
+    const next = idx + dir
+    setIdx(next < 0 ? idx + 1 : next)
+  }, [idx, lines, handled])
+  // Each new step: bring the line into view and play around the word. Only on
+  // a move, so a reload mid-step doesn't reset what's typed or replay the clip.
+  useEffect(() => {
+    if (!item || stale(item)) return
     setAddRule(false)
-    onShowLine(item.ts)
-    onPlay(...clipFor(item))
+    if (item.kind === 'name') {
+      setValue(item.name.suggestion ?? '')
+      const ex = item.name.examples[0]
+      if (ex) {
+        onShowLine(ex.ts)
+        if (onPlayLine) onPlayLine(ex.ts, item.name.word, ex.text)
+      }
+    } else {
+      setValue(item.w.word)
+      onShowLine(item.w.ts)
+      onPlay(...clipFor(item.w))
+    }
   }, [idx])
   useEffect(() => () => onStop(), [])
 
   if (!item) {
+    const parts = [
+      namesDone ? `${namesDone} name${namesDone !== 1 ? 's' : ''} dealt with` : '',
+      fixed ? `${fixed} word${fixed !== 1 ? 's' : ''} fixed` : '',
+    ].filter(Boolean)
     return (
-      <div className="walkthrough" role="dialog" aria-label="Unsure words">
-        <div style={{ fontSize: 19 }}>All {items.length} unsure words reviewed{fixed ? `, ${fixed} fixed` : ''}.</div>
+      <div className="walkthrough" role="dialog" aria-label="Review">
+        <div style={{ fontSize: 19 }}>Review finished{parts.length ? `: ${parts.join(', ')}` : ''}.</div>
         <button className="btn-primary" onClick={onClose} autoFocus>Done</button>
       </div>
     )
   }
+  if (stale(item)) return null  // passed over on the next render
 
-  const text = textOf(item)
-  const at = findNear(text, item.word, item.at)
+  const post = (path: string, body: unknown) => fetch(apiUrl(path), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  })
+  const putLine = (lineIdx: number, content: string) => fetch(apiUrl(`/sessions/${sessionName}/transcript/line/${lineIdx + 1}`), {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }),
+  })
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true)
+    try { await fn() } finally { setBusy(false) }
+  }
+  const head = (label: string, detail: ReactNode) => (
+    <div className="walkthrough-head">
+      <span>{label}</span>
+      <span style={{ color: 'var(--ink-faint)' }}>{detail}</span>
+      <span style={{ flex: 1 }} />
+      <button type="button" className="entry-action" onClick={onClose} aria-label="Close review"><CloseIcon /></button>
+    </div>
+  )
+  const backSkip = (skipTitle: string) => (
+    <>
+      <button type="button" className="btn-ghost" onClick={() => go(idx - 1)} disabled={idx === 0}>Back</button>
+      <button type="button" className="btn-ghost" onClick={advance} title={skipTitle}>Skip</button>
+    </>
+  )
+
+  // ── A name: fix every instance (rule or this session only), or ignore it ──
+  if (item.kind === 'name') {
+    const n = item.name
+    const right = value.trim()
+    const canFix = right !== '' && right !== n.word
+    const nameIdx = items.slice(0, idx + 1).filter(it => it.kind === 'name').length
+    const doneWith = (key = ignoreKey(n.word)) => {
+      setHandled(prev => new Set(prev).add(key))
+      setNamesDone(d => d + 1)
+      onChanged()
+      onNamesChanged()
+      advance()
+    }
+    const ruleFix = () => run(async () => {
+      if (!canFix || !activeCampaign) return
+      const replaced = await addCorrectionRule(activeCampaign.slug, n.word, right, sessionName)
+      if (replaced === null) { toast('Could not add the rule', 'error'); return }
+      toast(`Rule added: ${n.word} → ${right} (${replaced} fixed in this session)`, 'success')
+      doneWith()
+    })
+    const sessionFix = () => run(async () => {
+      if (!canFix) return
+      const r = await post(`/sessions/${sessionName}/replace-word`, { wrong: n.word, right })
+      if (!r.ok) { toast('Could not change it', 'error'); return }
+      const data = await r.json()
+      toast(`Changed ${n.word} → ${right} in this session (${data.files?.['transcript.md'] ?? 0} in the transcript), no rule saved`, 'success')
+      doneWith()
+    })
+    const ignore = () => run(async () => {
+      const r = await post('/config/ignored-words', { word: n.word })
+      if (!r.ok) { toast('Could not ignore it', 'error'); return }
+      doneWith()
+    })
+    return (
+      <div className="walkthrough" role="dialog" aria-label="Review"
+        onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
+        {head(`Name ${nameIdx} of ${nameCount}`, <>
+          ×{n.count} in this session{n.suggestion ? <>, close to <strong style={{ color: 'var(--ink)', fontWeight: 500 }}>{n.suggestion}</strong></> : ', not a known word'}
+          {wordCount > 0 && nameIdx === nameCount ? `; ${wordCount} unsure word${wordCount !== 1 ? 's' : ''} next` : ''}
+        </>)}
+        <div style={{ fontSize: 22, color: 'var(--ink)' }}>{n.word}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {n.examples.map(ex => (
+            <div key={ex.line} className="unknown-word-example-row">
+              {onPlayLine && (
+                <button type="button" className="example-play" onClick={() => onPlayLine(ex.ts, n.word, ex.text)}
+                  aria-label={`Play the audio at ${ex.ts}`} title="Play this line">
+                  <PlayIcon size={14} />
+                </button>
+              )}
+              <button type="button" onClick={() => onShowLine(ex.ts)} className="unknown-word-example" title="Show in transcript">
+                <span style={{ fontVariantNumeric: 'lining-nums tabular-nums', color: 'var(--text-muted)', flexShrink: 0 }}>{ex.ts}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {(() => {
+                    const { text, start } = excerptAround(ex.text, n.word)
+                    return renderMarked(text, start >= 0 ? [{ start, end: start + n.word.length, search: true }] : [])
+                  })()}
+                </span>
+              </button>
+            </div>
+          ))}
+        </div>
+        <form className="walkthrough-actions" onSubmit={e => { e.preventDefault(); ruleFix() }}>
+          <input
+            autoFocus
+            className="written-line"
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            placeholder="Correct spelling"
+            aria-label={`Correct spelling of ${n.word}`}
+            style={{ width: 200 }}
+          />
+          <span style={{ flex: 1 }} />
+          {backSkip('Leave it for now')}
+          <button type="button" className="btn-ghost" onClick={ignore} disabled={busy}
+            title="It's spelled right: stop flagging it (and its plural/possessive) in every session of this campaign">Ignore</button>
+          <button type="button" className="btn-ghost" onClick={sessionFix} disabled={busy || !canFix}
+            title="Change every instance in this session only. No rule is saved, so other sessions aren't touched.">This session only</button>
+          <button type="submit" className="btn-primary" disabled={busy || !canFix}
+            title="Fix every instance here, and in every future transcript">Add rule</button>
+        </form>
+        <div style={{ fontSize: 14, color: 'var(--ink-faint)' }}>Add rule fixes it here and in future transcripts; Ignore stops flagging it in this campaign. Enter adds the rule. Esc closes.</div>
+      </div>
+    )
+  }
+
+  // ── An unsure word: keep it, fix it, or edit/delete its line ──────────────
+  const w = item.w
+  const wordIdx = idx - nameCount + 1
+  const text = textOf(w)
+  const at = findNear(text, w.word, w.at)
   // Up to ~90 characters either side, cut back to whole words.
-  let before = at >= 0 ? text.slice(Math.max(0, at - 90), at) : text
+  let before = text.slice(Math.max(0, at - 90), at)
   if (at > 90 && before.includes(' ')) before = before.slice(before.indexOf(' ') + 1)
-  let after = at >= 0 ? text.slice(at + item.word.length, at + item.word.length + 90) : ''
-  const afterCut = at >= 0 && at + item.word.length + 90 < text.length
+  let after = text.slice(at + w.word.length, at + w.word.length + 90)
+  const afterCut = at + w.word.length + 90 < text.length
   if (afterCut && after.includes(' ')) after = after.slice(0, after.lastIndexOf(' '))
-  const changed = value.trim() !== '' && value.trim() !== item.word
-
-  const advance = () => { setConfirmDelete(false); setIdx(i => i + 1) }
+  const changed = value.trim() !== '' && value.trim() !== w.word
+  const nextLine = () => {
+    const next = items.findIndex((it, i) => i > idx && !(it.kind === 'word' && it.w.lineIdx === w.lineIdx))
+    go(next === -1 ? items.length : next)
+  }
 
   // Keep: the word is right, so stop flagging it (here and in the transcript).
-  const keepWord = async () => {
-    setBusy(true)
-    try {
-      const r = await fetch(apiUrl(`/sessions/${sessionName}/confidence/dismiss`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ts: item.ts, speaker: item.speaker, word: item.word }),
-      })
-      if (!r.ok) { toast('Could not mark it as checked', 'error'); return }
-      onChanged()
-      advance()
-    } finally {
-      setBusy(false)
-    }
-  }
+  const keepWord = () => run(async () => {
+    const r = await post(`/sessions/${sessionName}/confidence/dismiss`, { ts: w.ts, speaker: w.speaker, word: w.word })
+    if (!r.ok) { toast('Could not mark it as checked', 'error'); return }
+    onChanged()
+    advance()
+  })
 
   // Delete line: for a line nobody said (a hallucination). Blanks it, so line
   // numbers stay put, and moves past every unsure word in it.
-  const deleteLine = async () => {
+  const deleteLine = () => {
     if (!confirmDelete) { setConfirmDelete(true); return }
-    setBusy(true)
-    try {
-      const r = await fetch(apiUrl(`/sessions/${sessionName}/transcript/line/${item.lineIdx + 1}`), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: '' }),
-      })
+    return run(async () => {
+      const r = await putLine(w.lineIdx, '')
       if (!r.ok) { toast('Could not delete the line', 'error'); return }
       if (r.status === 202) toast('Deletion sent to the DM for review', 'info')
-      else lines[item.lineIdx] = ''
       onChanged()
-      setConfirmDelete(false)
-      const next = items.findIndex((it, i) => i > idx && it.lineIdx !== item.lineIdx)
-      setIdx(next === -1 ? items.length : next)
-    } finally {
-      setBusy(false)
-    }
+      nextLine()
+    })
   }
 
-  const applyFix = async () => {
-    const m = lines[item.lineIdx]?.match(LINE_PARTS)
+  const applyFix = () => run(async () => {
+    const m = lines[w.lineIdx]?.match(LINE_PARTS)
     if (!m || !changed) return
     const replacement = value.trim()
     // This occurrence, not the line's first one of the same word.
-    const at = findNear(m[4], item.word, item.at)
-    if (at < 0) return
-    const newText = m[4].slice(0, at) + replacement + m[4].slice(at + item.word.length)
-    setBusy(true)
-    try {
-      const r = await fetch(apiUrl(`/sessions/${sessionName}/transcript/line/${item.lineIdx + 1}`), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: m[1] + newText }),
-      })
-      if (!r.ok) { toast('Could not save the fix', 'error'); return }
-      if (r.status === 202) toast('Fix sent to the DM for review', 'info')
-      lines[item.lineIdx] = m[1] + newText
-      if (addRule && activeCampaign) {
-        const n = await addCorrectionRule(activeCampaign.slug, item.word, replacement, sessionName)
-        if (n === null) toast('Fixed, but the rule could not be saved', 'error')
-        else if (n > 0) toast(`Rule saved: ${item.word} → ${replacement} (${n} more fixed)`, 'success')
-      }
+    const pos = findNear(m[4], w.word, w.at)
+    if (pos < 0) return
+    const r = await putLine(w.lineIdx, m[1] + m[4].slice(0, pos) + replacement + m[4].slice(pos + w.word.length))
+    if (!r.ok) { toast('Could not save the fix', 'error'); return }
+    if (r.status === 202) toast('Fix sent to the DM for review', 'info')
+    if (addRule && activeCampaign) {
+      const n = await addCorrectionRule(activeCampaign.slug, w.word, replacement, sessionName)
+      if (n === null) toast('Fixed, but the rule could not be saved', 'error')
+      else if (n > 0) toast(`Rule saved: ${w.word} → ${replacement} (${n} more fixed)`, 'success')
+    }
+    setFixed(f => f + 1)
+    onChanged()
+    advance()
+  })
+
+  // Edit line: rewrite the whole line (several words wrong, or a word the
+  // review didn't flag), then move on to the next line.
+  const saveLine = () => run(async () => {
+    const m = lines[w.lineIdx]?.match(LINE_PARTS)
+    const draft = (lineDraft ?? '').replace(/\s*\n\s*/g, ' ').trim()
+    if (!m || !draft) return
+    if (draft !== m[4]) {
+      const r = await putLine(w.lineIdx, m[1] + draft)
+      if (!r.ok) { toast('Could not save the line', 'error'); return }
+      if (r.status === 202) toast('Edit sent to the DM for review', 'info')
       setFixed(f => f + 1)
       onChanged()
-      advance()
-    } finally {
-      setBusy(false)
     }
-  }
+    nextLine()
+  })
 
   return (
-    <div className="walkthrough" role="dialog" aria-label="Unsure words"
-      onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
-      <div className="walkthrough-head">
-        <span>Unsure word {idx + 1} of {items.length}</span>
-        <span style={{ color: 'var(--ink-faint)' }}>
-          at {item.ts}, Whisper was {Math.round(item.prob * 100)}% sure
-          {item.t === undefined && <span title="This session was transcribed before word times were kept, so the clip is placed by the word's position in the line"> (timing estimated)</span>}
-        </span>
-        <span style={{ flex: 1 }} />
-        <button type="button" className="entry-action" onClick={onClose} aria-label="Close walkthrough"><CloseIcon /></button>
-      </div>
-      <p className="walkthrough-line">
-        <span className="speaker-name" style={{ marginRight: 6 }}>{splitSpeaker(item.speaker).name}</span>
-        {before.length < at ? '…' : ''}{before}
-        <mark className="search-hit">{at >= 0 ? text.slice(at, at + item.word.length) : item.word}</mark>
-        {after}{afterCut ? '…' : ''}
-      </p>
-      <form
-        className="walkthrough-actions"
-        onSubmit={e => { e.preventDefault(); if (changed) applyFix(); else keepWord() }}
-      >
-        <input
-          autoFocus
-          className="written-line"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          aria-label={`Correct spelling of ${item.word}`}
-          style={{ width: 200 }}
-        />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, color: 'var(--ink-soft)' }}>
-          <input type="checkbox" checked={addRule} onChange={e => setAddRule(e.target.checked)} disabled={!changed}
-            style={{ accentColor: 'var(--rubric)' }} />
-          also save as a rule
-        </label>
-        <span style={{ flex: 1 }} />
-        <button type="button" className="btn-ghost" onClick={() => { setConfirmDelete(false); setIdx(i => Math.max(0, i - 1)) }} disabled={idx === 0}>Back</button>
-        <button type="button" className="btn-ghost" onClick={advance} title="Leave it flagged and move on">Skip</button>
-        <button type="button" className={confirmDelete ? 'btn-danger' : 'btn-ghost'} onClick={deleteLine} disabled={busy}
-          title="Remove the whole line (for a line nobody actually said)">
-          <SteadyLabel show={confirmDelete ? 'Confirm delete' : 'Delete line'} other={confirmDelete ? 'Delete line' : 'Confirm delete'} />
-        </button>
-        <button type="button" className="btn-ghost"
-          onClick={() => onPlay(...clipFor(item))}>Play again</button>
-        <button type="submit" className={changed ? 'btn-primary' : 'btn-secondary'} disabled={busy}>
-          <SteadyLabel show={changed ? 'Fix' : 'Keep'} other={changed ? 'Keep' : 'Fix'} />
-        </button>
-      </form>
-      <div style={{ fontSize: 14, color: 'var(--ink-faint)' }}>Keep marks the word as checked; Skip leaves it flagged. Enter keeps the word (or applies your fix). Esc closes.</div>
+    <div className="walkthrough" role="dialog" aria-label="Review"
+      onKeyDown={e => { if (e.key === 'Escape') { if (lineDraft !== null) setLineDraft(null); else onClose() } }}>
+      {head(`Unsure word ${wordIdx} of ${wordCount}`, <>
+        at {w.ts}, Whisper was {Math.round(w.prob * 100)}% sure
+        {w.t === undefined && <span title="This session was transcribed before word times were kept, so the clip is placed by the word's position in the line"> (timing estimated)</span>}
+      </>)}
+      {lineDraft === null ? (
+        <>
+          <p className="walkthrough-line">
+            <span className="speaker-name" style={{ marginRight: 6 }}>{splitSpeaker(w.speaker).name}</span>
+            {before.length < at ? '…' : ''}{before}
+            <mark className="search-hit">{text.slice(at, at + w.word.length)}</mark>
+            {after}{afterCut ? '…' : ''}
+          </p>
+          <form className="walkthrough-actions" onSubmit={e => { e.preventDefault(); if (changed) applyFix(); else keepWord() }}>
+            <input
+              autoFocus
+              className="written-line"
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              aria-label={`Correct spelling of ${w.word}`}
+              style={{ width: 200 }}
+            />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, color: 'var(--ink-soft)' }}>
+              <input type="checkbox" checked={addRule} onChange={e => setAddRule(e.target.checked)} disabled={!changed}
+                style={{ accentColor: 'var(--rubric)' }} />
+              also save as a rule
+            </label>
+            <span style={{ flex: 1 }} />
+            {backSkip('Leave it flagged and move on')}
+            <button type="button" className="btn-ghost" onClick={() => setLineDraft(text)}
+              title="Rewrite the whole line">Edit line</button>
+            <button type="button" className={confirmDelete ? 'btn-danger' : 'btn-ghost'} onClick={deleteLine} disabled={busy}
+              title="Remove the whole line (for a line nobody actually said)">
+              <SteadyLabel show={confirmDelete ? 'Confirm delete' : 'Delete line'} other={confirmDelete ? 'Delete line' : 'Confirm delete'} />
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => onPlay(...clipFor(w))}>Play again</button>
+            <button type="submit" className={changed ? 'btn-primary' : 'btn-secondary'} disabled={busy}>
+              <SteadyLabel show={changed ? 'Fix' : 'Keep'} other={changed ? 'Keep' : 'Fix'} />
+            </button>
+          </form>
+          <div style={{ fontSize: 14, color: 'var(--ink-faint)' }}>Keep marks the word as checked; Skip leaves it flagged. Enter keeps the word (or applies your fix). Esc closes.</div>
+        </>
+      ) : (
+        <form className="walkthrough-edit" onSubmit={e => { e.preventDefault(); saveLine() }}>
+          <label className="speaker-name" htmlFor="review-line-edit">{splitSpeaker(w.speaker).name}</label>
+          <textarea
+            id="review-line-edit"
+            autoFocus
+            value={lineDraft}
+            onChange={e => setLineDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveLine() } }}
+            onFocus={e => {
+              // Start with the cursor on the flagged word.
+              const el = e.currentTarget
+              el.setSelectionRange(at, at + w.word.length)
+            }}
+            rows={3}
+            aria-label="The whole line"
+          />
+          <div className="walkthrough-actions">
+            <span style={{ fontSize: 14, color: 'var(--ink-faint)' }}>Enter saves and moves to the next line. Esc cancels.</span>
+            <span style={{ flex: 1 }} />
+            <button type="button" className="btn-ghost" onClick={() => onPlay(...clipFor(w))}>Play again</button>
+            <button type="button" className="btn-ghost" onClick={() => setLineDraft(null)}>Cancel</button>
+            <button type="submit" className="btn-primary" disabled={busy || !lineDraft.trim()}>Save line</button>
+          </div>
+        </form>
+      )}
     </div>
   )
 }
@@ -4501,11 +4710,14 @@ function UnknownWordsPanel({
   onPlay,
   onStop,
   audioPlaying = false,
+  onReview,
 }: {
   sessionName: string
   canEdit: boolean
   onJump: (timestamp: string) => void
   onRuleAdded: () => void
+  /** Go through these one at a time in the transcript's review (names first, then unsure words). */
+  onReview?: () => void
   /** Play the line at this timestamp in place (absent when the session has no audio). */
   onPlay?: (timestamp: string, word?: string, text?: string) => void
   onStop?: () => void
@@ -4737,10 +4949,18 @@ function UnknownWordsPanel({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '820px' }}>
-      <p style={{ margin: 0, fontSize: '15px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-        Words in this transcript that aren't English and aren't in the campaign's vocabulary (vault index,
-        correction targets, player names). Adding a rule fixes this session now and every future transcript.
-      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+        <p style={{ margin: 0, fontSize: '15px', color: 'var(--text-muted)', lineHeight: 1.6, flex: 1 }}>
+          Words in this transcript that aren't English and aren't in the campaign's vocabulary (vault index,
+          correction targets, player names). Adding a rule fixes this session now and every future transcript.
+        </p>
+        {canEdit && onReview && (
+          <button type="button" className="btn-secondary" style={{ flexShrink: 0 }} onClick={onReview}
+            title="One at a time in the transcript, with the audio; then the unsure words">
+            Review one by one
+          </button>
+        )}
+      </div>
       {nearMisses.length > 0 && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--text-secondary)' }}>

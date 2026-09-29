@@ -674,6 +674,13 @@ input.written-line:focus {
 .walkthrough-head { display: flex; align-items: center; gap: 12px; font-size: 16px; color: var(--ink-soft); }
 .walkthrough-line { margin: 0; font-size: 19px; line-height: 1.5; color: var(--ink); }
 .walkthrough-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.walkthrough-edit { display: flex; flex-direction: column; gap: 8px; }
+.walkthrough-edit textarea {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 4.5em;
+  font: inherit; font-size: 19px; line-height: 1.5; color: var(--ink);
+  background: var(--page); border: 1px solid var(--rule-strong); border-radius: 3px; padding: 6px 8px;
+}
+.walkthrough-edit textarea:focus { outline: 2px solid var(--rubric); outline-offset: 1px; }
 @media (max-width: 768px) {
   .walkthrough { left: 50%; width: calc(100vw - 24px); bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
 }
