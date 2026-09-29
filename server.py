@@ -4538,11 +4538,15 @@ def worker_get_wiki_job(slug: str, db: Session = Depends(get_db), request: Reque
         if summary or wiki_s:
             sessions.append({"name": s["name"], "date": (s["created_at"] or "")[:10], "summary": summary, "wiki": wiki_s})
     vault = _wiki_vault(slug, db)
-    existing = [p.title for p in _wiki_index(slug, vault).pages.values()] if vault else []
+    pages = list(_wiki_index(slug, vault).pages.values()) if vault else []
+    existing = [p.title for p in pages]
+    # Every name an existing page goes by, so a fill doesn't write a second page
+    # for something under another name (worker/wiki_gen.py compares them loosely).
+    existing_names = sorted({n for p in pages for n in [p.title, *(p.aliases or [])]})
     fmt = (Path(__file__).parent / "WIKI_FORMAT.md")
     job.update(state="running", message="Reading the sessions")
     _write_wiki_job(slug, job)
-    return {"job": {"mode": job["mode"], "sessions": sessions, "existing": existing,
+    return {"job": {"mode": job["mode"], "sessions": sessions, "existing": existing, "existing_names": existing_names,
                     "players": load_config(slug).get("players") or {},
                     "format": fmt.read_text(encoding="utf-8") if fmt.exists() else ""}}
 

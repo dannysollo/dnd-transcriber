@@ -135,6 +135,18 @@ def write_page(entity: dict, sessions: list[dict], titles: list[str], fmt: str, 
     return {"title": entity["title"], "section": entity["folder"], "markdown": md}
 
 
+def name_keys(name: str) -> set[str]:
+    """Loose forms of a page name, so "The Tehom", "Tehom", "Conduit"/"Conduits",
+    "Magic 8-Ball"/"The Magic 8 Ball" and "Faerun" (of "Faerun & Bethesda") match."""
+    def key(n: str) -> str:
+        n = re.sub(r"\s*\(.*?\)", "", n.lower())       # "Canaan Labs (Faction)"
+        n = re.sub(r"^the\s+", "", n.strip())
+        n = re.sub(r"[^a-z0-9]", "", n)
+        return n[:-1] if n.endswith("s") and len(n) > 4 else n
+    parts = [name, *re.split(r"\s+&\s+|\s+and\s+", name)] if re.search(r"\s(&|and)\s", name) else [name]
+    return {k for k in map(key, parts) if k}
+
+
 def generate(job: dict, client, config: dict) -> None:
     scratch = config.get("audio_dir") or None
     sessions = sorted(job["sessions"], key=lambda s: s["date"] or s["name"])
@@ -142,9 +154,17 @@ def generate(job: dict, client, config: dict) -> None:
         client.wiki_status("running", 0, 0, "Finding who and what deserves a page")
         entities = find_entities(sessions, job.get("players") or {}, scratch)
         if job.get("mode") == "fill":
-            have = {t.lower() for t in job.get("existing", [])}
-            entities = [e for e in entities if e["title"].lower() not in have
-                        and not any(a.lower() in have for a in e["aliases"])]
+            # Skip anything an existing page already covers, under any of its names.
+            have = {k for n in job.get("existing_names") or job.get("existing", []) for k in name_keys(n)}
+            entities = [e for e in entities if not any(k in have for n in [e["title"], *e["aliases"]] for k in name_keys(n))]
+        # And no two new pages for the same thing.
+        seen, unique = set(), []
+        for e in entities:
+            keys = {k for n in [e["title"], *e["aliases"]] for k in name_keys(n)}
+            if not keys & seen:
+                unique.append(e)
+            seen |= keys
+        entities = unique
         titles = sorted({*job.get("existing", []), *(e["title"] for e in entities)})
         total = len(entities)
         print(f"[wiki] {total} pages to write", flush=True)
