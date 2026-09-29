@@ -214,8 +214,12 @@ def fingerprint(vault: Path) -> tuple:
 # and whenever a page is created, so no page is left off. Big sections are
 # split into major and minor by how many pages link to each one.
 
-NAV_START = "<!-- page lists: kept up to date by Co-DM; edit the pages, not these lists -->"
-NAV_END = "<!-- end of page lists -->"
+# Obsidian comments (%% %%): hidden in reading view and live preview alike; the
+# site strips them too. The HTML-comment markers of the first version are still
+# recognised (Obsidian's live preview shows those).
+NAV_START = "%% page lists: kept up to date by Co-DM; edit the pages, not these lists %%"
+NAV_END = "%% end of page lists %%"
+OLD_MARKERS = ("<!-- page lists: kept up to date by Co-DM; edit the pages, not these lists -->", "<!-- end of page lists -->")
 NAV_HEADING = "## 🗺️ Navigation"
 # (folder, list heading, split into major/minor). Folders not listed get their own heading.
 NAV_GROUPS = [
@@ -268,6 +272,7 @@ def update_index(vault: Path, title: str = "Index") -> str:
     path = vault / "Index.md"
     nav = f"{NAV_START}\n{navigation(scan(vault))}\n{NAV_END}"
     text = path.read_text(encoding="utf-8") if path.exists() else f"# {title}\n"
+    text = text.replace(OLD_MARKERS[0], NAV_START).replace(OLD_MARKERS[1], NAV_END)
     if NAV_START in text and NAV_END in text:
         a, b = text.index(NAV_START), text.index(NAV_END) + len(NAV_END)
         text = text[:a] + nav + text[b:]
