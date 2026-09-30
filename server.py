@@ -4327,8 +4327,15 @@ def _wiki_vault(slug: str, db: Session) -> Optional[Path]:
     return vault
 
 
+def _wiki_is_dm(user: Optional[User], member) -> bool:
+    return (not AUTH_ENABLED) or bool(user and user.is_admin) or bool(member and member.role == "dm")
+
+
 def _wiki_reader(slug: str, user: Optional[User], db: Session):
-    """The campaign, if this visitor may read its wiki; the member (or None)."""
+    """The campaign, if this visitor may read its wiki; whether they're public, and may edit pages.
+
+    DMs always edit; players too when the DM allows it (settings.wiki_players_edit).
+    Spectators never do."""
     campaign = crud.get_campaign_by_slug(db, slug)
     if not campaign:
         raise HTTPException(404, "Campaign not found")
@@ -4336,7 +4343,8 @@ def _wiki_reader(slug: str, user: Optional[User], db: Session):
     public = bool((campaign.settings or {}).get("wiki_public"))
     if AUTH_ENABLED and not public and not member and not (user and user.is_admin):
         raise HTTPException(401 if not user else 403, "This wiki is for campaign members")
-    can_edit = (not AUTH_ENABLED) or bool(user and user.is_admin) or bool(member and member.role == "dm")
+    players_edit = bool((campaign.settings or {}).get("wiki_players_edit"))
+    can_edit = _wiki_is_dm(user, member) or bool(players_edit and member and member.role == "player")
     return campaign, public, can_edit
 
 
@@ -4348,11 +4356,14 @@ def _wiki_index(slug: str, vault: Path):
 @app.get("/campaigns/{slug}/wiki")
 def campaign_wiki_index(slug: str, user: Optional[User] = Depends(get_current_user), db: Session = Depends(get_db)):
     campaign, public, can_edit = _wiki_reader(slug, user, db)
+    # can_manage: the DM's tools (who can read, generating, continuity, the front page)
+    can_manage = _wiki_is_dm(user, crud.get_member(db, campaign.id, user.id) if user else None)
     vault = _wiki_vault(slug, db)
     if vault is None:
-        return {"name": campaign.name, "public": public, "can_edit": can_edit, "has_wiki": False, "pages": []}
+        return {"name": campaign.name, "public": public, "can_edit": can_edit, "can_manage": can_manage,
+                "has_wiki": False, "pages": []}
     idx = _wiki_index(slug, vault)
-    return {"name": campaign.name, "public": public, "can_edit": can_edit, "has_wiki": True,
+    return {"name": campaign.name, "public": public, "can_edit": can_edit, "can_manage": can_manage, "has_wiki": True,
             "pages": idx.summary(), "broken": sum(len(p.broken) for p in idx.pages.values())}
 
 
@@ -4433,14 +4444,16 @@ class WikiPageBody(BaseModel):
 @app.put("/campaigns/{slug}/wiki/pages/{page}")
 def campaign_wiki_save(slug: str, page: str, body: WikiPageBody,
                        user: Optional[User] = Depends(get_current_user), db: Session = Depends(get_db)):
-    _, _, can_edit = _wiki_reader(slug, user, db)
+    campaign, _, can_edit = _wiki_reader(slug, user, db)
     if not can_edit:
-        raise HTTPException(403, "Only the DM can edit the wiki")
+        raise HTTPException(403, "You can't edit this wiki")
     vault = _wiki_vault(slug, db)
     idx = _wiki_index(slug, vault) if vault else None
     p = idx.pages.get(page) if idx else None
     if not p:
         raise HTTPException(404, "No such page")
+    if page == "index" and not _wiki_is_dm(user, crud.get_member(db, campaign.id, user.id) if user else None):
+        raise HTTPException(403, "Only the DM can edit the front page")
     if body.base_hash and hashlib.md5(p.text.encode()).hexdigest() != body.base_hash:
         raise HTTPException(409, "The page changed since you opened it (someone else, or Obsidian). Reload to see their version.")
     with _wiki_lock:
@@ -4456,7 +4469,7 @@ def campaign_wiki_create(slug: str, body: WikiPageBody,
     import wiki
     _, _, can_edit = _wiki_reader(slug, user, db)
     if not can_edit:
-        raise HTTPException(403, "Only the DM can edit the wiki")
+        raise HTTPException(403, "You can't edit this wiki")
     title = (body.title or "").strip()
     if not title or any(c in title for c in '/\\:*?"<>|#[]'):
         raise HTTPException(400, "A page needs a title without / \\ : * ? \" < > | # [ ]")

@@ -34,7 +34,7 @@ function kindOf(section: string): string {
   const top = section.split('/')[0]
   return KINDS.find(k => k.key === top || k.key.startsWith(top + '/'))?.key ?? 'Other'
 }
-const kindLabel = (kind: string) => KINDS.find(k => k.key === kind)?.label ?? 'Other'
+const kindLabelOf = (kind: string) => KINDS.find(k => k.key === kind)?.label ?? 'Other'
 const colorOf = (kind: string) => {
   const k = KINDS.find(x => x.key === kind)
   return k ? `var(--wg-${k.slot})` : 'var(--wg-other)'
@@ -49,8 +49,10 @@ interface Settings {
   textSize: number     // label size on screen, px
   names: number        // best-connected pages always named
   hideLonely: boolean  // leave out pages with no links
+  softenHubs: boolean  // links to much-linked pages pull less (d3's own default), so the rest branch out
+  groupByKind: boolean // each kind of page gathers in its own place around a circle
 }
-const DEFAULTS: Settings = { spacing: 700, linkLength: 120, linkPull: 0.12, dotSize: 1, textSize: 13, names: 14, hideLonely: false }
+const DEFAULTS: Settings = { spacing: 700, linkLength: 120, linkPull: 0.12, dotSize: 1, textSize: 13, names: 14, hideLonely: false, softenHubs: true, groupByKind: false }
 const STORAGE_KEY = 'wikiGraph.settings'
 function loadSettings(): Settings {
   try {
@@ -72,7 +74,7 @@ const SLIDERS: { key: keyof Settings; label: string; min: number; max: number; s
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 interface GraphApi {
-  relayout: () => void
+  relayout: (refit?: boolean) => void
   restyle: () => void
   zoomBy: (k: number) => void
   fitAll: () => void
@@ -136,26 +138,58 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
       neighbours.set(b, (neighbours.get(b) ?? new Set()).add(a))
     }
     const radius = (d: Node) => (4 + Math.sqrt(d.degree) * 1.7) * settingsRef.current.dotSize
+    // links per page among what's shown (hiding a kind removes its links)
+    const shownDegree = new Map<string, number>()
+    for (const [id, near] of neighbours) shownDegree.set(id, near.size)
+    const idOf = (e: string | Node) => (typeof e === 'string' ? e : e.id)
+    const kindOfId = new Map(nodes.map(n => [n.id, kindOf(n.section)]))
+
+    // Group by kind: each kind shown gets a point on a circle, in legend order
+    const kindsShown = [...KINDS.map(k => k.key), 'Other'].filter(k => nodes.some(n => kindOf(n.section) === k))
+    const anchor = (kind: string) => {
+      const i = kindsShown.indexOf(kind), a = (i / kindsShown.length) * 2 * Math.PI - Math.PI / 2
+      // the circle grows with the number of pages and the spacing, so groups don't overlap
+      const r = 16 * Math.sqrt(nodes.length * settingsRef.current.spacing / 100)
+      return { x: width / 2 + r * Math.cos(a), y: height / 2 + r * Math.sin(a), dx: Math.cos(a), dy: Math.sin(a) }
+    }
 
     const linkForce = forceLink<Node, Edge>(links).id(d => d.id)
     const chargeForce = forceManyBody<Node>().distanceMax(900)
     const collide = forceCollide<Node>()
+    const xForce = forceX<Node>(), yForce = forceY<Node>()
     const setForces = () => {
       const s = settingsRef.current
-      linkForce.distance(s.linkLength).strength(s.linkPull)
+      linkForce.distance(s.linkLength).strength(l => {
+        let pull = s.linkPull
+        if (s.softenHubs) {
+          // a link pulls less the busier its quieter end is; a page with one link still holds on
+          const least = Math.min(shownDegree.get(idOf(l.source)) ?? 1, shownDegree.get(idOf(l.target)) ?? 1)
+          pull = Math.min(1, (s.linkPull * 8) / Math.max(1, least))
+        }
+        // grouped, links between kinds only lean on each other, or they'd drag the groups back into one ball
+        if (s.groupByKind && kindOfId.get(idOf(l.source)) !== kindOfId.get(idOf(l.target))) pull *= 0.12
+        return pull
+      })
       chargeForce.strength(-s.spacing)
       collide.radius(d => radius(d) + 6)
+      if (s.groupByKind) {
+        xForce.x(d => anchor(kindOf(d.section)).x).strength(0.3)
+        yForce.y(d => anchor(kindOf(d.section)).y).strength(0.3)
+      } else {
+        // pages with no links would drift to the edges and shrink the fitted view
+        xForce.x(width / 2).strength(d => (d.degree ? 0.035 : 0.3))
+        yForce.y(height / 2).strength(d => (d.degree ? 0.035 : 0.3))
+      }
     }
-    setForces()
     const sim: Simulation<Node, Edge> = forceSimulation(nodes)
       .force('link', linkForce)
       .force('charge', chargeForce)
-      // pages with no links would drift to the edges and shrink the fitted view
-      .force('x', forceX<Node>(width / 2).strength(d => (d.degree ? 0.035 : 0.3)))
-      .force('y', forceY<Node>(height / 2).strength(d => (d.degree ? 0.035 : 0.3)))
+      .force('x', xForce)
+      .force('y', yForce)
       .force('center', forceCenter(width / 2, height / 2))
       .force('collide', collide)
       .stop()
+    setForces()   // after the simulation has the nodes, so per-link strengths see them
     for (let i = 0; i < 450; i++) sim.tick()   // lay out up front: no drifting animation on arrival
 
     const svg = select(svgEl)
@@ -165,6 +199,8 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     const dot = g.append('g').attr('class', 'wg-nodes').selectAll<SVGCircleElement, Node>('circle').data(nodes).join('circle')
       .attr('fill', d => colorOf(kindOf(d.section))).attr('class', 'wg-node')
       .attr('tabindex', 0).attr('role', 'link').attr('aria-label', d => `${d.title}, ${d.degree} links`)
+    const kindLabel = g.append('g').attr('class', 'wg-kinds').selectAll<SVGTextElement, string>('text').data(kindsShown).join('text')
+      .text(k => kindLabelOf(k))
     const label = g.append('g').attr('class', 'wg-labels').selectAll<SVGTextElement, Node>('text').data(nodes).join('text')
       .text(d => d.title)
 
@@ -175,6 +211,17 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
         .attr('x2', d => (d.target as Node).x!).attr('y2', d => (d.target as Node).y!)
       dot.attr('cx', d => d.x!).attr('cy', d => d.y!)
       label.attr('x', d => d.x!).attr('y', d => d.y!)
+      // group names sit just outside their group, on the side facing away from the middle
+      const grouped = settingsRef.current.groupByKind
+      kindLabel.classed('on', grouped)
+      if (grouped) kindLabel.each(function (kind) {
+        const members = nodes.filter(n => kindOf(n.section) === kind)
+        const cx = members.reduce((t, n) => t + n.x!, 0) / members.length
+        const cy = members.reduce((t, n) => t + n.y!, 0) / members.length
+        const { dx, dy } = anchor(kind)
+        const reach = Math.max(...members.map(n => (n.x! - cx) * dx + (n.y! - cy) * dy))
+        select(this).attr('x', cx + dx * (reach + 34 / k)).attr('y', cy + dy * (reach + 34 / k))
+      })
     }
     // sizes and which names stand: dots scale with the setting, names stay a
     // readable size on screen at any zoom
@@ -184,6 +231,7 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
       const standing = width < 600 ? Math.min(s.names, 5) : s.names
       named = new Set([...nodes].sort((a, b) => b.degree - a.degree).slice(0, standing).map(n => n.id))
       dot.attr('r', radius)
+      kindLabel.attr('font-size', 17 / k).attr('stroke-width', 4 / k)
       label.attr('font-size', s.textSize / k).attr('stroke-width', 3 / k).attr('dy', d => -radius(d) - 4 / k)
         .classed('on', d => named.has(d.id) || k >= LABEL_ZOOM)
     }
@@ -210,9 +258,11 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     const fit = (subset: Node[], maxScale: number, animate = true) => {
       if (!subset.length) return
       const xs = subset.map(n => n.x!), ys = subset.map(n => n.y!)
-      const pad = 48
-      const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad
-      const s = Math.min(maxScale, width / (x1 - x0), height / (y1 - y0))
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
+      // margins on screen: grouped, the group names sit outside the dots and need more room at the sides
+      const grouped = settingsRef.current.groupByKind && subset.length === nodes.length
+      const padX = grouped ? Math.min(120, width * 0.2) : 48, padY = grouped ? 64 : 48
+      const s = Math.max(0.05, Math.min(maxScale, (width - 2 * padX) / Math.max(1, x1 - x0), (height - 2 * padY) / Math.max(1, y1 - y0)))
       const t = zoomIdentity.translate(width / 2 - s * (x0 + x1) / 2, height / 2 - s * (y0 + y1) / 2).scale(s)
       if (animate && duration) svg.transition().duration(duration).call(zoomer.transform, t)
       else svg.call(zoomer.transform, t)
@@ -247,14 +297,17 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     // Slider changes re-settle the layout from where it is, animated unless
     // the reader asked for less motion.
     sim.on('tick', place)
-    const relayout = () => {
+    const relayout = (refit = false) => {
       setForces()
       if (reducedMotion()) {
         sim.stop().alpha(0.6)
         for (let i = 0; i < 300; i++) sim.tick()
         place()
+        if (refit) fit(nodes, 1.4, false)
       } else {
-        sim.alpha(0.6).alphaDecay(0.03).restart()
+        // a change of shape (grouping on or off) re-frames the view once it settles
+        sim.on('end.fit', refit ? () => { sim.on('end.fit', null); fit(nodes, 1.4) } : null)
+        sim.alpha(refit ? 0.9 : 0.6).alphaDecay(0.03).restart()
       }
       restyle()
     }
@@ -282,7 +335,12 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     apiRef.current?.select(focus ?? null, true)
   }, [focus])
 
-  useEffect(() => { apiRef.current?.relayout() }, [settings.spacing, settings.linkLength, settings.linkPull, settings.dotSize])
+  useEffect(() => { apiRef.current?.relayout() }, [settings.spacing, settings.linkLength, settings.linkPull, settings.dotSize, settings.softenHubs])
+  const firstGroup = useRef(true)
+  useEffect(() => {
+    if (firstGroup.current) { firstGroup.current = false; return }
+    apiRef.current?.relayout(true)
+  }, [settings.groupByKind])
   useEffect(() => { apiRef.current?.restyle() }, [settings.textSize, settings.names])
 
   const toggle = (k: string) => setHidden(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n })
@@ -374,6 +432,14 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
                     )
                   })}
                   <label className="wg-check">
+                    <input type="checkbox" checked={settings.groupByKind} onChange={e => set('groupByKind', e.target.checked)} />
+                    Group by kind
+                  </label>
+                  <label className="wg-check">
+                    <input type="checkbox" checked={settings.softenHubs} onChange={e => set('softenHubs', e.target.checked)} />
+                    Soften links to busy pages
+                  </label>
+                  <label className="wg-check">
                     <input type="checkbox" checked={settings.hideLonely} onChange={e => set('hideLonely', e.target.checked)} />
                     Hide pages with no links
                   </label>
@@ -385,7 +451,7 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
             {sel && !(panelOpen && narrow) && (
               <aside className="wg-card" aria-label={`${sel.title}: its links`}>
                 <div className="wg-card-head">
-                  <span className="wg-card-kind"><span className="wg-swatch" style={{ background: colorOf(kindOf(sel.section)) }} />{kindLabel(kindOf(sel.section))}</span>
+                  <span className="wg-card-kind"><span className="wg-swatch" style={{ background: colorOf(kindOf(sel.section)) }} />{kindLabelOf(kindOf(sel.section))}</span>
                   <button type="button" className="wg-panel-close" onClick={() => apiRef.current?.select(null)} aria-label="Clear selection"><CloseIcon size={14} /></button>
                 </div>
                 <h3 className="wg-card-title"><Link to={`${base}/${sel.id}`}>{sel.title}</Link></h3>
@@ -412,7 +478,7 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
       {tip && (
         <div className="chart-tooltip" role="tooltip" style={{ left: tip.x + 14, top: tip.y + 14, position: 'fixed' }}>
           <strong>{tip.node.title}</strong>
-          <div className="muted">{kindLabel(kindOf(tip.node.section))} · {tip.node.degree} link{tip.node.degree !== 1 ? 's' : ''}</div>
+          <div className="muted">{kindLabelOf(kindOf(tip.node.section))} · {tip.node.degree} link{tip.node.degree !== 1 ? 's' : ''}</div>
         </div>
       )}
     </div>

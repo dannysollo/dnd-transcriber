@@ -15,6 +15,7 @@ interface Campaign {
   owner_id: number
   settings: {
     require_edit_approval?: boolean
+    wiki_players_edit?: boolean
     discord_webhook_url?: string | null
     discord_channel_id?: string | null
     vault_repo_url?: string | null
@@ -82,6 +83,7 @@ export default function CampaignSettingsPage() {
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [requireApproval, setRequireApproval] = useState(false)
+  const [wikiPlayersEdit, setWikiPlayersEdit] = useState(false)
   const [webhookUrl, setWebhookUrl] = useState('')
   const [channelId, setChannelId] = useState('')
   const [vaultRepoUrl, setVaultRepoUrl] = useState('')
@@ -124,6 +126,7 @@ export default function CampaignSettingsPage() {
         setEditName(c.name)
         setEditDesc(c.description ?? '')
         setRequireApproval(c.settings?.require_edit_approval ?? false)
+        setWikiPlayersEdit(c.settings?.wiki_players_edit ?? false)
         setWebhookUrl(c.settings?.discord_webhook_url ?? '')
         setChannelId(c.settings?.discord_channel_id ?? '')
         setVaultRepoUrl(c.settings?.vault_repo_url ?? '')
@@ -268,6 +271,7 @@ export default function CampaignSettingsPage() {
           settings: {
             ...campaign.settings,
             require_edit_approval: requireApproval,
+            wiki_players_edit: wikiPlayersEdit,
             discord_webhook_url: webhookUrl || null,
             discord_channel_id: channelId || null,
             vault_repo_url: vaultRepoUrl || null,
@@ -470,6 +474,13 @@ export default function CampaignSettingsPage() {
             <input type="checkbox" checked={requireApproval} onChange={e => setRequireApproval(e.target.checked)} />
             Require edit approval for transcript changes
           </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '16px', color: 'var(--ink-soft)' }}>
+            <input type="checkbox" checked={wikiPlayersEdit} onChange={e => setWikiPlayersEdit(e.target.checked)} />
+            Let players edit the wiki
+          </label>
+          <div style={{ fontSize: 14, color: 'var(--ink-faint)', marginTop: -10 }}>
+            Players can edit and add pages. The front page, who can read it, generating and continuity fixes stay with the DM.
+          </div>
           <button
             onClick={saveSettings}
             disabled={saving}

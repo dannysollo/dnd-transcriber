@@ -13,7 +13,7 @@ import { ContinuityCheckAll, PageContinuity } from '../Continuity'
 // committed to the vault repo, so Obsidian stays in step.
 
 interface PageSummary { title: string; slug: string; section: string; excerpt: string; backlinks: number; broken: number; aliases?: string[] }
-interface WikiIndex { name: string; public: boolean; can_edit: boolean; has_wiki: boolean; pages: PageSummary[]; broken?: number }
+interface WikiIndex { name: string; public: boolean; can_edit: boolean; can_manage?: boolean; has_wiki: boolean; pages: PageSummary[]; broken?: number }
 interface WikiPageData { title: string; slug: string; section: string; path: string; markdown: string; body?: string; facts?: { label: string; value: string }[]; status?: string; hash: string; broken: string[]; backlinks: { title: string; slug: string }[] }
 
 const WIKILINK = /\[\[([^\]\n]+)\]\]/g
@@ -204,7 +204,7 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
         <h1 className="wiki-title">{index.name} Wiki</h1>
         <p className="wiki-note">
           {index.pages.length} pages. {index.public ? 'Anyone with the link can read it.' : 'Only campaign members can read it.'}
-          {index.can_edit && <> <button type="button" className="index-link" onClick={togglePublic}>
+          {index.can_manage && <> <button type="button" className="index-link" onClick={togglePublic}>
             {index.public ? 'Make it members only' : 'Make it public'}</button></>}
         </p>
         <div className="wiki-tools">
@@ -216,14 +216,14 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
               {showAll ? 'Hide all pages' : 'All pages'}</button>}
           </>}
           {index.can_edit && <button type="button" className="btn-ghost" onClick={() => setCreating(c => !c)}>New page</button>}
-          {index.can_edit && hasIndexPage && <Link to={`${base}/${INDEX_SLUG}`} className="index-link">Edit the front page</Link>}
+          {index.can_manage && hasIndexPage && <Link to={`${base}/${INDEX_SLUG}`} className="index-link">Edit the front page</Link>}
         </div>
         {creating && <NewPageForm slug={slug} sections={sections.map(([s]) => s)}
           onCreated={s => { onChanged(); navigate(`${base}/${s}`) }} onCancel={() => setCreating(false)} />}
       </header>
 
-      {index.can_edit && <WikiGenerate slug={slug} empty={!index.has_wiki || index.pages.length === 0} onDone={onChanged} />}
-      {index.can_edit && index.has_wiki && index.pages.length > 0 && <ContinuityCheckAll slug={slug} />}
+      {index.can_manage && <WikiGenerate slug={slug} empty={!index.has_wiki || index.pages.length === 0} onDone={onChanged} />}
+      {index.can_manage && index.has_wiki && index.pages.length > 0 && <ContinuityCheckAll slug={slug} />}
 
       {!index.has_wiki || index.pages.length === 0 ? (
         !index.can_edit && <p className="wiki-note">This campaign has no wiki yet.</p>
@@ -432,7 +432,7 @@ function WikiArticle({ slug, page, index, base, onChanged }: { slug: string; pag
           {data.status && !editing && (
             <span className={`wiki-status ${statusTone(data.status)}`}><i aria-hidden="true" />{md(data.status, true)}</span>
           )}
-          {index.can_edit && !editing && (
+          {index.can_edit && (index.can_manage || data.slug !== INDEX_SLUG) && !editing && (
             <button type="button" className="btn-ghost" onClick={() => { setDraft(data.markdown); setEditing(true) }}>Edit</button>
           )}
         </div>
@@ -442,7 +442,7 @@ function WikiArticle({ slug, page, index, base, onChanged }: { slug: string; pag
           {data.facts.map(f => <div key={f.label}><dt>{f.label}</dt><dd>{md(f.value, true)}</dd></div>)}
         </dl>
       )}
-      {index.can_edit && !editing && <PageContinuity slug={slug} path={data.path} onChanged={() => { load(); onChanged() }} />}
+      {index.can_manage && !editing && <PageContinuity slug={slug} path={data.path} onChanged={() => { load(); onChanged() }} />}
       {creatingTitle && (
         <NewPageForm slug={slug} sections={[...new Set(index.pages.map(p => p.section))]} initialTitle={creatingTitle}
           onCreated={s => { onChanged(); navigate(`${base}/${s}`) }} onCancel={() => setCreatingTitle(null)} />
