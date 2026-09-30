@@ -246,6 +246,13 @@ export function ContinuityCheckAll({ slug }: { slug: string }) {
     toast(`Checking ${d.queued} session${d.queued !== 1 ? 's' : ''} against the wiki on the worker, oldest first. Findings show on each page and session.`, 'success')
     load()
   }
+  const stopAll = async () => {
+    const r = await fetch(`/campaigns/${slug}/continuity/queue`, { method: 'DELETE' })
+    if (!r.ok) { toast('Could not stop the checks', 'error'); return }
+    const d = await r.json()
+    toast(`Stopped ${d.stopped} queued check${d.stopped !== 1 ? 's' : ''}. One already running on the worker finishes.`, 'info')
+    load()
+  }
   const setStatus = async (it: CampaignItem, status: ContinuityItem['status']) => {
     const r = await fetch(`/campaigns/${slug}/sessions/${encodeURIComponent(it.sessionName)}/continuity/${it.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
@@ -270,6 +277,9 @@ export function ContinuityCheckAll({ slug }: { slug: string }) {
           Continuity: {items.length ? `${items.length} finding${items.length !== 1 ? 's' : ''} to check` : 'nothing open'}
           {state.queued ? `, ${state.queued} session${state.queued !== 1 ? 's' : ''} still queued` : ''}
         </span>
+        {state.queued > 0 && (
+          <button type="button" className="btn-ghost" onClick={stopAll} title="Take the queued sessions off the queue">Stop</button>
+        )}
         {items.length > 0 && (
           <button type="button" className="btn-ghost" aria-expanded={reviewing} onClick={() => { setReviewing(v => !v); if (!reviewing) load() }}>
             {reviewing ? 'Hide findings' : `Review ${items.length} finding${items.length !== 1 ? 's' : ''}`}

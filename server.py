@@ -5046,6 +5046,19 @@ def campaign_run_continuity_all(slug: str, _member=Depends(require_campaign_memb
     return {"queued": len(dirs)}
 
 
+@app.delete("/campaigns/{slug}/continuity/queue")
+def campaign_stop_continuity(slug: str, _member=Depends(require_campaign_member("dm"))):
+    """Take every queued continuity check off the queue (one already running finishes)."""
+    sessions_dir = get_sessions_dir(slug)
+    stopped = 0
+    for d in (sessions_dir.iterdir() if sessions_dir.exists() else []):
+        flag = d / CONTINUITY_FLAG
+        if d.is_dir() and flag.exists():
+            flag.unlink()
+            stopped += 1
+    return {"stopped": stopped}
+
+
 @app.get("/campaigns/{slug}/continuity")
 def campaign_continuity(slug: str, page: Optional[str] = None,
                         _member=Depends(require_campaign_member("spectator")), db: Session = Depends(get_db)):
