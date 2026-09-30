@@ -55,8 +55,9 @@ Still open:
   Read turn per page (each resending ~80k tokens). Usage limits now leave jobs
   queued (the worker pauses 30 min) instead of failing them: 40 of a 43-session
   run had failed that way. The page pick varies run to run (Haiku), so a page a
-  session only describes ("the smith") can be missed. Still open:
-  - A cheaper model for the check itself (`--model sonnet`), if quality holds.
+  session only describes ("the smith") can be missed. The check itself runs on
+  Sonnet since 2026-09-30 (the catch-up run over every session was done on the
+  default model). Still open:
   - Re-check only what changed: remember the pages' hashes per session.
 
 ## Review

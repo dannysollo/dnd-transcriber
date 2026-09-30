@@ -295,5 +295,6 @@ def run_job(job: dict, config: dict, vault: Path, run_claude) -> list[dict]:
     system, message, pages = build_prompt(job, vault, run_claude, config)
     print(f"[continuity]   {len(pages)} pages, ~{(len(system) + len(message)) // 4:,} tokens: "
           + ", ".join(Path(r).stem for r in pages))
-    out = run_claude(system, message, config, tools=None)
+    # Sonnet: good enough for a list of findings the DM reviews anyway, and cheaper.
+    out = run_claude(system, message, config, tools=None, model="sonnet")
     return [] if out.strip().upper().startswith("NONE") else parse(out)
