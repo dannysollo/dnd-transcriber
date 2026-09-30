@@ -4,7 +4,6 @@ import { CloseIcon } from '../Icons'
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import VoiceLibrary from '../VoiceLibrary'
-import WorkerQueue from '../WorkerQueue'
 import { Roll20Settings } from '../Dice'
 import { useAuth } from '../AuthContext'
 
@@ -872,7 +871,6 @@ export default function CampaignSettingsPage() {
       {tab === 'voices' && myRole === 'dm' && slug && <VoiceLibrary slug={slug} />}
       {tab === 'dice' && myRole === 'dm' && slug && <Roll20Settings slug={slug} />}
 
-      {tab === 'worker' && myRole === 'dm' && slug && <WorkerQueue slug={slug} />}
       {tab === 'worker' && myRole === 'dm' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '540px' }}>
           <div style={{ fontSize: '16px', color: 'var(--ink-soft)', lineHeight: '1.5' }}>

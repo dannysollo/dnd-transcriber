@@ -128,6 +128,13 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   .badge.processing, .badge.claimed { color: var(--ink); font-weight: 600; }
   .tbl-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; border-bottom: 1px solid var(--rule); padding-bottom: 4px; }
   .tbl-header h2 { border: none; padding: 0; }
+  .queue-actions { display: flex; gap: 8px; }
+  .queue-kinds { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .queue-kinds:empty { display: none; }
+  .queue-note { font-size: 15px; color: var(--ink-faint); margin: 10px 0 0; }
+  .btn.danger { background: var(--rubric); color: var(--on-rubric); border-color: var(--rubric); }
+  td.act { text-align: right; padding-right: 0; }
+  .badge.running { color: var(--moss); font-weight: 600; }
   /* Logs: machine output, so monospace on a sunk panel */
   #log-panel {
     background: var(--sunk); border: 1px solid var(--rule); border-radius: 3px;
@@ -206,10 +213,15 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 
     <section class="card">
       <div class="tbl-header">
-        <h2>Sessions</h2>
-        <button class="btn secondary" onclick="loadJobs()">Refresh</button>
+        <h2>Queue</h2>
+        <span class="queue-actions">
+          <button class="btn secondary" onclick="loadQueue()">Refresh</button>
+          <button class="btn secondary" id="clear-all" onclick="clearAll(this)" hidden>Clear all</button>
+        </span>
       </div>
-      <div id="sessions-table"><p class="empty">Loading…</p></div>
+      <div id="queue-kinds" class="queue-kinds"></div>
+      <div id="queue-table"><p class="empty">Loading…</p></div>
+      <p id="queue-note" class="queue-note" hidden>A job already running finishes even if you remove it; it just won't be tried again.</p>
     </section>
   </div>
 
@@ -269,31 +281,65 @@ function renderStatus(d) {
   });
 }
 
-async function loadJobs() {
-  const tbody = document.getElementById('sessions-table');
-  tbody.innerHTML = '<p class="empty">Loading…</p>';
-  try {
-    const r = await fetch('/api/jobs');
-    const d = await r.json();
-    const sessions = d.sessions || d;
-    if (!sessions.length) { tbody.innerHTML = '<p class="empty">No sessions found.</p>'; return; }
-    const LABEL = { pending: 'queued', claimed: 'transcribing', processing: 'transcribing', done: 'done', error: 'failed' };
-    const table = document.createElement('table');
-    const head = table.insertRow();
-    ['Session', 'Status', 'Queued'].forEach(t => { const th = document.createElement('th'); th.textContent = t; head.append(th); });
-    sessions.forEach(s => {
-      const st = (s.status || '').toLowerCase();
-      const row = table.insertRow();
-      row.insertCell().textContent = s.name || s.session_name || '';
-      const badge = document.createElement('span');
-      badge.className = 'badge ' + st; badge.textContent = LABEL[st] || s.status || '';
-      row.insertCell().append(badge);
-      row.insertCell().textContent = s.created_at ? new Date(s.created_at).toLocaleString() : '';
+// The worker's queue, from the site (every kind of job waiting for this worker).
+const PLURAL = { transcription: 'transcriptions', analysis: 'summaries', continuity: 'continuity checks', wiki: 'wiki generation' };
+async function queueCall(method, path) {
+  const r = await fetch(path, { method });
+  const d = await r.json();
+  if (!r.ok || d.error) throw new Error(d.error || d.detail || r.status);
+  return d;
+}
+function renderQueue(items) {
+  const box = document.getElementById('queue-table');
+  const kinds = document.getElementById('queue-kinds');
+  document.getElementById('clear-all').hidden = !items.length;
+  document.getElementById('queue-note').hidden = !items.some(i => i.state === 'running');
+  kinds.replaceChildren();
+  const byKind = {};
+  items.forEach(i => { byKind[i.kind] = (byKind[i.kind] || 0) + 1; });
+  if (Object.keys(byKind).length > 1) {
+    Object.entries(byKind).forEach(([kind, n]) => {
+      const b = document.createElement('button'); b.className = 'btn secondary';
+      b.textContent = `Clear ${PLURAL[kind] || kind} (${n})`;
+      b.onclick = () => removeJobs(`/api/queue/${kind}`);
+      kinds.append(b);
     });
-    tbody.replaceChildren(table);
-  } catch(e) {
-    tbody.innerHTML = '<p class="empty">Could not load sessions. Is the site reachable?</p>';
   }
+  if (!items.length) { box.innerHTML = '<p class="empty">Nothing waiting for the worker.</p>'; return; }
+  const table = document.createElement('table');
+  const head = table.insertRow();
+  ['Session', 'Job', 'Status', ''].forEach(t => { const th = document.createElement('th'); th.textContent = t; head.append(th); });
+  items.forEach(it => {
+    const row = table.insertRow();
+    row.insertCell().textContent = it.session || '';
+    row.insertCell().textContent = it.label;
+    const badge = document.createElement('span');
+    badge.className = 'badge ' + it.state; badge.textContent = it.state === 'running' ? 'running now' : 'waiting';
+    row.insertCell().append(badge);
+    const cell = row.insertCell(); cell.className = 'act';
+    const b = document.createElement('button'); b.className = 'btn secondary'; b.textContent = 'Remove';
+    b.title = it.state === 'running' ? 'Take it off the queue. What already started finishes.' : 'Take it off the queue';
+    b.onclick = () => removeJobs(`/api/queue/${it.kind}` + (it.session ? `?session=${encodeURIComponent(it.session)}` : ''));
+    cell.append(b);
+  });
+  box.replaceChildren(table);
+}
+async function loadQueue() {
+  try { renderQueue((await queueCall('GET', '/api/queue')).items || []); }
+  catch (e) { document.getElementById('queue-table').innerHTML = '<p class="empty">Could not load the queue. Is the site reachable?</p>'; }
+}
+async function removeJobs(path) {
+  try { renderQueue((await queueCall('DELETE', path)).items || []); }
+  catch (e) { alert('Could not remove it: ' + e.message); }
+}
+async function clearAll(btn) {
+  if (!btn.dataset.confirm) {
+    btn.dataset.confirm = '1'; btn.textContent = 'Confirm: clear all'; btn.classList.add('danger');
+    setTimeout(() => { delete btn.dataset.confirm; btn.textContent = 'Clear all'; btn.classList.remove('danger'); }, 4000);
+    return;
+  }
+  delete btn.dataset.confirm; btn.textContent = 'Clear all'; btn.classList.remove('danger');
+  await removeJobs('/api/queue');
 }
 
 let logLines = [];
@@ -351,9 +397,10 @@ async function saveConfig() {
 
 // Init
 fetchStatus();
-loadJobs();
+loadQueue();
 fetchLogs();
 setInterval(fetchStatus, 5000);
+setInterval(loadQueue, 15000);
 setInterval(fetchLogs, 3000);
 </script>
 </body>
@@ -408,20 +455,28 @@ def create_app():
         logs = list(_log_buffer)[-200:] if _log_buffer else []
         return jsonify(logs)
 
-    @app.route("/api/jobs")
-    def api_jobs():
+    # The worker's queue on the site, with this worker's key (the dashboard is where
+    # the worker is managed): list it, remove one job, a kind, or everything.
+    def _site(method: str, path: str, params: dict | None = None):
+        base = _config.get("server_url", "")
+        slug = _config.get("campaign_slug", "")
+        if not base or not slug:
+            return jsonify({"error": "server_url or campaign_slug not configured", "items": []}), 200
         try:
-            base = _config.get("server_url", "")
-            slug = _config.get("campaign_slug", "")
-            key = _config.get("api_key", "")
-            if not base or not slug:
-                return jsonify({"error": "server_url or campaign_slug not configured", "sessions": []}), 200
-            url = f"{base}/campaigns/{slug}/sessions?limit=20"
-            headers = {"Authorization": f"Bearer {key}"}
-            r = _requests.get(url, headers=headers, timeout=10)
+            r = _requests.request(method, f"{base}/campaigns/{slug}/worker/queue{path}", params=params,
+                                  headers={"Authorization": f"Bearer {_config.get('api_key', '')}"}, timeout=15)
             return jsonify(r.json()), r.status_code
         except Exception as e:
-            return jsonify({"error": str(e), "sessions": []}), 200
+            return jsonify({"error": str(e), "items": []}), 200
+
+    @app.route("/api/queue", methods=["GET", "DELETE"])
+    def api_queue():
+        return _site(request.method, "")
+
+    @app.route("/api/queue/<kind>", methods=["DELETE"])
+    def api_queue_remove(kind):
+        session = request.args.get("session")
+        return _site("DELETE", f"/{kind}", {"session": session} if session else None)
 
     @app.route("/api/config", methods=["POST"])
     def api_config():

@@ -1287,12 +1287,3 @@ span.continuity-ts { cursor: default; color: var(--ink-faint); }
 @media (max-width: 768px) {
   .update-notice { left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
 }
-
-/* ── The worker's queue (WorkerQueue.tsx) ──────────────────────────────────── */
-.worker-queue { max-width: 680px; margin-bottom: 32px; }
-.worker-queue-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
-.worker-queue-head h3 { margin: 0; font-size: 19px; color: var(--ink); }
-.worker-queue-kinds { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-.worker-queue .voice-name a { color: var(--ink); text-decoration: none; }
-.worker-queue .voice-name a:hover { color: var(--rubric); text-decoration: underline; text-underline-offset: 3px; }
-.worker-queue-running { color: var(--moss); }

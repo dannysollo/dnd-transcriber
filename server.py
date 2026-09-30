@@ -5239,7 +5239,7 @@ def campaign_session_rolls_shift(slug: str, name: str, body: RollsShiftBody,
     return _session_rolls_view(slug, name, True)
 
 
-# ─── The worker's queue, for the DM (Campaign Settings > Worker) ──────────────
+# ─── The worker's queue, shown in the worker's own dashboard ──────────────────
 # Everything waiting for the worker, whatever its kind: transcriptions (database
 # rows), analyses and continuity checks (flag files per session) and a wiki
 # generation. A flagged job counts as running once the worker has been handed it
@@ -5279,8 +5279,12 @@ def _queue_items(slug: str, db: Session) -> list[dict]:
     return sorted(items, key=lambda it: (it["state"] != "running", order.index(it["kind"]), it["session"] or ""))
 
 
-@app.get("/campaigns/{slug}/queue")
-def campaign_queue(slug: str, _member=Depends(require_campaign_member("dm")), db: Session = Depends(get_db)):
+# The worker dashboard (worker/gui_server.py, the desktop app's Worker Dashboard)
+# asks with the worker key: that's where the worker is managed.
+
+@app.get("/campaigns/{slug}/worker/queue")
+def worker_queue(slug: str, db: Session = Depends(get_db), request: Request = None):
+    require_worker_key(slug)(request, db)
     return {"items": _queue_items(slug, db)}
 
 
@@ -5309,10 +5313,11 @@ def _remove_from_queue(slug: str, kind: str, session: str | None, db: Session) -
     raise HTTPException(400, f"Unknown kind: {kind}")
 
 
-@app.delete("/campaigns/{slug}/queue/{kind}")
-def campaign_queue_remove(slug: str, kind: str, session: Optional[str] = None,
-                          _member=Depends(require_campaign_member("dm")), db: Session = Depends(get_db)):
+@app.delete("/campaigns/{slug}/worker/queue/{kind}")
+def worker_queue_remove(slug: str, kind: str, session: Optional[str] = None,
+                        db: Session = Depends(get_db), request: Request = None):
     """Remove one job (`session` given, or the wiki generation), or every job of this kind."""
+    require_worker_key(slug)(request, db)
     if kind != "wiki" and session is None:
         removed = sum(_remove_from_queue(slug, kind, it["session"], db) for it in _queue_items(slug, db) if it["kind"] == kind)
     else:
@@ -5320,9 +5325,10 @@ def campaign_queue_remove(slug: str, kind: str, session: Optional[str] = None,
     return {"removed": removed, "items": _queue_items(slug, db)}
 
 
-@app.delete("/campaigns/{slug}/queue")
-def campaign_queue_clear(slug: str, _member=Depends(require_campaign_member("dm")), db: Session = Depends(get_db)):
+@app.delete("/campaigns/{slug}/worker/queue")
+def worker_queue_clear(slug: str, db: Session = Depends(get_db), request: Request = None):
     """Clear the whole queue. Jobs already running on the worker finish."""
+    require_worker_key(slug)(request, db)
     removed = sum(_remove_from_queue(slug, it["kind"], it["session"], db) for it in _queue_items(slug, db))
     return {"removed": removed, "items": []}
 
