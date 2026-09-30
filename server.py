@@ -4811,6 +4811,7 @@ def worker_list_analysis_jobs(slug: str, db: Session = Depends(get_db), request:
                 ) if x),
                 "wiki_only": wiki_only,
             })
+            _job_served[("analysis", slug, session_dir.name)] = time.time()
             # Send it to the back of the queue: a job that keeps failing
             # (the flag stays) then can't block the others.
             try:
@@ -4935,6 +4936,7 @@ def worker_get_continuity_job(slug: str, db: Session = Depends(get_db), request:
         return {"job": None}
     d = flagged[0]
     os.utime(d / CONTINUITY_FLAG)  # to the back of the queue, so a failing one can't block the rest
+    _job_served[("continuity", slug, d.name)] = time.time()
     config = load_config(slug)
     transcript = (d / "transcript.md").read_text(encoding="utf-8") if (d / "transcript.md").exists() else ""
     corrections, patterns = config.get("corrections") or {}, config.get("patterns") or []
@@ -5235,6 +5237,94 @@ def campaign_session_rolls_shift(slug: str, name: str, body: RollsShiftBody,
         raise HTTPException(404, "Session not found")
     (session_dir / ROLLS_SHIFT_FILE).write_text(json.dumps({"shift": body.shift, "force": body.force}), encoding="utf-8")
     return _session_rolls_view(slug, name, True)
+
+
+# ─── The worker's queue, for the DM (Campaign Settings > Worker) ──────────────
+# Everything waiting for the worker, whatever its kind: transcriptions (database
+# rows), analyses and continuity checks (flag files per session) and a wiki
+# generation. A flagged job counts as running once the worker has been handed it
+# (remembered here, so it resets if the server restarts); it runs to the end
+# even if it's removed from the queue meanwhile.
+
+_job_served: dict[tuple[str, str, str], float] = {}
+QUEUE_RUNNING_FOR = 25 * 60   # a job handed out this recently is taken to be running
+QUEUE_KINDS = {"transcription": "Transcription", "analysis": "Summary and wiki suggestions",
+               "continuity": "Continuity check", "wiki": "Wiki generation"}
+
+
+def _queue_items(slug: str, db: Session) -> list[dict]:
+    campaign = crud.get_campaign_by_slug(db, slug)
+    items = []
+    if campaign:
+        for j in db.query(TranscriptionJob).filter(TranscriptionJob.campaign_id == campaign.id,
+                                                   TranscriptionJob.status.in_(("pending", "claimed"))):
+            items.append({"kind": "transcription", "session": j.session_name,
+                          "state": "running" if j.status == "claimed" else "queued",
+                          "since": (j.claimed_at or j.created_at).isoformat() if (j.claimed_at or j.created_at) else None})
+    sessions_dir = get_sessions_dir(slug)
+    now = time.time()
+    for kind, flag in (("analysis", ANALYSIS_FLAG), ("continuity", CONTINUITY_FLAG)):
+        for d in (sessions_dir.iterdir() if sessions_dir.exists() else []):
+            if d.is_dir() and (d / flag).exists():
+                served = _job_served.get((kind, slug, d.name), 0)
+                items.append({"kind": kind, "session": d.name,
+                              "state": "running" if now - served < QUEUE_RUNNING_FOR else "queued", "since": None})
+    wjob = _read_wiki_job(slug)
+    if wjob.get("state") in ("queued", "running"):
+        items.append({"kind": "wiki", "session": None, "state": wjob["state"], "since": wjob.get("requested"),
+                      "detail": wjob.get("message")})
+    order = list(QUEUE_KINDS)
+    for it in items:
+        it["label"] = QUEUE_KINDS[it["kind"]]
+    return sorted(items, key=lambda it: (it["state"] != "running", order.index(it["kind"]), it["session"] or ""))
+
+
+@app.get("/campaigns/{slug}/queue")
+def campaign_queue(slug: str, _member=Depends(require_campaign_member("dm")), db: Session = Depends(get_db)):
+    return {"items": _queue_items(slug, db)}
+
+
+def _remove_from_queue(slug: str, kind: str, session: str | None, db: Session) -> bool:
+    if kind == "transcription":
+        campaign = crud.get_campaign_by_slug(db, slug)
+        job = crud.get_job(db, campaign.id, session) if campaign and session else None
+        if job and job.status in ("pending", "claimed"):
+            crud.delete_job(db, job)
+            return True
+        return False
+    if kind in ("analysis", "continuity"):
+        flag = get_sessions_dir(slug) / (session or "") / (ANALYSIS_FLAG if kind == "analysis" else CONTINUITY_FLAG)
+        if session and flag.exists():
+            flag.unlink()
+            _job_served.pop((kind, slug, session), None)
+            return True
+        return False
+    if kind == "wiki":
+        job = _read_wiki_job(slug)
+        if job.get("state") in ("queued", "running"):
+            job.update(state="error", message="Cancelled by the DM")
+            _write_wiki_job(slug, job)
+            return True
+        return False
+    raise HTTPException(400, f"Unknown kind: {kind}")
+
+
+@app.delete("/campaigns/{slug}/queue/{kind}")
+def campaign_queue_remove(slug: str, kind: str, session: Optional[str] = None,
+                          _member=Depends(require_campaign_member("dm")), db: Session = Depends(get_db)):
+    """Remove one job (`session` given, or the wiki generation), or every job of this kind."""
+    if kind != "wiki" and session is None:
+        removed = sum(_remove_from_queue(slug, kind, it["session"], db) for it in _queue_items(slug, db) if it["kind"] == kind)
+    else:
+        removed = int(_remove_from_queue(slug, kind, session, db))
+    return {"removed": removed, "items": _queue_items(slug, db)}
+
+
+@app.delete("/campaigns/{slug}/queue")
+def campaign_queue_clear(slug: str, _member=Depends(require_campaign_member("dm")), db: Session = Depends(get_db)):
+    """Clear the whole queue. Jobs already running on the worker finish."""
+    removed = sum(_remove_from_queue(slug, it["kind"], it["session"], db) for it in _queue_items(slug, db))
+    return {"removed": removed, "items": []}
 
 
 # ─── Static frontend (SPA catch-all) ─────────────────────────────────────────
