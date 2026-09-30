@@ -51,3 +51,11 @@ export const DownloadIcon = (p: IconProps) => <Svg {...p}><path d="M12 4v11M7 10
 export const MoreIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="5" cy="12" r="1.4" fill="currentColor" /><circle cx="12" cy="12" r="1.4" fill="currentColor" /><circle cx="19" cy="12" r="1.4" fill="currentColor" /></Svg>
 )
+export const PlusIcon = (p: IconProps) => <Svg {...p}><path d="M12 5v14M5 12h14" /></Svg>
+export const MinusIcon = (p: IconProps) => <Svg {...p}><path d="M5 12h14" /></Svg>
+/** Fit to view: four corners. */
+export const FitIcon = (p: IconProps) => <Svg {...p}><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></Svg>
+/** Adjust: three slider tracks with knobs. */
+export const SlidersIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></Svg>
+)

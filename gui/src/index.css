@@ -1187,22 +1187,80 @@ button.wiki-missing { cursor: pointer; }
 .wg-legend button:focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
 .wg-swatch { width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 0 2px var(--page); outline: 1px solid var(--rule-strong); }
 .wg-count { color: var(--ink-faint); font-size: 14px; font-variant-numeric: lining-nums tabular-nums; }
-.wg-svg { width: 100%; height: calc(100vh - 230px); min-height: 420px; border: 1px solid var(--rule); border-radius: 3px; background: var(--page-raised); cursor: grab; touch-action: none; }
+.wg-stage { position: relative; }
+/* the canvas reads as a sheet of dotted graph paper */
+.wg-svg { display: block; width: 100%; height: calc(100vh - 230px); min-height: 440px; border: 1px solid var(--rule); border-radius: 3px;
+  background-color: var(--page-raised);
+  background-image: radial-gradient(color-mix(in srgb, var(--ink) 11%, transparent) 1px, transparent 1.3px);
+  background-size: 24px 24px; cursor: grab; touch-action: none; }
 .wg-svg:active { cursor: grabbing; }
-.wg-links line { stroke: var(--rule-strong); stroke-width: 1; stroke-opacity: 0.7; transition: stroke-opacity 0.15s; }
-.wg-links line.hot { stroke: var(--ink-soft); stroke-opacity: 1; stroke-width: 1.5; }
-.wg-links line.dim { stroke-opacity: 0.12; }
-.wg-node { stroke: var(--page-raised); stroke-width: 2; cursor: pointer; transition: opacity 0.15s; }
-.wg-node.dim { opacity: 0.18; }
+.wg-links line { stroke: var(--rule-strong); stroke-width: 1; stroke-opacity: 0.75; stroke-linecap: round; transition: stroke-opacity 0.15s, stroke 0.15s; }
+.wg-links line.hot { stroke: var(--gilt-ink); stroke-opacity: 1; stroke-width: 1.6; }
+.wg-links line.dim { stroke-opacity: 0.1; }
+.wg-node { stroke: var(--page-raised); stroke-width: 2; cursor: pointer; transition: opacity 0.15s, stroke 0.15s; }
+.wg-node:hover { stroke: var(--ink); stroke-width: 1.5; }
+.wg-node.sel { stroke: var(--gilt); stroke-width: 3.5; }
+.wg-node.dim { opacity: 0.16; }
 .wg-node:focus-visible { outline: none; stroke: var(--gilt); stroke-width: 3; }
 .wg-labels text { font-family: var(--font-journal); fill: var(--ink); text-anchor: middle; pointer-events: none;
   paint-order: stroke; stroke: var(--page-raised); stroke-linejoin: round; display: none; }
 .wg-labels text.on, .wg-labels text.hot { display: block; }
 .wg-labels text.hot { font-weight: 600; }
 .wg-labels text.dim { display: none; }
+
+/* Find a page: a written line over the top left of the sheet */
+.wg-find { position: absolute; top: 12px; left: 12px; width: min(260px, calc(100% - 180px)); z-index: 2; }
+.wg-find-input { width: 100%; background: color-mix(in srgb, var(--page-raised) 88%, transparent); font: inherit; font-size: 17px; padding: 5px 2px; }
+.wg-find-input::-webkit-search-cancel-button { display: none; }
+.wg-find-list, .wg-card-links { list-style: none; margin: 0; padding: 0; }
+.wg-find-list { margin-top: 4px; background: var(--page-raised); border: 1px solid var(--rule-strong); border-radius: 3px; box-shadow: var(--shadow); padding: 4px 0; }
+.wg-find-list button, .wg-card-links button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: none;
+  padding: 5px 12px; font: inherit; font-size: 16px; color: var(--ink); cursor: pointer; transition: background 0.15s; }
+.wg-find-list button:hover, .wg-find-list button:focus-visible,
+.wg-card-links button:hover, .wg-card-links button:focus-visible { background: color-mix(in srgb, var(--gilt) 12%, transparent); outline: none; }
+.wg-find-list .wg-swatch, .wg-card-links .wg-swatch, .wg-card-kind .wg-swatch { width: 9px; height: 9px; flex-shrink: 0; }
+
+/* View tools and the Adjust slip, top right */
+.wg-tools { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; z-index: 2; }
+.wg-toolbar { display: flex; background: var(--page-raised); border: 1px solid var(--rule-strong); border-radius: 3px; }
+.wg-toolbar button { display: grid; place-items: center; width: 34px; height: 32px; background: none; border: none; color: var(--ink-soft); cursor: pointer;
+  transition: color 0.15s, background 0.15s; }
+.wg-toolbar button + button { border-left: 1px solid var(--rule); }
+.wg-toolbar button:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.wg-toolbar button.on { color: var(--rubric); background: color-mix(in srgb, var(--gilt) 12%, transparent); }
+.wg-toolbar button:focus-visible { outline: 2px solid var(--gilt); outline-offset: -2px; }
+.wg-panel, .wg-card { background: var(--page-raised); border: 1px solid var(--rule-strong); border-top: 3px solid var(--rubric); border-radius: 3px; box-shadow: var(--shadow); }
+.wg-panel { width: 290px; padding: 10px 16px 14px; display: flex; flex-direction: column; gap: 8px; }
+.wg-panel-head, .wg-card-head { display: flex; align-items: center; justify-content: space-between; }
+.wg-panel-head span { font-variant: small-caps; letter-spacing: 0.04em; font-size: 18px; color: var(--ink); }
+.wg-panel-close { background: none; border: none; padding: 4px; color: var(--ink-faint); cursor: pointer; display: grid; place-items: center; transition: color 0.15s; }
+.wg-panel-close:hover { color: var(--ink); }
+.wg-ctrl { display: grid; grid-template-columns: 96px 1fr 58px; align-items: center; gap: 10px; }
+.wg-ctrl-label { font-size: 15px; color: var(--ink-soft); }
+.wg-ctrl-val { font-size: 14px; color: var(--ink-faint); text-align: right; font-variant-numeric: lining-nums tabular-nums; }
+.wg-check { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--ink-soft); margin-top: 2px; cursor: pointer; }
+.wg-check input { accent-color: var(--rubric); }
+.wg-reset { align-self: flex-start; margin-top: 2px; }
+
+/* The picked page, bottom left */
+.wg-card { position: absolute; left: 12px; bottom: 12px; width: min(340px, calc(100% - 24px)); max-height: calc(100% - 80px); overflow: auto;
+  padding: 10px 16px 14px; z-index: 2; display: flex; flex-direction: column; gap: 6px; }
+.wg-card-kind { display: inline-flex; align-items: center; gap: 7px; font-variant: small-caps; letter-spacing: 0.04em; font-size: 15px; color: var(--ink-faint); }
+.wg-card-title { margin: 0; font-size: 23px; font-weight: 500; line-height: 1.2; }
+.wg-card-title a { color: var(--ink); text-decoration: none; }
+.wg-card-title a:hover { color: var(--rubric); }
+.wg-card-excerpt { margin: 0; font-size: 16px; line-height: 1.45; color: var(--ink-soft); }
+.wg-card-sub { margin-top: 4px; font-size: 14px; color: var(--ink-faint); border-top: 1px solid var(--rule); padding-top: 8px; }
+.wg-card-links { max-height: 190px; overflow: auto; margin: 0 -16px; }
+.wg-card-links button { padding: 4px 16px; font-size: 15px; }
+.wg-card-open { align-self: flex-start; margin-top: 6px; text-decoration: none; }
 .wiki-backlinks > .index-link { display: inline-block; margin-bottom: 14px; }
 @media (max-width: 768px) {
   .wg-svg { height: calc(100vh - 300px); }
+  .wg-find { width: calc(100% - 180px); }
+  .wg-panel { width: min(290px, calc(100vw - 56px)); }
+  .wg-card { max-height: 40%; }
+  .wg-tools { z-index: 3; }
 }
 
 /* ── Continuity checks (Continuity.tsx) ────────────────────────────────────── */
