@@ -4942,7 +4942,16 @@ def worker_get_continuity_job(slug: str, db: Session = Depends(get_db), request:
         transcript, _ = RuleSet(corrections, patterns).apply(transcript)
     summary = (d / "summary.md").read_text(encoding="utf-8") if (d / "summary.md").exists() else ""
     wiki = (d / "wiki_suggestions.md").read_text(encoding="utf-8") if (d / "wiki_suggestions.md").exists() else ""
-    return {"job": {"session_name": d.name, "summary": summary, "transcript": transcript, "wiki": wiki}}
+    # The pages as they are now, from the server's checkout: the worker's own vault
+    # copy can be weeks old (one was, and every finding quoted outdated pages).
+    pages = []
+    try:
+        vault = _wiki_vault(slug, db)
+        if vault:
+            pages = [{"path": p.path, "text": p.text} for p in _wiki_index(slug, vault).pages.values()]
+    except Exception:
+        pass
+    return {"job": {"session_name": d.name, "summary": summary, "transcript": transcript, "wiki": wiki, "pages": pages}}
 
 
 class ContinuityResultBody(BaseModel):

@@ -265,6 +265,26 @@ Start your response directly with ## [1] for the first wiki suggestion.
 """
 
 
+_vault_pulled_at: dict[str, float] = {}
+
+
+def refresh_vault(vault: Path) -> None:
+    """Bring the local vault checkout up to date (git pull, at most every 5 min).
+    Analysis reads it for the existing pages, and a stale copy (one was three
+    weeks old) makes the wiki suggestions refer to pages as they used to be."""
+    if not (vault / ".git").exists() or time.time() - _vault_pulled_at.get(str(vault), 0) < 300:
+        return
+    _vault_pulled_at[str(vault)] = time.time()
+    try:
+        r = subprocess.run(["git", "-C", str(vault), "pull", "--ff-only", "-q"],
+                           capture_output=True, text=True, timeout=120)
+        if r.returncode != 0:
+            print(f"[analysis] Warning: couldn't update the vault at {vault} "
+                  f"({(r.stderr or r.stdout).strip()[:200]}); using it as it is.")
+    except Exception as e:
+        print(f"[analysis] Warning: couldn't update the vault at {vault} ({e}); using it as it is.")
+
+
 def vault_index_block(campaign_vault: Path) -> str:
     """The vault's pages and their subsections, as a prompt section, so Claude
     knows exactly what already exists (analysis and the continuity check)."""
@@ -413,6 +433,7 @@ def run_analysis(transcript: str, config: dict, notes: str = "", wiki_only: bool
         raise RuntimeError(f"ANALYZE_SESSION.md not found at {ANALYZE_SESSION_MD}")
 
     campaign_vault = _resolve_campaign_vault(config)
+    refresh_vault(campaign_vault)
     if not campaign_vault.is_dir():
         print(f"[analysis] Warning: vault not found at {campaign_vault} — "
               f"proceeding without existing-pages context (set vault_path in "

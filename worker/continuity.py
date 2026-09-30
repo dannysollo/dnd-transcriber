@@ -129,21 +129,28 @@ def _secs(ts: str) -> int:
     return s
 
 
-def vault_pages(vault: Path) -> list[tuple[str, list[str], str]]:
-    """(relative path, names it goes by, text) for every page but the index."""
+def vault_pages(vault: Path | None, given: list[dict] | None = None) -> list[tuple[str, list[str], str]]:
+    """(relative path, names it goes by, text) for every page but the index: the
+    pages the server sent with the job when there are any (always current),
+    else the worker's own vault copy."""
+    if given:
+        files = [(Path(g["path"]), g["text"]) for g in given if g.get("path") and g.get("text") is not None]
+    else:
+        files = [(p.relative_to(vault), p.read_text(encoding="utf-8", errors="replace"))
+                 for p in sorted(vault.rglob("*.md"))]
     out = []
-    for p in sorted(vault.rglob("*.md")):
-        if "campaign-site" in p.parts or ".git" in p.parts or p.name in ("README.md", "Index.md"):
+    for rel_path, text in files:
+        if "campaign-site" in rel_path.parts or ".git" in rel_path.parts or rel_path.name in ("README.md", "Index.md"):
             continue
-        text = p.read_text(encoding="utf-8", errors="replace")
         # "Faerun & Bethesda" also answers to "Faerun" and "Bethesda".
-        names = [p.stem] + ([x.strip() for x in re.split(r"\s+&\s+|\s+and\s+", p.stem)] if " & " in p.stem or " and " in p.stem else [])
+        stem = rel_path.stem
+        names = [stem] + ([x.strip() for x in re.split(r"\s+&\s+|\s+and\s+", stem)] if " & " in stem or " and " in stem else [])
         front = FRONT_RE.match(text)
         if front:
             m = ALIASES_RE.search(front[1])
             if m:
                 names += [a.strip().strip("\"'") for a in m[1].split(",") if a.strip()]
-        out.append((p.relative_to(vault).as_posix(), names, text))
+        out.append((rel_path.as_posix(), names, text))
     return out
 
 
@@ -249,7 +256,7 @@ def build_prompt(job: dict, vault: Path, run_claude=None, config: dict | None = 
     summary = job.get("summary") or ""
     ex = excerpts(summary, job.get("transcript", ""))
     suggested = set(re.findall(r"^Page:\s*(.+?\.md)\s*$", job.get("wiki") or "", re.M))
-    pages = vault_pages(vault)
+    pages = vault_pages(vault, job.get("pages"))
     by_rel = {rel: (rel, names, text) for rel, names, text in pages}
     guessed = pick_pages(summary, pages, suggested, ex)
     picked: list[str] = []
@@ -281,7 +288,7 @@ def build_prompt(job: dict, vault: Path, run_claude=None, config: dict | None = 
 def run_job(job: dict, config: dict, vault: Path, run_claude) -> list[dict]:
     """Check one session (a job from /worker/continuity-jobs) against the vault at
     `vault`, in one tool-free call. main.py passes run_claude in. Returns the items."""
-    if not vault.is_dir():
+    if not job.get("pages") and not vault.is_dir():
         raise RuntimeError(f"vault not found at {vault}: set vault_path in worker.yaml")
     if not (job.get("summary") or "").strip():
         return []  # nothing to check against: the session hasn't been analysed
