@@ -179,7 +179,9 @@ def campaign_stats(sessions: list[dict], terms: list[str], config: dict) -> dict
 
 # ─── Deeper campaign stats: records, per-player profiles, quirks ─────────────
 
-LAUGH_RE = re.compile(r"^(?:(?:ha){2,}h?|(?:he){2,}|lol|lmao|lmfao|rofl)$", re.I)
+LAUGH_RE = re.compile(r"^(?:(?:ha){2,}h?|(?:he){2,}h?|heh|lol|lmao|lmfao|rofl)$", re.I)
+# Whisper usually writes a laugh as separate syllables ("Ha ha ha!", "Ha-ha-ha"), not "hahaha".
+LAUGH_SYLLABLE_RE = re.compile(r"^(?:hah?|heh?)$", re.I)
 SIG_WORD_RE = re.compile(r"[a-z]{4,}")
 WHOLE_WORD_RE = re.compile(r"[a-z]+(?:'[a-z]+)*")
 
@@ -686,7 +688,27 @@ def longest_overall_speech(lines: list[dict]) -> dict | None:
 
 
 def laugh_count(text: str) -> int:
-    return sum(1 for tok in WORD_RE.findall(text) if LAUGH_RE.match(tok))
+    """Laughs in a line: each unbroken run of laugh words counts once ("Ha ha ha!", "Lol. Lol.").
+
+    A lone "ha" isn't a laugh, and runs of plain "he" are almost always a stutter ("he he said"),
+    so those only count when the whole line is laughing ("He he he he").
+    """
+    toks = WORD_RE.findall(text)
+    is_laugh = [bool(LAUGH_RE.match(t) or LAUGH_SYLLABLE_RE.match(t)) for t in toks]
+    only_laughing = all(is_laugh)
+    count, i = 0, 0
+    while i < len(toks):
+        if not is_laugh[i]:
+            i += 1
+            continue
+        j = i
+        while j < len(toks) and is_laugh[j]:
+            j += 1
+        run = [t.lower() for t in toks[i:j]]
+        if any(LAUGH_RE.match(t) for t in run) or (j - i >= 2 and (only_laughing or any(t.startswith("ha") for t in run))):
+            count += 1
+        i = j
+    return count
 
 
 def exchange_pairs(lines: list[dict]) -> dict[tuple[str, str], int]:
