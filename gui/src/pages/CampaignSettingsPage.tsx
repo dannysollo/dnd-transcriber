@@ -638,6 +638,13 @@ export default function CampaignSettingsPage() {
                     description="Bias via faster-whisper's hotwords param instead of initial_prompt — beat initial_prompt on proper-noun accuracy in head-to-head testing"
                   />
                 </ConfigField>
+                <ConfigField label="Batched Transcription">
+                  <ConfigToggle
+                    value={config.batched_transcription ?? false}
+                    onChange={v => updateConfigField('batched_transcription', v)}
+                    description="Whisper transcribes many speech regions at once — about 2x faster on a full session, same accuracy in testing. Needs VAD on."
+                  />
+                </ConfigField>
                 <ConfigField label="Vocabulary Prompt">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <textarea

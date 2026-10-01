@@ -189,7 +189,7 @@ def apply_vad(wav_path: str) -> str:
 
 # ─── VAD-chunk transcription (accurate timestamps) ───────────────────────────
 
-def _transcribe_via_vad_chunks(wav_path: str, model, **whisper_kwargs) -> dict:
+def _transcribe_via_vad_chunks(wav_path: str, model, speech_ts: list | None = None, **whisper_kwargs) -> dict:
     """
     Transcribe a WAV using Silero VAD timestamps as anchors.
 
@@ -207,30 +207,12 @@ def _transcribe_via_vad_chunks(wav_path: str, model, **whisper_kwargs) -> dict:
 
     Returns {"segments": [{start, end, text}, ...]} sorted by start time.
     """
-    import soundfile as sf
-    import torch
-    import torchaudio
-    from silero_vad import get_speech_timestamps, load_silero_vad
     import tempfile
+    from vad_regions import speech_timestamps as silero_speech_timestamps
 
     # ── 1. Get speech timestamps from Silero VAD ──────────────────────────────
-    vad_model = load_silero_vad()
-    audio_np, sr = sf.read(wav_path, dtype="float32", always_2d=False)
-    wav_tensor = torch.from_numpy(audio_np)
-    if sr != SAMPLE_RATE:
-        wav_tensor = torchaudio.functional.resample(wav_tensor, sr, SAMPLE_RATE)
-    if wav_tensor.dim() > 1:
-        wav_tensor = wav_tensor.mean(0)
-
-    speech_timestamps = get_speech_timestamps(
-        wav_tensor, vad_model,
-        sampling_rate=SAMPLE_RATE,
-        threshold=0.4,
-        min_speech_duration_ms=300,
-        min_silence_duration_ms=500,
-        speech_pad_ms=400,
-        return_seconds=True,
-    )
+    # (speech_ts: already worked out in the background by transcribe_session)
+    speech_timestamps = speech_ts if speech_ts is not None else silero_speech_timestamps(wav_path)
 
     if not speech_timestamps:
         # No speech detected — fall back to transcribing the whole file
@@ -301,6 +283,93 @@ def _transcribe_via_vad_chunks(wav_path: str, model, **whisper_kwargs) -> dict:
     return {"segments": all_segments}
 
 
+# ─── Batched transcription (hybrid) ───────────────────────────────────────────
+
+# Batched regions are at most this long: BatchedInferencePipeline cuts each
+# clip_timestamps entry at 30 s, so speech runs are split at Silero's best pause.
+BATCHED_MAX_REGION_S = 30.0
+BATCH_SIZE = 16
+
+
+def _batched_regions(speech_ts: list) -> list[dict]:
+    """The regions _transcribe_via_vad_chunks would use (gaps < 1.5 s merged, < 0.5 s dropped), kept <= 30 s."""
+    regions = []
+    for ts in speech_ts:
+        if regions and ts["start"] - regions[-1]["end"] < 1.5 and ts["end"] - regions[-1]["start"] <= BATCHED_MAX_REGION_S:
+            regions[-1]["end"] = ts["end"]
+        else:
+            regions.append({"start": ts["start"], "end": min(ts["end"], ts["start"] + BATCHED_MAX_REGION_S)})
+    return [r for r in regions if r["end"] - r["start"] >= 0.5]
+
+
+def _looping(segments: list, duration: float) -> bool:
+    """A region whose text repeats itself ("Bye." x49 in 1.2 s, "The Black Blade, The Black Blade, ...")."""
+    import zlib
+    text = " ".join(s["text"] for s in segments)
+    raw = text.encode("utf-8")
+    return len(raw) / max(1, len(zlib.compress(raw))) > 2.4 or len(text.split()) / max(0.5, duration) > 6
+
+
+def _transcribe_batched(wav_path: str, model, speech_ts: list, **whisper_kwargs) -> dict:
+    """
+    The VAD-chunk approach with the regions transcribed in batches: same Silero
+    regions and absolute timestamps, ~2.3x faster on full Craig tracks with the
+    same accuracy (9-13 session, 2026-10-01: WER 3.3% vs 3.0%, same proper
+    nouns, 0.1% of lines shifted > 2 s).
+
+    Two things the batched pipeline does differently, both handled here:
+      - without_timestamps defaults to True there, which together with
+        hotwords drops or garbles the start of regions; keep timestamps on.
+      - It has no temperature fallback, so a region can loop. Those regions
+        (~1%) are redone one at a time the usual way.
+    """
+    import bisect
+    import soundfile as sf
+    from faster_whisper import BatchedInferencePipeline
+
+    regions = _batched_regions(speech_ts)
+    if not regions:
+        return transcribe_audio(model, wav_path, vad_filter=False, **whisper_kwargs)
+
+    pipeline = BatchedInferencePipeline(model)
+    batch_size = BATCH_SIZE
+    while True:
+        try:
+            result = transcribe_audio(pipeline, wav_path, vad_filter=False, clip_timestamps=regions,
+                                      batch_size=batch_size, without_timestamps=False, **whisper_kwargs)
+            break
+        except RuntimeError as e:
+            if "out of memory" not in str(e).lower() or batch_size == 1:
+                raise
+            batch_size //= 2
+            print(f"      GPU out of memory, retrying with batch size {batch_size}")
+
+    starts = [r["start"] for r in regions]
+    by_region: dict[int, list] = {}
+    for seg in result["segments"]:
+        by_region.setdefault(bisect.bisect_right(starts, seg["start"] + 0.05) - 1, []).append(seg)
+    redo = {k for k, segs in by_region.items() if k >= 0 and _looping(segs, regions[k]["end"] - regions[k]["start"])}
+
+    segments = [s for k, segs in by_region.items() if k not in redo for s in segs]
+    if redo:
+        audio, _ = sf.read(wav_path, dtype="float32")
+        for k in sorted(redo):
+            r = regions[k]
+            sub = transcribe_audio(model, audio[int(r["start"] * SAMPLE_RATE):int(r["end"] * SAMPLE_RATE)],
+                                   vad_filter=False, **whisper_kwargs)
+            for seg in sub["segments"]:
+                segments.append({
+                    **seg,
+                    "start": r["start"] + seg["start"],
+                    "end": r["start"] + seg["end"],
+                    "low_conf": [{**w, "t": round(r["start"] + w["t"], 2)} if "t" in w else w
+                                 for w in seg.get("low_conf", [])],
+                })
+        print(f"      redid {len(redo)} of {len(regions)} region(s) one at a time (repeating output)")
+    segments.sort(key=lambda s: s["start"])
+    return {"segments": segments}
+
+
 # ─── Per-speaker transcription ────────────────────────────────────────────────
 
 def transcribe_session(session_dir: Path, model, config: dict) -> tuple[str, dict]:
@@ -342,11 +411,44 @@ def transcribe_session(session_dir: Path, model, config: dict) -> tuple[str, dic
 
     print(f"  Found {len(audio_files)} speaker track(s)")
 
+    # batched_transcription: Whisper batches each track's speech regions (see
+    # _transcribe_batched). Off by default while it's tried on real sessions.
+    is_whisper = getattr(model, "_model_type", None) != "canary"
+    batched = bool(use_vad and is_whisper and config.get("batched_transcription", False))
+    max_region_s = BATCHED_MAX_REGION_S if batched else float("inf")
+
+    # Silero for every track starts now, one process each, so it runs on the
+    # CPU while the GPU works through the tracks before it (same regions as
+    # running it per track; see vad_regions.py).
+    prepared: dict = {}
+    if use_vad and is_whisper:
+        from vad_regions import start_speech_timestamps
+        for audio_file in audio_files:
+            if not diarize_module.should_diarize(audio_file.name, config):
+                wav = convert_to_wav(audio_file)
+                prepared[audio_file] = (wav, start_speech_timestamps(wav, max_region_s))
+    try:
+        _transcribe_tracks(audio_files, prepared, speakers_dir, model, config, players,
+                           vocab_prompt, use_vad, batched, max_region_s, whisper_biasing_kwargs)
+    finally:
+        for wav, pending in prepared.values():   # anything a failed run left behind
+            pending.cancel()
+            Path(wav).unlink(missing_ok=True)
+
+    split_shared_mics(session_dir, audio_files, speakers_dir, players, config)
+    return merge_speaker_jsons(speakers_dir, vocab_prompt=vocab_prompt)
+
+
+def _transcribe_tracks(audio_files, prepared, speakers_dir, model, config, players,
+                       vocab_prompt, use_vad, batched, max_region_s, whisper_biasing_kwargs) -> None:
+    """transcribe_session's per-track loop: writes speakers/<track>.json for each audio file."""
     for audio_file in audio_files:
         speaker = get_speaker_label(audio_file.name, players)
         print(f"  Transcribing: {audio_file.name} → {speaker}")
 
-        wav_path = convert_to_wav(audio_file)
+        wav_path, pending = prepared.get(audio_file, (None, None))
+        if wav_path is None:
+            wav_path = convert_to_wav(audio_file)
 
         # NOTE: External VAD zeroing (apply_vad) was removed because it conflicts
         # with faster-whisper's internal vad_filter=True.  Zeroing silence to
@@ -423,11 +525,17 @@ def transcribe_session(session_dir: Path, model, config: dict) -> tuple[str, dic
         # interleaving because Whisper's internal timestamp mapping can drift by
         # several seconds when processing concatenated speech chunks.
         elif use_vad:
-            result = _transcribe_via_vad_chunks(
-                wav_path, model,
-                language="en",
-                **whisper_biasing_kwargs,
-            )
+            from vad_regions import speech_timestamps as silero_speech_timestamps
+            speech_ts = pending.result() if pending else silero_speech_timestamps(wav_path, max_region_s)
+            if batched:
+                result = _transcribe_batched(wav_path, model, speech_ts, language="en", **whisper_biasing_kwargs)
+            else:
+                result = _transcribe_via_vad_chunks(
+                    wav_path, model,
+                    speech_ts=speech_ts,
+                    language="en",
+                    **whisper_biasing_kwargs,
+                )
         else:
             result = transcribe_audio(
                 model,
@@ -449,9 +557,6 @@ def transcribe_session(session_dir: Path, model, config: dict) -> tuple[str, dic
                 f, indent=2, ensure_ascii=False,
             )
         print(f"    → {len(result['segments'])} segments")
-
-    split_shared_mics(session_dir, audio_files, speakers_dir, players, config)
-    return merge_speaker_jsons(speakers_dir, vocab_prompt=vocab_prompt)
 
 
 def split_shared_mics(session_dir: Path, audio_files: list, speakers_dir: Path, players: dict, config: dict) -> None:

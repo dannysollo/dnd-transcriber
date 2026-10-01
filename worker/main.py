@@ -158,7 +158,7 @@ def poll_loop(config: dict, stop_event: threading.Event):
                 # (server.py worker_get_config forwards both) — listing them here too just
                 # lets a worker.yaml override them locally (e.g. weaker GPU forcing a
                 # smaller model regardless of what the campaign settings page says).
-                LOCAL_KEYS = ("whisper_model", "use_hotwords", "hf_token", "diarize_tracks", "diarize_all", "diarize_speakers")
+                LOCAL_KEYS = ("whisper_model", "use_hotwords", "batched_transcription", "hf_token", "diarize_tracks", "diarize_all", "diarize_speakers")
                 job_config = {**campaign_config, **{
                     k: config[k] for k in LOCAL_KEYS if k in config
                 }}

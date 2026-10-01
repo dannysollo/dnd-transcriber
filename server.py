@@ -4162,6 +4162,7 @@ def worker_get_config(slug: str, db: Session = Depends(get_db), request: Request
         "vad": config.get("vad", True),
         "whisper_model": config.get("whisper_model", "turbo"),
         "use_hotwords": config.get("use_hotwords", False),
+        "batched_transcription": config.get("batched_transcription", False),
     }
 
 
