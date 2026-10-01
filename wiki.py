@@ -196,6 +196,72 @@ def scan(vault: Path) -> WikiIndex:
     return WikiIndex(pages, by_title, backlinks)
 
 
+PARTY = "_party"   # player characters, and what they carry
+
+
+def factions(idx: WikiIndex) -> dict[str, str]:
+    """The faction each page belongs with, for grouping the graph (slug -> faction
+    slug, or PARTY); pages with none are left out.
+
+    A faction is itself. Player characters are the party. Other characters go by
+    their `affiliation`, then by leading a faction, then by their `base`; items by
+    who holds them (`held-by`); places by who rules them (`ruled-by`). A link to a
+    place counts when it's the base of exactly one faction (Canaan Labs, not a
+    region several share)."""
+    def prop_links(page: Page, key: str) -> list[str]:
+        out = []
+        for inner in LINK_RE.findall(_prop_text(page.props.get(key))):
+            slug = idx.resolve(link_target(inner)[0])
+            if slug and slug not in out:
+                out.append(slug)
+        return out
+
+    faction_pages = [p for p in idx.pages.values() if p.section == "Factions"]
+    based: dict[str, set[str]] = {}
+    led: dict[str, str] = {}
+    for f in faction_pages:
+        first = prop_links(f, "base")[:1]
+        for place in first:
+            based.setdefault(place, set()).add(f.slug)
+        for person in prop_links(f, "leader"):
+            led.setdefault(person, f.slug)
+    home_of = {place: next(iter(fs)) for place, fs in based.items() if len(fs) == 1}
+
+    memo: dict[str, str | None] = {}
+
+    def of(slug: str, depth: int = 0) -> str | None:
+        if slug in memo:
+            return memo[slug]
+        p = idx.pages[slug]
+        top = p.section.split("/")[0]
+        found = None
+        if p.section == "Factions":
+            found = slug
+        elif p.section == "Characters/PCs":
+            found = PARTY
+        elif depth < 3:
+            keys = {"Characters": ["affiliation", "_leads", "base"], "Items": ["held-by"],
+                    "Locations": ["ruled-by"]}.get(top, [])
+            for key in keys:
+                targets = [led[slug]] if key == "_leads" and slug in led else [] if key == "_leads" else prop_links(p, key)
+                for t in targets:
+                    tp = idx.pages[t]
+                    if tp.section == "Factions":
+                        found = t
+                    elif t in home_of:
+                        found = home_of[t]
+                    elif tp.section.startswith("Characters") and t != slug:
+                        found = of(t, depth + 1)
+                    if found:
+                        break
+                if found:
+                    break
+        memo[slug] = found
+        return found
+
+    return {slug: f for slug in idx.pages if (f := of(slug))}
+
+
 def fingerprint(vault: Path) -> tuple:
     """Changes whenever a page is added, removed or edited."""
     stamps = []

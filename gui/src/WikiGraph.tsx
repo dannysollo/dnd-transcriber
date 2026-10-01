@@ -15,7 +15,7 @@ import { CloseIcon, FitIcon, MinusIcon, PlusIcon, SlidersIcon } from './Icons'
 // click again (or "Open page") to open it. The Adjust panel re-lays it out
 // live, like the old campaign site's sliders; settings stay in this browser.
 
-interface Node extends SimulationNodeDatum { id: string; title: string; section: string; degree: number; excerpt?: string }
+interface Node extends SimulationNodeDatum { id: string; title: string; section: string; degree: number; excerpt?: string; faction?: string | null }
 interface Edge { source: string | Node; target: string | Node }
 
 // Kinds in legend order, each with its fixed colour slot (index.css --wg-*).
@@ -50,9 +50,10 @@ interface Settings {
   names: number        // best-connected pages always named
   hideLonely: boolean  // leave out pages with no links
   softenHubs: boolean  // links to much-linked pages pull less (d3's own default), so the rest branch out
-  groupByKind: boolean // each kind of page gathers in its own place around a circle
+  groupByFaction: boolean // each faction's pages gather in their own place around a circle
+  groupPull: number    // grouped, how strongly pages hold to their faction's place
 }
-const DEFAULTS: Settings = { spacing: 700, linkLength: 120, linkPull: 0.12, dotSize: 1, textSize: 13, names: 14, hideLonely: false, softenHubs: true, groupByKind: false }
+const DEFAULTS: Settings = { spacing: 700, linkLength: 120, linkPull: 0.12, dotSize: 1, textSize: 13, names: 14, hideLonely: false, softenHubs: true, groupByFaction: false, groupPull: 0.5 }
 const STORAGE_KEY = 'wikiGraph.settings'
 function loadSettings(): Settings {
   try {
@@ -66,6 +67,7 @@ const SLIDERS: { key: keyof Settings; label: string; min: number; max: number; s
   { key: 'spacing', label: 'Spacing', min: 50, max: 2000, step: 10, fmt: v => String(v) },
   { key: 'linkLength', label: 'Link length', min: 20, max: 300, step: 5, fmt: v => String(v) },
   { key: 'linkPull', label: 'Link pull', min: 0.01, max: 1, step: 0.01, fmt: v => v.toFixed(2) },
+  { key: 'groupPull', label: 'Group pull', min: 0.02, max: 1, step: 0.01, fmt: v => v.toFixed(2) },
   { key: 'dotSize', label: 'Dot size', min: 0.4, max: 3, step: 0.1, fmt: v => v.toFixed(1) + '×' },
   { key: 'textSize', label: 'Name size', min: 9, max: 22, step: 1, fmt: v => v + 'px' },
   { key: 'names', label: 'Names shown', min: 0, max: 60, step: 1, fmt: v => (v ? String(v) : 'on hover') },
@@ -85,7 +87,7 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
   const navigate = useNavigate()
   const svgRef = useRef<SVGSVGElement>(null)
   const apiRef = useRef<GraphApi | null>(null)
-  const [data, setData] = useState<{ nodes: Node[]; links: Edge[] } | null>(null)
+  const [data, setData] = useState<{ nodes: Node[]; links: Edge[]; groups?: { id: string; title: string }[] } | null>(null)
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [tip, setTip] = useState<{ x: number; y: number; node: Node } | null>(null)
   const [settings, setSettings] = useState<Settings>(loadSettings)
@@ -142,14 +144,21 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     const shownDegree = new Map<string, number>()
     for (const [id, near] of neighbours) shownDegree.set(id, near.size)
     const idOf = (e: string | Node) => (typeof e === 'string' ? e : e.id)
-    const kindOfId = new Map(nodes.map(n => [n.id, kindOf(n.section)]))
+    const groupOf = (n: Node) => n.faction ?? ''   // '' = no faction
+    const groupOfId = new Map(nodes.map(n => [n.id, groupOf(n)]))
 
-    // Group by kind: each kind shown gets a point on a circle, in legend order
-    const kindsShown = [...KINDS.map(k => k.key), 'Other'].filter(k => nodes.some(n => kindOf(n.section) === k))
-    const anchor = (kind: string) => {
-      const i = kindsShown.indexOf(kind), a = (i / kindsShown.length) * 2 * Math.PI - Math.PI / 2
-      // the circle grows with the number of pages and the spacing, so groups don't overlap
-      const r = 16 * Math.sqrt(nodes.length * settingsRef.current.spacing / 100)
+    // Group by faction: each faction shown gets a point on a circle (the party
+    // first, then the biggest); pages with no faction stay in the middle.
+    const groupsShown = (data.groups ?? []).filter(gr => nodes.some(n => n.faction === gr.id))
+    const groupIds = groupsShown.map(gr => gr.id)
+    const unaffiliated = nodes.filter(n => !n.faction).length
+    const anchor = (group: string) => {
+      const i = groupIds.indexOf(group)
+      if (i < 0) return { x: width / 2, y: height / 2, dx: 0, dy: 0 }
+      const a = (i / groupIds.length) * 2 * Math.PI - Math.PI / 2
+      // the circle clears the pages with no faction in the middle, and gives each group room around it
+      const sp = Math.sqrt(settingsRef.current.spacing / 100)
+      const r = sp * (22 * Math.sqrt(unaffiliated) + 60 * groupIds.length / Math.PI)
       return { x: width / 2 + r * Math.cos(a), y: height / 2 + r * Math.sin(a), dx: Math.cos(a), dy: Math.sin(a) }
     }
 
@@ -166,15 +175,16 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
           const least = Math.min(shownDegree.get(idOf(l.source)) ?? 1, shownDegree.get(idOf(l.target)) ?? 1)
           pull = Math.min(1, (s.linkPull * 8) / Math.max(1, least))
         }
-        // grouped, links between kinds only lean on each other, or they'd drag the groups back into one ball
-        if (s.groupByKind && kindOfId.get(idOf(l.source)) !== kindOfId.get(idOf(l.target))) pull *= 0.12
+        // grouped, links between groups only lean on each other, or they'd drag the groups back into one ball
+        if (s.groupByFaction && groupOfId.get(idOf(l.source)) !== groupOfId.get(idOf(l.target))) pull *= 0.12
         return pull
       })
       chargeForce.strength(-s.spacing)
       collide.radius(d => radius(d) + 6)
-      if (s.groupByKind) {
-        xForce.x(d => anchor(kindOf(d.section)).x).strength(0.3)
-        yForce.y(d => anchor(kindOf(d.section)).y).strength(0.3)
+      if (s.groupByFaction) {
+        // factions hold to their places; the unaffiliated only loosely to the middle
+        xForce.x(d => anchor(groupOf(d)).x).strength(d => (groupOf(d) ? s.groupPull : s.groupPull * 0.24))
+        yForce.y(d => anchor(groupOf(d)).y).strength(d => (groupOf(d) ? s.groupPull : s.groupPull * 0.24))
       } else {
         // pages with no links would drift to the edges and shrink the fitted view
         xForce.x(width / 2).strength(d => (d.degree ? 0.035 : 0.3))
@@ -199,8 +209,8 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     const dot = g.append('g').attr('class', 'wg-nodes').selectAll<SVGCircleElement, Node>('circle').data(nodes).join('circle')
       .attr('fill', d => colorOf(kindOf(d.section))).attr('class', 'wg-node')
       .attr('tabindex', 0).attr('role', 'link').attr('aria-label', d => `${d.title}, ${d.degree} links`)
-    const kindLabel = g.append('g').attr('class', 'wg-kinds').selectAll<SVGTextElement, string>('text').data(kindsShown).join('text')
-      .text(k => kindLabelOf(k))
+    const groupLabel = g.append('g').attr('class', 'wg-groups').selectAll<SVGTextElement, { id: string; title: string }>('text')
+      .data(groupsShown).join('text').text(gr => gr.title)
     const label = g.append('g').attr('class', 'wg-labels').selectAll<SVGTextElement, Node>('text').data(nodes).join('text')
       .text(d => d.title)
 
@@ -211,17 +221,40 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
         .attr('x2', d => (d.target as Node).x!).attr('y2', d => (d.target as Node).y!)
       dot.attr('cx', d => d.x!).attr('cy', d => d.y!)
       label.attr('x', d => d.x!).attr('y', d => d.y!)
-      // group names sit just outside their group, on the side facing away from the middle
-      const grouped = settingsRef.current.groupByKind
-      kindLabel.classed('on', grouped)
-      if (grouped) kindLabel.each(function (kind) {
-        const members = nodes.filter(n => kindOf(n.section) === kind)
+      placeGroups()
+    }
+    // group names sit just outside their group, on the side facing away from the middle;
+    // their size is fixed on screen, so this runs on zoom too
+    // where each group's name goes at zoom kk (in graph units; the names' size is fixed on screen)
+    const spotsAt = (kk: number) => {
+      const size = (width < 600 ? 12 : 17) / kk
+      const spots = groupsShown.map(gr => {
+        const members = nodes.filter(n => n.faction === gr.id)
         const cx = members.reduce((t, n) => t + n.x!, 0) / members.length
         const cy = members.reduce((t, n) => t + n.y!, 0) / members.length
-        const { dx, dy } = anchor(kind)
+        const { dx, dy } = anchor(gr.id)
         const reach = Math.max(...members.map(n => (n.x! - cx) * dx + (n.y! - cy) * dy))
-        select(this).attr('x', cx + dx * (reach + 34 / k)).attr('y', cy + dy * (reach + 34 / k))
+        // small caps run about 0.62 of the font size per letter
+        return { id: gr.id, x: cx + dx * (reach + 34 / kk), y: cy + dy * (reach + 34 / kk), dy, half: gr.title.length * size * 0.31, size }
       })
+      // names that would overlap step apart, away from the middle
+      for (let pass = 0; pass < 4; pass++) {
+        for (const a of spots) for (const b of spots) {
+          if (a === b || Math.abs(a.x - b.x) > a.half + b.half || Math.abs(a.y - b.y) > size * 1.2) continue
+          const outer = Math.abs(a.dy) >= Math.abs(b.dy) ? a : b
+          outer.y += (outer.dy >= 0 ? 1 : -1) * (size * 1.25 - Math.abs(a.y - b.y))
+        }
+      }
+      return spots
+    }
+    // group names sit just outside their group, on the side facing away from the middle;
+    // their size is fixed on screen, so this runs on zoom too
+    const placeGroups = () => {
+      const grouped = settingsRef.current.groupByFaction
+      groupLabel.classed('on', grouped)
+      if (!grouped) return
+      const at = new Map(spotsAt(k).map(sp => [sp.id, sp]))
+      groupLabel.attr('x', gr => at.get(gr.id)!.x).attr('y', gr => at.get(gr.id)!.y)
     }
     // sizes and which names stand: dots scale with the setting, names stay a
     // readable size on screen at any zoom
@@ -231,7 +264,7 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
       const standing = width < 600 ? Math.min(s.names, 5) : s.names
       named = new Set([...nodes].sort((a, b) => b.degree - a.degree).slice(0, standing).map(n => n.id))
       dot.attr('r', radius)
-      kindLabel.attr('font-size', 17 / k).attr('stroke-width', 4 / k)
+      groupLabel.attr('font-size', (width < 600 ? 12 : 17) / k).attr('stroke-width', 4 / k)
       label.attr('font-size', s.textSize / k).attr('stroke-width', 3 / k).attr('dy', d => -radius(d) - 4 / k)
         .classed('on', d => named.has(d.id) || k >= LABEL_ZOOM)
     }
@@ -251,6 +284,7 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
       g.attr('transform', t.toString())
       k = t.k
       restyle()
+      placeGroups()
     })
     svg.call(zoomer).on('dblclick.zoom', null)
 
@@ -258,11 +292,22 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     const fit = (subset: Node[], maxScale: number, animate = true) => {
       if (!subset.length) return
       const xs = subset.map(n => n.x!), ys = subset.map(n => n.y!)
-      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
-      // margins on screen: grouped, the group names sit outside the dots and need more room at the sides
-      const grouped = settingsRef.current.groupByKind && subset.length === nodes.length
-      const padX = grouped ? Math.min(120, width * 0.2) : 48, padY = grouped ? 64 : 48
-      const s = Math.max(0.05, Math.min(maxScale, (width - 2 * padX) / Math.max(1, x1 - x0), (height - 2 * padY) / Math.max(1, y1 - y0)))
+      let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
+      const pad = 40   // on screen
+      const scaleFor = () => Math.max(0.05, Math.min(maxScale, (width - 2 * pad) / Math.max(1, x1 - x0), (height - 2 * pad) / Math.max(1, y1 - y0)))
+      let s = scaleFor()
+      // grouped, frame the group names too; where they fall depends on the zoom, so settle it in a few rounds
+      if (settingsRef.current.groupByFaction && subset.length === nodes.length) {
+        const nx0 = x0, nx1 = x1, ny0 = y0, ny1 = y1
+        for (let round = 0; round < 3; round++) {
+          x0 = nx0; x1 = nx1; y0 = ny0; y1 = ny1
+          for (const sp of spotsAt(s)) {
+            x0 = Math.min(x0, sp.x - sp.half); x1 = Math.max(x1, sp.x + sp.half)
+            y0 = Math.min(y0, sp.y - sp.size); y1 = Math.max(y1, sp.y + sp.size)
+          }
+          s = scaleFor()
+        }
+      }
       const t = zoomIdentity.translate(width / 2 - s * (x0 + x1) / 2, height / 2 - s * (y0 + y1) / 2).scale(s)
       if (animate && duration) svg.transition().duration(duration).call(zoomer.transform, t)
       else svg.call(zoomer.transform, t)
@@ -335,12 +380,12 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     apiRef.current?.select(focus ?? null, true)
   }, [focus])
 
-  useEffect(() => { apiRef.current?.relayout() }, [settings.spacing, settings.linkLength, settings.linkPull, settings.dotSize, settings.softenHubs])
+  useEffect(() => { apiRef.current?.relayout() }, [settings.spacing, settings.linkLength, settings.linkPull, settings.dotSize, settings.softenHubs, settings.groupPull])
   const firstGroup = useRef(true)
   useEffect(() => {
     if (firstGroup.current) { firstGroup.current = false; return }
     apiRef.current?.relayout(true)
-  }, [settings.groupByKind])
+  }, [settings.groupByFaction])
   useEffect(() => { apiRef.current?.restyle() }, [settings.textSize, settings.names])
 
   const toggle = (k: string) => setHidden(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n })
@@ -421,10 +466,11 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
                   </div>
                   {SLIDERS.map(sl => {
                     const v = settings[sl.key] as number
+                    const off = sl.key === 'groupPull' && !settings.groupByFaction   // only matters grouped
                     return (
-                      <label key={sl.key} className="wg-ctrl">
+                      <label key={sl.key} className={'wg-ctrl' + (off ? ' off' : '')} title={off ? 'Turn on Group by faction to use this' : undefined}>
                         <span className="wg-ctrl-label">{sl.label}</span>
-                        <input type="range" className="journal-scrubber" min={sl.min} max={sl.max} step={sl.step} value={v}
+                        <input type="range" className="journal-scrubber" disabled={off} min={sl.min} max={sl.max} step={sl.step} value={v}
                           onChange={e => set(sl.key, parseFloat(e.target.value) as never)}
                           style={{ ['--pct' as string]: `${((v - sl.min) / (sl.max - sl.min)) * 100}%` }} />
                         <span className="wg-ctrl-val">{sl.fmt(v)}</span>
@@ -432,8 +478,8 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
                     )
                   })}
                   <label className="wg-check">
-                    <input type="checkbox" checked={settings.groupByKind} onChange={e => set('groupByKind', e.target.checked)} />
-                    Group by kind
+                    <input type="checkbox" checked={settings.groupByFaction} onChange={e => set('groupByFaction', e.target.checked)} />
+                    Group by faction
                   </label>
                   <label className="wg-check">
                     <input type="checkbox" checked={settings.softenHubs} onChange={e => set('softenHubs', e.target.checked)} />

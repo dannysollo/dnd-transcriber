@@ -4390,10 +4390,17 @@ def campaign_wiki_graph(slug: str, user: Optional[User] = Depends(get_current_us
     for a, b in edges:
         degree[a] = degree.get(a, 0) + 1
         degree[b] = degree.get(b, 0) + 1
+    faction = wiki.factions(idx)
     nodes = [{"id": p.slug, "title": p.title, "section": p.section, "degree": degree.get(p.slug, 0),
-              "excerpt": wiki.excerpt(p.body, 160)}
+              "excerpt": wiki.excerpt(p.body, 160), "faction": faction.get(p.slug)}
              for p in idx.pages.values() if p.slug not in skip]
-    return {"nodes": nodes, "links": [{"source": a, "target": b} for a, b in edges]}
+    # the groups' names, for "Group by faction" (the party first, then the biggest)
+    sizes: dict[str, int] = {}
+    for f in faction.values():
+        sizes[f] = sizes.get(f, 0) + 1
+    groups = [{"id": f, "title": "The party" if f == wiki.PARTY else idx.pages[f].title.removesuffix(" (Faction)")}
+              for f in sorted(sizes, key=lambda f: (f != wiki.PARTY, -sizes[f], f))]
+    return {"nodes": nodes, "links": [{"source": a, "target": b} for a, b in edges], "groups": groups}
 
 
 @app.get("/campaigns/{slug}/wiki/pages/{page}")

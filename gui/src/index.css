@@ -1207,9 +1207,9 @@ button.wiki-missing { cursor: pointer; }
 .wg-labels text.on, .wg-labels text.hot { display: block; }
 .wg-labels text.hot { font-weight: 600; }
 .wg-labels text.dim { display: none; }
-.wg-kinds text { font-family: var(--font-journal); font-variant: small-caps; letter-spacing: 0.06em; fill: var(--ink-soft); text-anchor: middle;
+.wg-groups text { font-family: var(--font-journal); font-variant: small-caps; letter-spacing: 0.06em; fill: var(--ink-soft); text-anchor: middle;
   dominant-baseline: middle; pointer-events: none; paint-order: stroke; stroke: var(--page-raised); stroke-linejoin: round; display: none; }
-.wg-kinds text.on { display: block; }
+.wg-groups text.on { display: block; }
 
 /* Find a page: a written line over the top left of the sheet */
 .wg-find { position: absolute; top: 12px; left: 12px; width: min(260px, calc(100% - 180px)); z-index: 2; }
@@ -1240,6 +1240,8 @@ button.wiki-missing { cursor: pointer; }
 .wg-panel-close:hover { color: var(--ink); }
 .wg-ctrl { display: grid; grid-template-columns: 96px 1fr 58px; align-items: center; gap: 10px; }
 .wg-ctrl-label { font-size: 15px; color: var(--ink-soft); }
+.wg-ctrl.off { opacity: 0.45; }
+.wg-ctrl.off input { cursor: not-allowed; }
 .wg-ctrl-val { font-size: 14px; color: var(--ink-faint); text-align: right; font-variant-numeric: lining-nums tabular-nums; }
 .wg-check { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--ink-soft); margin-top: 2px; cursor: pointer; }
 .wg-check input { accent-color: var(--rubric); }
