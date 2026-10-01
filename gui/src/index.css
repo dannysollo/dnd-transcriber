@@ -469,7 +469,8 @@ span.transcript-ts { cursor: default; }
   .session-tabs-row[data-edges="end"] { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
   .session-tabs-row[data-edges="start"] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 15%); mask-image: linear-gradient(90deg, transparent, #000 15%); }
   .session-tabs-row[data-edges="both"] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent); mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent); }
-  .session-content { --ts-col: 54px; --ts-gap: 10px; }
+  .session-content { --ts-col: 54px; --ts-gap: 10px; overflow-x: hidden !important; overscroll-behavior-x: none; }
+  .session-view-root, .app-main { overflow-x: clip; }
   .session-header h1 { font-size: 28px !important; }
   .transcript-ts { font-size: 13px; }
   /* The ribbon lies across the top of the page instead of hanging down its edge. */
@@ -805,6 +806,8 @@ input.written-line:focus {
 .edit-lines { display: flex; flex-direction: column; }
 /* Scroll position is kept by hand when blocks fill in (see EditChunk), so native anchoring stays out of it. */
 .edit-chunk, .edit-chunk-placeholder { overflow-anchor: none; display: flex; flex-direction: column; }
+/* Reading-view blocks (ReadChunk): same hand-kept scroll position; contain keeps a block's layout to itself. */
+.read-chunk { overflow-anchor: none; contain: layout style; }
 .edit-row { display: flex; gap: 8px; padding: 3px 6px; align-items: flex-start; border-radius: 3px;
   content-visibility: auto; contain-intrinsic-size: auto 34px; }
 .edit-row.editing { background: color-mix(in srgb, var(--ochre) 8%, transparent); content-visibility: visible; }
@@ -842,7 +845,7 @@ input.written-line:focus {
   box-shadow: inset 2px 0 0 var(--gilt); }
 .transcript-line.active .transcript-ts { color: var(--gilt-ink); }
 .transcript-line.flash { background: var(--highlighter); }
-.read-text { margin: 0; font-size: 19px; line-height: 1.55; color: var(--ink); max-width: 70ch; }
+.read-text { margin: 0; font-size: 19px; line-height: 1.55; color: var(--ink); max-width: 70ch; overflow-wrap: anywhere; }
 .read-text .speaker-name { margin-right: 0.4em; }
 .read-text .speaker-player { margin-right: 0.5em; }
 .read-heading { font-size: 20px; color: var(--rubric); margin: 24px 0 8px 96px; }

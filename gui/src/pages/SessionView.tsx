@@ -675,10 +675,18 @@ export default function SessionView() {
       if (!el) return
       container.scrollTop += el.getBoundingClientRect().top - container.getBoundingClientRect().top - anchor.offset
     }
-    let placedAt = -1
-    const frame = requestAnimationFrame(() => { place(); placedAt = container.scrollTop })
-    const settle = window.setTimeout(() => { if (container.scrollTop === placedAt) place() }, 300)
-    return () => { cancelAnimationFrame(frame); window.clearTimeout(settle) }
+    // "Unless you've started scrolling yourself": real input, not the scroll
+    // position (blocks filling in above move that by themselves; see useLazyBlock).
+    let touched = false
+    const onInput = () => { touched = true }
+    const inputs = ['wheel', 'touchstart', 'keydown', 'mousedown'] as const
+    inputs.forEach(ev => container.addEventListener(ev, onInput, { passive: true }))
+    const frame = requestAnimationFrame(place)
+    const settles = [300, 800].map(ms => window.setTimeout(() => { if (!touched) place() }, ms))
+    return () => {
+      cancelAnimationFrame(frame); settles.forEach(t => window.clearTimeout(t))
+      inputs.forEach(ev => container.removeEventListener(ev, onInput))
+    }
   }, [editMode])
 
   // Window-level drag-and-drop
@@ -1669,7 +1677,7 @@ export default function SessionView() {
       )}
 
       {/* Content */}
-      <div ref={sessionContentRef} className={'session-content' + (audioFiles.length > 0 ? ' has-audio' : '')} onScroll={onContentScroll} style={{ flex: 1, overflow: 'auto', padding: '18px 48px', paddingBottom: !mainAudioVisible && audioFiles.length > 0 ? '80px' : '40px' }}>
+      <div ref={sessionContentRef} className={'session-content' + (audioFiles.length > 0 ? ' has-audio' : '')} onScroll={onContentScroll} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '18px 48px', paddingBottom: !mainAudioVisible && audioFiles.length > 0 ? '80px' : '40px' }}>
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '820px' }}>
             {[0,1,2,3].map(i => (
@@ -2019,8 +2027,7 @@ function TranscriptView({
 
   const continueReading = () => {
     if (!ribbonTs) return
-    const el = pageRef.current?.querySelector<HTMLElement>(`[data-ts="${ribbonTs}"]`)
-    el?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    setJumpIdx(visibleLines.findIndex(l => l.type === 'speech' && l.timestamp === ribbonTs))
     setRibbonTs(null)
   }
   // activeIdx is computed during render; we use a ref to scroll without triggering re-renders
@@ -2098,13 +2105,54 @@ function TranscriptView({
     return idx
   }, [visibleLines, currentTime])
 
+  // The reading view in blocks of READ_CHUNK lines (ReadChunk), with what each
+  // block needs computed once per transcript, so a block's props only change
+  // when something inside it does.
+  const readChunks = useMemo(() => {
+    const out: ReadChunkData[] = []
+    for (let s = 0; s < visibleLines.length; s += READ_CHUNK) {
+      const e = Math.min(visibleLines.length, s + READ_CHUNK)
+      out.push({
+        start: s, lines: visibleLines.slice(s, e), silence: readDerived.silence.slice(s, e),
+        continued: readDerived.continued.slice(s, e), nextTs: readDerived.nextTs.slice(s, e),
+        lowConf: lowConfPerLine.slice(s, e), rolls: rollsPerLine ? rollsPerLine.slice(s, e) : null,
+      })
+    }
+    return out
+  }, [visibleLines, readDerived, lowConfPerLine, rollsPerLine])
+  const savedKeys = useMemo(() => readChunks.map(c => c.lines
+    .map((l, i) => (l.type === 'speech' && quotes.some(q => q.ts === l.timestamp && q.text === (l.text ?? '').trim()) ? i : -1))
+    .filter(i => i >= 0).join(',')), [readChunks, quotes])
+  const targetIdx = useMemo(() => (targetTimestamp
+    ? visibleLines.findIndex(l => l.type === 'speech' && l.timestamp === targetTimestamp) : -1), [visibleLines, targetTimestamp])
+  const flashIdx = useMemo(() => (flashTimestamp
+    ? visibleLines.findIndex(l => l.type === 'speech' && l.timestamp === flashTimestamp) : -1), [visibleLines, flashTimestamp])
+  // Coming back from edit mode: the line you were on has to be rendered to be put back on screen.
+  const anchorIdx = useMemo(() => (initialEditLine != null
+    ? visibleLines.findIndex(l => l.lineIdx === initialEditLine) : -1), [visibleLines, initialEditLine])
+  // "Continue from": render that line's block, then scroll to it.
+  const [jumpIdx, setJumpIdx] = useState(-1)
+  useEffect(() => {
+    if (jumpIdx < 0) return
+    const frame = requestAnimationFrame(() => {
+      const line = visibleLines[jumpIdx]
+      const el = pageRef.current?.querySelector<HTMLElement>(`[data-line-idx="${line?.lineIdx}"]`)
+      if (el) scrollToLine(el, 'start')
+      setJumpIdx(-1)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [jumpIdx])
+
   // Scroll active line into view — suppressed in edit mode to prevent audio controls
   // from hijacking scroll or blurring the active text input
   useEffect(() => {
     if (editMode) return
     const el = activeLineRef.current
     if (!el) return
-    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    // a seek far away (not the next line as it plays) jumps rather than glides
+    const root = el.closest('.session-content') as HTMLElement | null
+    const far = root ? Math.abs(el.getBoundingClientRect().top - root.getBoundingClientRect().top) > root.clientHeight * 1.5 : false
+    el.scrollIntoView({ block: 'nearest', behavior: far ? 'auto' : 'smooth' })
   }, [activeIdx, editMode])
 
   // Line saves only update editedLines, so hand the saved text up when
@@ -2152,7 +2200,7 @@ function TranscriptView({
     if (!targetTimestamp) return
     const timer = setTimeout(() => {
       if (targetLineRef.current) {
-        targetLineRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        scrollToLine(targetLineRef.current)
         setFlashTimestamp(targetTimestamp)
         setTimeout(() => {
           setFlashTimestamp(null)
@@ -2426,8 +2474,6 @@ function TranscriptView({
 
   // ── Read mode rendering ──────────────────────────────────────────────────
   // (parsedLines, visibleLines, activeIdx are computed via useMemo above)
-  const visible = visibleLines
-
   // Stable callbacks for the memoised lines (they read the latest closures via a ref).
   readActionsRef.current = {
     seek: (t, speaker) => onSeek?.(t, speaker),
@@ -2447,29 +2493,30 @@ function TranscriptView({
           </button>
         </div>
       )}
-      {visible.map((line, i) => (
-        <ReadLine
-          key={i}
-          line={line}
-          isActive={i === activeIdx}
-          isTarget={line.type === 'speech' && line.timestamp === targetTimestamp}
-          isFlash={line.type === 'speech' && line.timestamp === flashTimestamp}
-          silenceBefore={readDerived.silence[i]}
-          continued={readDerived.continued[i]}
-          nextTs={readDerived.nextTs[i]}
-          lowConf={lowConfPerLine[i]}
-          search={searchLower}
-          canSeek={!!onSeek}
-          canQuote={canQuote}
-          canReview={!!onReviewWord}
-          rolls={rollsPerLine?.[i] ?? NO_ROLLS}
-          isDm={isDm}
-          quoteSaved={canQuote && line.type === 'speech' ? !!quoteFor(line) : false}
-          actions={readActions}
-          activeRef={activeLineRef}
-          targetRef={targetLineRef}
-        />
-      ))}
+      {readChunks.map((c, k) => {
+        const at = (i: number) => (i >= c.start && i < c.start + c.lines.length ? i - c.start : -1)
+        return (
+          <ReadChunk
+            key={k}
+            chunk={c}
+            activeIdx={at(activeIdx)}
+            targetIdx={at(targetIdx)}
+            flashIdx={at(flashIdx)}
+            force={at(jumpIdx) >= 0 || at(anchorIdx) >= 0}
+            initial={k < 2}
+            search={searchLower}
+            savedKey={savedKeys[k]}
+            canSeek={!!onSeek}
+            canQuote={canQuote}
+            canReview={!!onReviewWord}
+            isDm={isDm}
+            quoteSaved={line => !!quoteFor(line)}
+            actions={readActions}
+            activeRef={activeLineRef}
+            targetRef={targetLineRef}
+          />
+        )
+      })}
     </div>
   )
 }
@@ -5147,6 +5194,145 @@ const ReadLine = React.memo(function ReadLine({ line, isActive, isTarget, isFlas
   )
 })
 
+/**
+ * Put a line on screen. Smooth only for a short way: a long smooth scroll
+ * passes blocks that fill in as it goes, and keeping the page steady while they
+ * do (useLazyBlock) cuts the smooth scroll short, miles from the line. So far
+ * jumps are instant, then centred again once the blocks around have filled in.
+ */
+function scrollToLine(el: HTMLElement, block: ScrollLogicalPosition = 'center') {
+  const root = el.closest('.session-content') as HTMLElement | null
+  const far = root ? Math.abs(el.getBoundingClientRect().top - root.getBoundingClientRect().top) > root.clientHeight * 1.5 : false
+  el.scrollIntoView({ block, behavior: far ? 'auto' : 'smooth' })
+  if (far) window.setTimeout(() => el.isConnected && el.scrollIntoView({ block, behavior: 'auto' }), 250)
+}
+
+// Long transcripts are drawn in blocks of lines. A block is rendered once it
+// comes within LAZY_AHEAD px of the screen, and turned back into an empty
+// spacer of exactly its measured height once it's more than LAZY_KEEP px away,
+// so a phone only ever lays out and paints a few hundred lines, whichever way
+// you scroll. (Thousands of rendered lines made scrolling a fresh transcript
+// lag on phones, and scrolling back up too.)
+const LAZY_AHEAD = 3000
+const LAZY_KEEP = 9000
+
+/**
+ * The block's wrapper ref, whether its lines are rendered, and the height to
+ * give it while they aren't (`estimate` until it has been measured once).
+ * `force` keeps it rendered (the line being edited, played or jumped to).
+ * When a block above the screen fills in, the scroll position is corrected by
+ * the difference so the text you're looking at doesn't jump (iOS Safari has no
+ * native scroll anchoring, so it's done by hand and native anchoring is off
+ * for these blocks). A block measured once comes back at exactly its old
+ * height, so scrolling back over it never moves the page. `initial` renders it
+ * straight away (the top of a fresh transcript shouldn't flash a throbber).
+ */
+function useLazyBlock(force: boolean, estimate: () => number, initial = false) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [shown, setShown] = useState(force || initial)
+  const mounted = useRef(false)
+  if (force && !shown) setShown(true)
+  const [savedH, setSavedH] = useState(0)   // its real height, from the last time it was rendered
+  const state = useRef({ shown, force })
+  useEffect(() => { state.current = { shown, force } })
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const root = el.closest('.session-content')
+    const near = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) setShown(true) },
+      { root, rootMargin: `${LAZY_AHEAD}px 0px` })
+    const far = new IntersectionObserver(es => {
+      if (es.every(e => !e.isIntersecting) && state.current.shown && !state.current.force) {
+        setSavedH(el.offsetHeight)
+        setShown(false)
+      }
+    }, { root, rootMargin: `${LAZY_KEEP}px 0px` })
+    near.observe(el); far.observe(el)
+    return () => { near.disconnect(); far.disconnect() }
+  }, [])
+  const height = savedH || estimate()
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!mounted.current) { mounted.current = true; return }   // rendered from the start: nothing filled in
+    if (!shown || !el) return
+    const root = el.closest('.session-content') as HTMLElement | null
+    const delta = el.offsetHeight - height
+    if (root && delta && el.getBoundingClientRect().top < root.getBoundingClientRect().top) root.scrollTop += delta
+    // only when it fills in; `height` is what the spacer was
+  }, [shown])   // eslint-disable-line react-hooks/exhaustive-deps
+  return { ref, shown, height: shown ? undefined : height, everShown: savedH > 0 }
+}
+
+/** A spacer for a block not rendered: a throbber the first time (on a slow phone a blank page looked frozen). */
+function LazySpacer({ everShown }: { everShown: boolean }) {
+  return everShown ? null : <div className="chunk-throbber" role="status"><span className="throbber" aria-hidden="true" />Loading lines…</div>
+}
+
+const READ_CHUNK = 80
+
+/** Rough height of reading-view lines before they're rendered. */
+function estimateReadHeight(lines: ParsedLine[]): number {
+  const phone = typeof window !== 'undefined' && window.innerWidth <= 768
+  const width = Math.min(70 * 10, (typeof window !== 'undefined' ? window.innerWidth : 900) - (phone ? 32 : 220))
+  const perRow = Math.max(20, width / 9.2)
+  let h = 0
+  for (const l of lines) {
+    if (l.type === 'heading') h += 60
+    else if (l.type === 'speech') h += Math.ceil(Math.max(1, (l.text?.length ?? 0) + 14) / perRow) * 29.5 + 8 + (phone ? 22 : 0)
+  }
+  return h
+}
+
+interface ReadChunkData {
+  start: number; lines: ParsedLine[]; silence: boolean[]; continued: boolean[]; nextTs: (string | undefined)[]
+  lowConf: LowConfWord[][]; rolls: Roll[][] | null
+}
+
+/**
+ * A block of reading-view lines (see useLazyBlock). Memoised on everything
+ * that changes only inside it, so the audio clock, the phone's bottom bar
+ * hiding and the like re-render one block, not every line of the session.
+ */
+const ReadChunk = React.memo(function ReadChunk({ chunk, activeIdx, targetIdx, flashIdx, force, initial, search,
+  canSeek, canQuote, canReview, isDm, quoteSaved, actions, activeRef, targetRef }: {
+  chunk: ReadChunkData; activeIdx: number; targetIdx: number; flashIdx: number; force: boolean; initial: boolean; search: string
+  savedKey: string; canSeek: boolean; canQuote: boolean; canReview: boolean; isDm: boolean
+  quoteSaved: (line: ParsedLine) => boolean; actions: ReadLineActions
+  activeRef: React.MutableRefObject<HTMLDivElement | null>; targetRef: React.MutableRefObject<HTMLDivElement | null>
+}) {
+  const { ref, shown, height, everShown } = useLazyBlock(force || activeIdx >= 0 || targetIdx >= 0 || flashIdx >= 0,
+    () => estimateReadHeight(chunk.lines), initial)
+  return (
+    <div ref={ref} className="read-chunk" style={shown ? undefined : { height }}>
+      {shown ? chunk.lines.map((line, i) => (
+        <ReadLine
+          key={chunk.start + i}
+          line={line}
+          isActive={i === activeIdx}
+          isTarget={i === targetIdx}
+          isFlash={i === flashIdx}
+          silenceBefore={chunk.silence[i]}
+          continued={chunk.continued[i]}
+          nextTs={chunk.nextTs[i]}
+          lowConf={chunk.lowConf[i]}
+          search={search}
+          canSeek={canSeek}
+          canQuote={canQuote}
+          canReview={canReview}
+          rolls={chunk.rolls?.[i] ?? NO_ROLLS}
+          isDm={isDm}
+          quoteSaved={canQuote && line.type === 'speech' ? quoteSaved(line) : false}
+          actions={actions}
+          activeRef={activeRef}
+          targetRef={targetRef}
+        />
+      )) : <LazySpacer everShown={everShown} />}
+    </div>
+  )
+}, (a, b) => a.chunk === b.chunk && a.activeIdx === b.activeIdx && a.targetIdx === b.targetIdx && a.flashIdx === b.flashIdx &&
+  a.force === b.force && a.search === b.search && a.savedKey === b.savedKey && a.canSeek === b.canSeek &&
+  a.canQuote === b.canQuote && a.canReview === b.canReview && a.isDm === b.isDm && a.actions === b.actions)
+
 const EDIT_CHUNK = 100
 
 /** Rough height of a block of lines before it's rendered (the text column wraps at ~8.6 px a character). */
@@ -5169,35 +5355,9 @@ function estimateHeight(lines: string[]): number {
 const EditChunk = React.memo(function EditChunk({ start, lines, editingIdx, pendingKey, saving, actions, eager }: {
   start: number; lines: string[]; editingIdx: number; pendingKey: string; saving: boolean; actions: EditRowActions; eager: boolean
 }) {
-  const [shown, setShown] = useState(eager || editingIdx >= 0)
-  const ref = useRef<HTMLDivElement>(null)
-  const placeholderH = useRef(0)
-  if (!shown && editingIdx >= 0) setShown(true)
-  useEffect(() => {
-    if (shown || !ref.current) return
-    const root = ref.current.closest('.session-content')
-    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) setShown(true) },
-      { root, rootMargin: '1500px 0px' })
-    io.observe(ref.current)
-    return () => io.disconnect()
-  }, [shown])
-  useLayoutEffect(() => {
-    if (!shown || !placeholderH.current || !ref.current) return
-    const root = ref.current.closest('.session-content') as HTMLElement | null
-    const delta = ref.current.offsetHeight - placeholderH.current
-    placeholderH.current = 0
-    if (root && delta && ref.current.getBoundingClientRect().top < root.getBoundingClientRect().top) root.scrollTop += delta
-  }, [shown])
+  const { ref, shown, height, everShown } = useLazyBlock(editingIdx >= 0, () => estimateHeight(lines), eager)
   if (!shown) {
-    const h = estimateHeight(lines)
-    placeholderH.current = h
-    // A throbber that stays in view while you scroll over lines not rendered yet
-    // (on a slow phone this used to look like the page had frozen).
-    return (
-      <div ref={ref} className="edit-chunk-placeholder" style={{ height: h }}>
-        <div className="chunk-throbber" role="status"><span className="throbber" aria-hidden="true" />Loading lines…</div>
-      </div>
-    )
+    return <div ref={ref} className="edit-chunk" style={{ height }}><LazySpacer everShown={everShown} /></div>
   }
   const pending = pendingKey ? new Set(pendingKey.split(',').map(Number)) : null
   return (
