@@ -632,6 +632,36 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
                     except Exception:
                         pass
 
+        # Wiki corrections from players' and the DM's reports (worker/wiki_fix.py):
+        # the server hands them out once a day, or when the DM asks.
+        if not stop_event.is_set() and time.time() >= paused_until:
+            try:
+                job = client.get_wiki_fix_job()
+            except Exception as e:
+                job = None
+                print(f"[wiki-fix] Error fetching jobs: {e}")
+            if job:
+                import wiki_fix
+                print(f"\n[wiki-fix] [JOB] {len(job.get('reports') or [])} report(s)")
+                try:
+                    results = wiki_fix.run_job(job, config, run_claude)
+                    done = client.push_wiki_fix_result(results)
+                    print(f"[wiki-fix]   [DONE] {done.get('fixed', 0)} fixed"
+                          + (f" ({done['warning']})" if done.get("warning") else ""))
+                except UsageLimitError as e:
+                    print(f"[wiki-fix]   Claude usage limit ({e}); the reports go back on the queue. Trying again in 30 min.")
+                    paused_until = time.time() + LIMIT_PAUSE
+                    try:
+                        client.push_wiki_fix_result([], error=f"Claude usage limit: {str(e)[:200]}")
+                    except Exception:
+                        pass
+                except Exception as e:
+                    print(f"[wiki-fix]   [ERROR] {e}")
+                    try:
+                        client.push_wiki_fix_result([], error=str(e)[:500])
+                    except Exception:
+                        pass
+
         stop_event.wait(poll_interval)
 
     print("[analysis] Poll loop stopped.")

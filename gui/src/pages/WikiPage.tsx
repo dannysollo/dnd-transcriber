@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { useToast } from '../Toast'
 import WorkerOffline from '../WorkerOffline'
 import WikiGraph from '../WikiGraph'
+import { PageReports, ReportsPage } from '../WikiReports'
 import { ContinuityCheckAll, PageContinuity } from '../Continuity'
 
 // The campaign wiki: its vault's pages (server: /campaigns/{slug}/wiki, wiki.py),
@@ -13,10 +14,11 @@ import { ContinuityCheckAll, PageContinuity } from '../Continuity'
 // committed to the vault repo, so Obsidian stays in step.
 
 interface PageSummary { title: string; slug: string; section: string; excerpt: string; backlinks: number; broken: number; aliases?: string[] }
-interface WikiIndex { name: string; public: boolean; can_edit: boolean; can_manage?: boolean; has_wiki: boolean; pages: PageSummary[]; broken?: number }
+interface WikiIndex { name: string; public: boolean; can_edit: boolean; can_manage?: boolean; can_report?: boolean; is_member?: boolean; open_reports?: number; has_wiki: boolean; pages: PageSummary[]; broken?: number }
 interface WikiPageData { title: string; slug: string; section: string; path: string; markdown: string; body?: string; facts?: { label: string; value: string }[]; status?: string; hash: string; broken: string[]; backlinks: { title: string; slug: string }[] }
 
 const WIKILINK = /\[\[([^\]\n]+)\]\]/g
+const REPORTS_PAGE = '_reports'  // reported mistakes and asked-for changes (not a page slug either)
 const GRAPH_PAGE = '_graph'   // the relationship graph's route (not a page slug: those never start with _)
 const INDEX_SLUG = 'index'    // the vault's Index.md: the wiki's front page
 
@@ -134,6 +136,7 @@ export default function WikiPage() {
     )
   }
   if (!index) return <div className="page-content wiki"><div className="skeleton" style={{ height: 240, maxWidth: 820 }} /></div>
+  if (page === REPORTS_PAGE) return <div className="page-content wiki"><ReportsPage slug={slug} base={base} canReport={!!index.can_report} /></div>
   if (page === GRAPH_PAGE) return <div className="page-content wiki wiki-wide"><WikiGraph slug={slug} base={base} focus={params.get('focus')} /></div>
   return page
     ? <WikiArticle slug={slug} page={page} index={index} base={base} onChanged={reload} />
@@ -212,6 +215,8 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
             placeholder="Search the wiki" aria-label="Search the wiki" />
           {index.has_wiki && index.pages.length > 0 && <>
             <Link to={`${base}/${GRAPH_PAGE}`} className="btn-ghost">Relationship graph</Link>
+            {index.is_member && <Link to={`${base}/${REPORTS_PAGE}`} className="btn-ghost">
+              Reports{index.open_reports ? <span className="wr-count">{index.open_reports} waiting</span> : null}</Link>}
             {hasIndexPage && <button type="button" className="btn-ghost" aria-expanded={showAll} onClick={() => setShowAll(v => !v)}>
               {showAll ? 'Hide all pages' : 'All pages'}</button>}
           </>}
@@ -442,6 +447,7 @@ function WikiArticle({ slug, page, index, base, onChanged }: { slug: string; pag
           {data.facts.map(f => <div key={f.label}><dt>{f.label}</dt><dd>{md(f.value, true)}</dd></div>)}
         </dl>
       )}
+      {index.is_member && !editing && <PageReports slug={slug} base={base} page={data.slug} canReport={!!index.can_report} />}
       {index.can_manage && !editing && <PageContinuity slug={slug} path={data.path} onChanged={() => { load(); onChanged() }} />}
       {creatingTitle && (
         <NewPageForm slug={slug} sections={[...new Set(index.pages.map(p => p.section))]} initialTitle={creatingTitle}

@@ -2,7 +2,7 @@
 server.py — FastAPI backend for the Co-DM GUI
 """
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import io
 import hashlib
 import json
@@ -4357,13 +4357,19 @@ def _wiki_index(slug: str, vault: Path):
 def campaign_wiki_index(slug: str, user: Optional[User] = Depends(get_current_user), db: Session = Depends(get_db)):
     campaign, public, can_edit = _wiki_reader(slug, user, db)
     # can_manage: the DM's tools (who can read, generating, continuity, the front page)
-    can_manage = _wiki_is_dm(user, crud.get_member(db, campaign.id, user.id) if user else None)
+    member = crud.get_member(db, campaign.id, user.id) if user else None
+    can_manage = _wiki_is_dm(user, member)
+    # reports (wiki corrections): players and DMs write them; members read them
+    can_report = can_manage or bool(member and member.role == "player")
+    open_reports = sum(it.get("status") in ("open", "working", "suggested") for it in _read_wiki_reports(slug).get("items", [])) \
+        if (member or can_manage) else 0
+    perms = {"can_edit": can_edit, "can_manage": can_manage, "can_report": can_report,
+             "is_member": bool(member) or can_manage, "open_reports": open_reports}
     vault = _wiki_vault(slug, db)
     if vault is None:
-        return {"name": campaign.name, "public": public, "can_edit": can_edit, "can_manage": can_manage,
-                "has_wiki": False, "pages": []}
+        return {"name": campaign.name, "public": public, **perms, "has_wiki": False, "pages": []}
     idx = _wiki_index(slug, vault)
-    return {"name": campaign.name, "public": public, "can_edit": can_edit, "can_manage": can_manage, "has_wiki": True,
+    return {"name": campaign.name, "public": public, **perms, "has_wiki": True,
             "pages": idx.summary(), "broken": sum(len(p.broken) for p in idx.pages.values())}
 
 
@@ -4642,6 +4648,287 @@ def campaign_wiki_settings(slug: str, body: WikiSettingsBody,
     return {"public": body.public}
 
 
+# ─── Wiki reports: mistakes and changes people ask for, fixed by the worker ───
+# Members (players and DMs) write what's wrong, on a page or about the wiki in
+# general. Once a day (or when the DM asks) the worker takes every open report,
+# has Claude work out the smallest edits that answer them (worker/wiki_fix.py),
+# and sends back exact find-and-replace edits. Nothing is written to the wiki:
+# each edit whose text is on its page exactly once becomes a suggested fix in the
+# same review list as the continuity check's (Apply fix / Edit line / Skip /
+# Dismiss), kept here in "findings" with the report it answers.
+
+WIKI_REPORTS_FILE = "wiki_reports.json"
+WIKI_FIX_EVERY = 24 * 3600     # the daily run
+WIKI_FIX_STALE = 2 * 3600      # a run handed out this long ago with no answer is given up on
+
+
+def _wiki_reports_path(slug: str) -> Path:
+    return BASE_DIR / "campaigns" / slug / WIKI_REPORTS_FILE
+
+
+def _read_wiki_reports(slug: str) -> dict:
+    try:
+        return json.loads(_wiki_reports_path(slug).read_text(encoding="utf-8"))
+    except Exception:
+        return {"items": []}
+
+
+def _write_wiki_reports(slug: str, data: dict) -> None:
+    path = _wiki_reports_path(slug)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def _wiki_fix_state(data: dict) -> dict:
+    """Whether a run is due, and when the next daily one is."""
+    now = datetime.utcnow()
+    open_items = [it for it in data.get("items", []) if it.get("status") == "open"]
+    last = datetime.fromisoformat(data["last_run"]) if data.get("last_run") else None
+    next_run = (last + timedelta(seconds=WIKI_FIX_EVERY)) if last else now
+    due = bool(open_items) and (data.get("requested") or next_run <= now)
+    return {"open": len(open_items), "due": due, "requested": bool(data.get("requested")),
+            "last_run": data.get("last_run"), "next_run": next_run.isoformat(timespec="seconds") if open_items else None,
+            "running": bool(data.get("served")) and not _wiki_fix_stale(data)}
+
+
+def _wiki_fix_stale(data: dict) -> bool:
+    served = data.get("served")
+    return not served or (datetime.utcnow() - datetime.fromisoformat(served)).total_seconds() > WIKI_FIX_STALE
+
+
+def _wiki_reports_view(slug: str, data: dict, can_manage: bool, page: Optional[str] = None) -> dict:
+    items = [it for it in data.get("items", []) if page is None or it.get("page_slug") == page]
+    items = sorted(items, key=lambda it: it.get("created", ""), reverse=True)
+    by_report: dict[int, list] = {}
+    for f in data.get("findings", []):
+        by_report.setdefault(f["report_id"], []).append(
+            {k: f.get(k) for k in ("id", "page", "page_title", "wiki", "fix", "status")})
+    out = []
+    for it in items:
+        sugg = by_report.get(it["id"], [])
+        status = it.get("status")
+        # every suggested fix dealt with in the review list: the report is done
+        if status == "suggested" and sugg and all(f["status"] != "open" for f in sugg):
+            status = "reviewed"
+        out.append({**it, "status": status, "suggestions": sugg})
+    return {"items": out, **_wiki_fix_state(data), "can_manage": can_manage}
+
+
+def _report_findings(slug: str, data: dict, page_path: Optional[str], slugs: dict[str, str]) -> list[dict]:
+    """Open suggested fixes from reports, shaped like continuity items (source "report")."""
+    reports = {it["id"]: it for it in data.get("items", [])}
+    out = []
+    for f in data.get("findings", []):
+        if f.get("status") != "open" or (page_path is not None and f.get("page") != page_path):
+            continue
+        r = reports.get(f["report_id"], {})
+        out.append({"id": f["id"], "source": "report", "report_id": f["report_id"], "title": f.get("title"),
+                    "page": f["page"], "page_slug": slugs.get(f["page"]), "kind": "report", "wiki": f["wiki"],
+                    "fix": f["fix"], "status": f["status"], "session": None, "claim": f.get("note") or "",
+                    "reported": r.get("text"), "by": r.get("by"), "ts": None})
+    return out
+
+
+class WikiSuggestionStatusBody(BaseModel):
+    status: str
+
+
+@app.patch("/campaigns/{slug}/wiki/suggestions/{finding_id}")
+def campaign_wiki_suggestion_status(slug: str, finding_id: int, body: WikiSuggestionStatusBody,
+                                    _member=Depends(require_campaign_member("dm"))):
+    """A suggested fix from a report, handled in the review list (the same statuses as continuity items)."""
+    if body.status not in ("open", "fixed", "dismissed", "ignored"):
+        raise HTTPException(400, "status must be open, fixed, dismissed or ignored")
+    with _wiki_lock:
+        data = _read_wiki_reports(slug)
+        f = next((x for x in data.get("findings", []) if x["id"] == finding_id), None)
+        if not f:
+            raise HTTPException(404, "No such suggestion")
+        f["status"] = body.status
+        _write_wiki_reports(slug, data)
+    return {"ok": True}
+
+
+def _wiki_member(slug: str, user: Optional[User], db: Session):
+    campaign = crud.get_campaign_by_slug(db, slug)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    member = crud.get_member(db, campaign.id, user.id) if user else None
+    return campaign, member, _wiki_is_dm(user, member)
+
+
+@app.get("/campaigns/{slug}/wiki/reports")
+def campaign_wiki_reports(slug: str, page: Optional[str] = None, user: Optional[User] = Depends(get_current_user),
+                          _member=Depends(require_campaign_member("spectator")), db: Session = Depends(get_db)):
+    _, _, is_dm = _wiki_member(slug, user, db)
+    return _wiki_reports_view(slug, _read_wiki_reports(slug), is_dm, page)
+
+
+class WikiReportBody(BaseModel):
+    text: str
+    page: Optional[str] = None   # the page's slug; none for the wiki in general
+
+
+@app.post("/campaigns/{slug}/wiki/reports")
+def campaign_wiki_report(slug: str, body: WikiReportBody, user: Optional[User] = Depends(get_current_user),
+                         _member=Depends(require_campaign_member("player")), db: Session = Depends(get_db)):
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "Say what's wrong or what should change")
+    if len(text) > 4000:
+        raise HTTPException(400, "Keep it under 4000 characters")
+    _, _, is_dm = _wiki_member(slug, user, db)
+    page_path = page_title = None
+    if body.page:
+        vault = _wiki_vault(slug, db)
+        p = _wiki_index(slug, vault).pages.get(body.page) if vault else None
+        if not p:
+            raise HTTPException(404, "No such page")
+        page_path, page_title = p.path, p.title
+    with _wiki_lock:
+        data = _read_wiki_reports(slug)
+        items = data.setdefault("items", [])
+        item = {"id": max((it["id"] for it in items), default=0) + 1, "page_slug": body.page, "page": page_path,
+                "page_title": page_title, "text": text, "by": user.username if user else "the site",
+                "by_id": user.id if user else None, "created": datetime.utcnow().isoformat(timespec="seconds"),
+                "status": "open"}
+        items.append(item)
+        _write_wiki_reports(slug, data)
+    return _wiki_reports_view(slug, data, is_dm, body.page)
+
+
+class WikiReportStatusBody(BaseModel):
+    status: str
+
+
+@app.patch("/campaigns/{slug}/wiki/reports/{report_id}")
+def campaign_wiki_report_status(slug: str, report_id: int, body: WikiReportStatusBody,
+                                user: Optional[User] = Depends(get_current_user),
+                                _member=Depends(require_campaign_member("player")), db: Session = Depends(get_db)):
+    """Dismiss a report or open it again: the DM any, a player their own while it's still open."""
+    if body.status not in ("open", "dismissed"):
+        raise HTTPException(400, "status must be open or dismissed")
+    _, _, is_dm = _wiki_member(slug, user, db)
+    with _wiki_lock:
+        data = _read_wiki_reports(slug)
+        it = next((x for x in data.get("items", []) if x["id"] == report_id), None)
+        if not it:
+            raise HTTPException(404, "No such report")
+        own = user is not None and it.get("by_id") == user.id and it.get("status") in ("open", "dismissed")
+        if not (is_dm or own):
+            raise HTTPException(403, "Only the DM, or whoever wrote it, can change this report")
+        if it.get("status") == "working":
+            raise HTTPException(409, "The worker is fixing this one right now")
+        it["status"] = body.status
+        _write_wiki_reports(slug, data)
+    return _wiki_reports_view(slug, data, is_dm)
+
+
+@app.post("/campaigns/{slug}/wiki/reports/run")
+def campaign_wiki_reports_run(slug: str, _member=Depends(require_campaign_member("dm"))):
+    """Fix the open reports at the worker's next poll instead of waiting for the daily run."""
+    with _wiki_lock:
+        data = _read_wiki_reports(slug)
+        data["requested"] = True
+        _write_wiki_reports(slug, data)
+    return _wiki_reports_view(slug, data, True)
+
+
+@app.get("/campaigns/{slug}/worker/wiki-fix-job")
+def worker_get_wiki_fix_job(slug: str, db: Session = Depends(get_db), request: Request = None):
+    """Every open report, with the pages as they are now, once a day or when the DM asks."""
+    campaign = require_worker_key(slug)(request, db)
+    _mark_worker_seen(db, campaign)
+    with _wiki_lock:
+        data = _read_wiki_reports(slug)
+        # a run that never came back: its reports go back on the queue
+        if data.get("served") and _wiki_fix_stale(data):
+            for it in data.get("items", []):
+                if it.get("status") == "working":
+                    it["status"] = "open"
+            data.pop("served", None)
+            _write_wiki_reports(slug, data)
+        if data.get("served") or not _wiki_fix_state(data)["due"]:
+            return {"job": None}
+        vault = _wiki_vault(slug, db)
+        if vault is None:
+            return {"job": None}
+        reports = [it for it in data["items"] if it.get("status") == "open"]
+        for it in reports:
+            it["status"] = "working"
+        data["served"] = datetime.utcnow().isoformat(timespec="seconds")
+        data["requested"] = False
+        _write_wiki_reports(slug, data)
+    _job_served[("wiki-fix", slug, "")] = time.time()
+    pages = [{"path": p.path, "text": p.text} for p in _wiki_index(slug, vault).pages.values()]
+    return {"job": {"reports": [{k: it.get(k) for k in ("id", "page", "page_title", "text", "by")} for it in reports],
+                    "pages": pages}}
+
+
+class WikiFixResultBody(BaseModel):
+    results: list[dict] = []      # {id, result: "fixed" | "no_change", note, edits: [{page, old, new}]}; nothing is applied
+    error: Optional[str] = None
+
+
+@app.post("/campaigns/{slug}/worker/wiki-fix-result")
+def worker_push_wiki_fix_result(slug: str, body: WikiFixResultBody, db: Session = Depends(get_db), request: Request = None):
+    require_worker_key(slug)(request, db)
+    vault = _wiki_vault(slug, db)
+    with _wiki_lock:
+        data = _read_wiki_reports(slug)
+        by_id = {it["id"]: it for it in data.get("items", []) if it.get("status") == "working"}
+        findings = data.setdefault("findings", [])
+        next_id = max((f["id"] for f in findings), default=0) + 1
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        suggested = 0
+        if body.error:
+            for it in by_id.values():
+                it["status"] = "open"   # tried again at the next daily run
+                it["error"] = body.error[:300]
+        for r in body.results if not body.error else []:
+            it = by_id.get(r.get("id"))
+            if not it:
+                continue
+            made, skipped = 0, []
+            for e in r.get("edits") or []:
+                rel, old, new = (e.get("page") or "").strip(), e.get("old") or "", e.get("new") or ""
+                f = (vault / rel) if vault and rel else None
+                if not f or not f.resolve().is_relative_to(vault.resolve()) or not f.exists() or f.suffix != ".md" or not old:
+                    skipped.append(f"{rel or '?'}: no such page")
+                    continue
+                # Apply fix (in the review list) needs the text on the page exactly once
+                if f.read_text(encoding="utf-8").count(old) != 1 or old == new:
+                    skipped.append(f"{Path(rel).stem}: the text to replace wasn't found exactly once")
+                    continue
+                findings.append({"id": next_id, "report_id": it["id"], "page": rel, "page_title": Path(rel).stem,
+                                 "title": (it["text"][:90] + "…") if len(it["text"]) > 90 else it["text"],
+                                 "note": (r.get("note") or "").strip(), "wiki": old, "fix": new,
+                                 "status": "open", "created": now})
+                next_id += 1
+                made += 1
+            note = (r.get("note") or "").strip()
+            if skipped:
+                note = (note + " " if note else "") + "Couldn't suggest: " + "; ".join(skipped) + "."
+            it.update(note=note, done=now)
+            it.pop("error", None)
+            if made:
+                it["status"] = "suggested"
+                suggested += made
+            else:
+                it["status"] = "no_change" if r.get("result") == "no_change" and not skipped else "failed"
+        for it in by_id.values():
+            if it.get("status") == "working":   # the worker didn't answer this one
+                it["status"] = "open"
+        data["last_run"] = now
+        data.pop("served", None)
+        if body.error and body.error.startswith("Claude usage limit"):
+            data["requested"] = True   # out of usage: again once the worker's pause ends, not tomorrow
+        _write_wiki_reports(slug, data)
+    _job_served.pop(("wiki-fix", slug, ""), None)
+    log_queue.put(f"[wiki-fix] {suggested} suggested fix(es) to review" + (f" (error: {body.error})" if body.error else ""))
+    return {"ok": True, "suggested": suggested}
+
+
 # ─── Vault connection test ────────────────────────────────────────────────────
 
 @app.post("/campaigns/{slug}/vault/test")
@@ -4913,7 +5200,7 @@ def cancel_analysis_pending(slug: str, name: str, _member=Depends(require_campai
 # or every unchecked session from the wiki): queued by a `continuity_pending` flag,
 # run by the worker one session at a time,
 # stored as continuity.json: {generated, error, items: [{id, title, page, kind,
-# wiki, session, ts, fix, status}]}, status open | fixed | dismissed.
+# wiki, session, ts, fix, status}]}, status open | fixed | dismissed (skipped) | ignored (dismissed, page left as is).
 
 CONTINUITY_FLAG = "continuity_pending"
 CONTINUITY_FILE = "continuity.json"
@@ -5033,8 +5320,9 @@ class ContinuityStatusBody(BaseModel):
 @app.patch("/campaigns/{slug}/sessions/{name}/continuity/{item_id}")
 def campaign_set_continuity_status(slug: str, name: str, item_id: int, body: ContinuityStatusBody,
                                    _member=Depends(require_campaign_member("dm"))):
-    if body.status not in ("open", "fixed", "dismissed"):
-        raise HTTPException(400, "status must be open, fixed or dismissed")
+    # dismissed = skipped for now; ignored = dismissed for good, the page left as it is
+    if body.status not in ("open", "fixed", "dismissed", "ignored"):
+        raise HTTPException(400, "status must be open, fixed, dismissed or ignored")
     session_dir = get_sessions_dir(slug) / name
     data = _read_continuity(session_dir)
     item = next((it for it in data.get("items", []) if it.get("id") == item_id), None)
@@ -5098,6 +5386,8 @@ def campaign_continuity(slug: str, page: Optional[str] = None,
         for it in _read_continuity(d).get("items", []):
             if it.get("status") == "open" and (page is None or it.get("page") == page):
                 items.append({**it, "session": d.name, "claim": it.get("session"), "page_slug": slugs.get(it.get("page", ""))})
+    # suggested fixes from wiki reports go in the same review list
+    items += _report_findings(slug, _read_wiki_reports(slug), page, slugs)
     return {"items": items, "queued": queued, "unchecked": unchecked}
 
 
@@ -5271,7 +5561,7 @@ def campaign_session_rolls_shift(slug: str, name: str, body: RollsShiftBody,
 _job_served: dict[tuple[str, str, str], float] = {}
 QUEUE_RUNNING_FOR = 25 * 60   # a job handed out this recently is taken to be running
 QUEUE_KINDS = {"transcription": "Transcription", "analysis": "Summary and wiki suggestions",
-               "continuity": "Continuity check", "wiki": "Wiki generation"}
+               "continuity": "Continuity check", "wiki": "Wiki generation", "wiki-fix": "Wiki corrections"}
 
 
 def _queue_items(slug: str, db: Session) -> list[dict]:
@@ -5295,6 +5585,11 @@ def _queue_items(slug: str, db: Session) -> list[dict]:
     if wjob.get("state") in ("queued", "running"):
         items.append({"kind": "wiki", "session": None, "state": wjob["state"], "since": wjob.get("requested"),
                       "detail": wjob.get("message")})
+    reports = _read_wiki_reports(slug)
+    rstate = _wiki_fix_state(reports)
+    if rstate["running"] or rstate["due"]:
+        items.append({"kind": "wiki-fix", "session": None, "state": "running" if rstate["running"] else "queued",
+                      "since": reports.get("served"), "detail": f"{rstate['open']} open report(s)"})
     order = list(QUEUE_KINDS)
     for it in items:
         it["label"] = QUEUE_KINDS[it["kind"]]
@@ -5332,6 +5627,16 @@ def _remove_from_queue(slug: str, kind: str, session: str | None, db: Session) -
             _write_wiki_job(slug, job)
             return True
         return False
+    if kind == "wiki-fix":
+        # postpones the run to tomorrow; one already running finishes
+        with _wiki_lock:
+            data = _read_wiki_reports(slug)
+            if not _wiki_fix_state(data)["due"]:
+                return False
+            data["requested"] = False
+            data["last_run"] = datetime.utcnow().isoformat(timespec="seconds")
+            _write_wiki_reports(slug, data)
+        return True
     raise HTTPException(400, f"Unknown kind: {kind}")
 
 
@@ -5340,7 +5645,7 @@ def worker_queue_remove(slug: str, kind: str, session: Optional[str] = None,
                         db: Session = Depends(get_db), request: Request = None):
     """Remove one job (`session` given, or the wiki generation), or every job of this kind."""
     require_worker_key(slug)(request, db)
-    if kind != "wiki" and session is None:
+    if kind not in ("wiki", "wiki-fix") and session is None:
         removed = sum(_remove_from_queue(slug, kind, it["session"], db) for it in _queue_items(slug, db) if it["kind"] == kind)
     else:
         removed = int(_remove_from_queue(slug, kind, session, db))

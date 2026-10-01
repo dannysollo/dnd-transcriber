@@ -103,6 +103,20 @@ class WorkerClient:
                           headers=self.headers, json={"items": items, "error": error}, timeout=60)
         r.raise_for_status()
 
+    def get_wiki_fix_job(self) -> dict | None:
+        """Every open wiki report, when a run is due (worker/wiki_fix.py), or None."""
+        r = requests.get(self._url("/worker/wiki-fix-job"), headers=self.headers, timeout=60)
+        if r.status_code == 404:
+            return None  # a server from before wiki reports
+        r.raise_for_status()
+        return r.json().get("job")
+
+    def push_wiki_fix_result(self, results: list[dict], error: str | None = None) -> dict:
+        r = requests.post(self._url("/worker/wiki-fix-result"), headers=self.headers,
+                          json={"results": results, "error": error}, timeout=120)
+        r.raise_for_status()
+        return r.json()
+
     def download_recording(self, session_name: str, dest_dir) -> "Path":
         """The uploaded recording for a reconstruction job, streamed to dest_dir."""
         from pathlib import Path

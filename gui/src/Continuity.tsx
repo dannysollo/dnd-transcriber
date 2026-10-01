@@ -2,16 +2,21 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast } from './Toast'
 
-// Continuity checks (server: continuity.json per session, worker/continuity.py):
-// where the wiki disagrees with what happened in a session. Shown on the
-// session's Wiki tab and, for the DM, on the wiki page concerned. Apply fix
-// swaps the quoted wording for the suggested one through the wiki's own save
-// (committed to the vault like any edit); nothing changes without a click.
+// Suggested fixes for the wiki, from two places: continuity checks (server:
+// continuity.json per session, worker/continuity.py), where the wiki disagrees
+// with what happened in a session; and reports people wrote on the wiki
+// (wiki_reports.json, worker/wiki_fix.py; source "report"). Shown on the
+// session's Wiki tab (its own checks), and for the DM on the wiki page concerned
+// and in the wiki's review list. Apply fix swaps the quoted wording for the
+// suggested one through the wiki's own save (committed to the vault like any
+// edit); nothing changes without a click.
 
 export interface ContinuityItem {
   id: number; title: string; page: string; page_slug?: string | null
-  kind: 'contradiction' | 'date' | 'spelling'; wiki: string; session: string; ts?: string | null
-  fix?: string | null; status: 'open' | 'fixed' | 'dismissed'
+  kind: 'contradiction' | 'date' | 'spelling' | 'report'; wiki: string; session: string; ts?: string | null
+  source?: 'report'; reported?: string; by?: string; report_id?: number   // from a wiki report
+  // dismissed = skipped (set aside, can be reopened); ignored = dismissed, the page left as it is
+  fix?: string | null; status: 'open' | 'fixed' | 'dismissed' | 'ignored'
 }
 interface SessionContinuityData { pending: boolean; generated: string | null; error: string | null; items: ContinuityItem[] }
 
@@ -21,11 +26,25 @@ const plain = (md: string) => md
   .replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, '$2')
   .replace(/(\*\*|__|\*|_)(.+?)\1/g, '$2')
 
-const KIND = { contradiction: 'Contradicts the session', date: 'Wrong date', spelling: 'Spelling' }
+const KIND = { contradiction: 'Contradicts the session', date: 'Wrong date', spelling: 'Spelling', report: 'From a report' }
 
-/** Swap the quoted text for the fix on the page. Returns an error message, or null when saved. */
-async function applyFix(slug: string, it: { page_slug?: string | null; wiki: string; fix?: string | null }): Promise<string | null> {
-  if (!it.page_slug || !it.fix) return 'No fix to apply'
+/** Where an item's status is saved: its session's continuity check, or the wiki's reports. */
+export const statusUrl = (slug: string, it: ContinuityItem & { sessionName?: string }) => it.source === 'report'
+  ? `/campaigns/${slug}/wiki/suggestions/${it.id}`
+  : `/campaigns/${slug}/sessions/${encodeURIComponent(it.sessionName ?? '')}/continuity/${it.id}`
+const itemKey = (it: ContinuityItem & { sessionName?: string }) => it.source === 'report' ? `report|${it.id}` : `${it.sessionName}|${it.id}`
+const DONE: Record<ContinuityItem['status'], string> = { open: '', fixed: 'fixed', dismissed: 'skipped', ignored: 'dismissed' }
+
+/** "2 fixed, 1 skipped" for a list of handled items. */
+export const handledSummary = (items: { status: ContinuityItem['status'] }[]) =>
+  (['fixed', 'dismissed', 'ignored'] as const)
+    .map(st => [items.filter(i => i.status === st).length, DONE[st]] as const)
+    .filter(([n]) => n > 0).map(([n, label]) => `${n} ${label}`).join(', ')
+
+/** Swap the quoted text for the fix (or `text`, written by hand) on the page. Returns an error message, or null when saved. */
+async function applyFix(slug: string, it: { page_slug?: string | null; wiki: string; fix?: string | null }, text?: string): Promise<string | null> {
+  const replacement = text ?? it.fix
+  if (!it.page_slug || replacement == null) return 'No fix to apply'
   const r = await fetch(`/campaigns/${slug}/wiki/pages/${encodeURIComponent(it.page_slug)}`)
   if (!r.ok) return 'Could not open the page'
   const page = await r.json()
@@ -34,7 +53,7 @@ async function applyFix(slug: string, it: { page_slug?: string | null; wiki: str
   if (at < 0 || md.indexOf(it.wiki, at + 1) >= 0) return "The quoted text isn't on the page as written (or is there twice). Edit the page instead."
   const save = await fetch(`/campaigns/${slug}/wiki/pages/${encodeURIComponent(it.page_slug)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ markdown: md.slice(0, at) + it.fix + md.slice(at + it.wiki.length), base_hash: page.hash }),
+    body: JSON.stringify({ markdown: md.slice(0, at) + replacement + md.slice(at + it.wiki.length), base_hash: page.hash }),
   })
   if (!save.ok) return (await save.json().catch(() => ({}))).detail ?? 'Could not save the page'
   return null
@@ -47,13 +66,15 @@ function ItemRow({ it, slug, canEdit, onJump, sessionLink, onStatus }: {
 }) {
   const { toast } = useToast()
   const [busy, setBusy] = useState(false)
+  const [draft, setDraft] = useState<string | null>(null)   // the line, being written by hand
   const done = it.status !== 'open'
-  const fix = async () => {
+  const fix = async (text?: string) => {
     setBusy(true)
     try {
-      const problem = await applyFix(slug, it)
+      const problem = await applyFix(slug, it, text)
       if (problem) { toast(problem, 'error'); return }
       await onStatus('fixed')
+      setDraft(null)
       toast(`${it.page.split('/').pop()?.replace(/\.md$/, '')} updated`, 'success')
     } finally { setBusy(false) }
   }
@@ -63,7 +84,7 @@ function ItemRow({ it, slug, canEdit, onJump, sessionLink, onStatus }: {
       <div className="continuity-head">
         <span className="continuity-title">{it.title}</span>
         <span className="continuity-kind">{KIND[it.kind] ?? it.kind}</span>
-        {done && <span className="continuity-kind">{it.status === 'fixed' ? 'fixed' : 'dismissed'}</span>}
+        {done && <span className="continuity-kind">{DONE[it.status]}</span>}
       </div>
       <div className="continuity-row">
         <span className="continuity-label">
@@ -71,6 +92,17 @@ function ItemRow({ it, slug, canEdit, onJump, sessionLink, onStatus }: {
         </span>
         <span className="continuity-quote">{plain(it.wiki)}</span>
       </div>
+      {it.source === 'report' ? (
+        <div className="continuity-row">
+          <span className="continuity-label">
+            <Link to={`/campaigns/${slug}/wiki/_reports`}>{it.by ?? 'Someone'} reported</Link>
+          </span>
+          <span>
+            “{it.reported}”
+            {it.session && <span className="continuity-why">{it.session}</span>}
+          </span>
+        </div>
+      ) : (
       <div className="continuity-row">
         <span className="continuity-label">
           {sessionLink && it.sessionName
@@ -84,24 +116,39 @@ function ItemRow({ it, slug, canEdit, onJump, sessionLink, onStatus }: {
             : <> <span className="continuity-ts">[{it.ts}]</span></>)}
         </span>
       </div>
+      )}
       {it.fix && (
         <div className="continuity-row">
           <span className="continuity-label">Suggested</span>
           <span className="continuity-fix">{plain(it.fix)}</span>
         </div>
       )}
-      {canEdit && (
+      {canEdit && draft !== null && (
+        <div className="continuity-edit">
+          <label className="continuity-label" htmlFor={`ce-${it.id}`}>Replace the quoted line with</label>
+          <textarea id={`ce-${it.id}`} value={draft} onChange={e => setDraft(e.target.value)} rows={3} autoFocus spellCheck />
+          <div className="continuity-actions">
+            <button type="button" className="btn-ghost" disabled={busy} onClick={() => setDraft(null)}>Cancel</button>
+            <button type="button" className="btn-secondary" disabled={busy || draft === it.wiki} onClick={() => fix(draft)}>Save to the page</button>
+          </div>
+        </div>
+      )}
+      {canEdit && draft === null && (
         <div className="continuity-actions">
           {done ? (
             <button type="button" className="btn-ghost" disabled={busy} onClick={() => onStatus('open')}>Reopen</button>
           ) : (
             <>
               <button type="button" className="btn-ghost" disabled={busy} onClick={() => onStatus('dismissed')}
-                title="Not actually a problem">Dismiss</button>
-              <button type="button" className="btn-ghost" disabled={busy} onClick={() => onStatus('fixed')}
-                title="You fixed it yourself">Mark fixed</button>
+                title="Set it aside for now; it stays under the handled ones and can be reopened">Skip</button>
+              <button type="button" className="btn-ghost" disabled={busy} onClick={() => onStatus('ignored')}
+                title="Not a problem: leave the page as it is">Dismiss</button>
+              {it.page_slug && (
+                <button type="button" className="btn-ghost" disabled={busy} onClick={() => setDraft(it.fix ?? it.wiki)}
+                  title="Write the replacement for the quoted line yourself">Edit line</button>
+              )}
               {it.fix && it.page_slug && (
-                <button type="button" className="btn-secondary" disabled={busy} onClick={fix}
+                <button type="button" className="btn-secondary" disabled={busy} onClick={() => fix()}
                   title="Replace the quoted text on the page with the suggested wording">Apply fix</button>
               )}
             </>
@@ -166,7 +213,7 @@ export function SessionContinuity({ slug, sessionName, canEdit, onJump }: {
       {done.length > 0 && canEdit && (
         <>
           <button type="button" className="continuity-toggle" onClick={() => setShowDone(v => !v)} aria-expanded={showDone}>
-            {showDone ? 'Hide' : 'Show'} {done.length} dealt with
+            {showDone ? 'Hide' : 'Show'} the {done.length} handled ({handledSummary(done)})
           </button>
           {showDone && (
             <ul className="continuity-list">
@@ -190,7 +237,7 @@ export function PageContinuity({ slug, path, onChanged }: { slug: string; path: 
   useEffect(() => { load() }, [slug, path])
   if (items.length === 0) return null
   const setStatus = async (it: ContinuityItem & { sessionName: string }, status: ContinuityItem['status']) => {
-    const r = await fetch(`/campaigns/${slug}/sessions/${encodeURIComponent(it.sessionName)}/continuity/${it.id}`, {
+    const r = await fetch(statusUrl(slug, it), {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
     })
     if (!r.ok) { toast('Could not update it', 'error'); return }
@@ -200,11 +247,11 @@ export function PageContinuity({ slug, path, onChanged }: { slug: string; path: 
   return (
     <section className="continuity continuity-page" aria-label="Continuity">
       <div className="continuity-bar">
-        <h3>Continuity<span className="continuity-count">{items.length} to check</span></h3>
-        <span className="continuity-note">Sessions that disagree with this page.</span>
+        <h3>Suggested fixes<span className="continuity-count">{items.length} to review</span></h3>
+        <span className="continuity-note">From continuity checks (sessions that disagree with this page) and reports.</span>
       </div>
       <ul className="continuity-list">
-        {items.map(it => <ItemRow key={`${it.sessionName}|${it.id}`} it={it} slug={slug} canEdit sessionLink onStatus={s => setStatus(it, s)} />)}
+        {items.map(it => <ItemRow key={itemKey(it)} it={it} slug={slug} canEdit sessionLink onStatus={s => setStatus(it, s)} />)}
       </ul>
     </section>
   )
@@ -215,8 +262,8 @@ export function PageContinuity({ slug, path, onChanged }: { slug: string; path: 
 type CampaignItem = ContinuityItem & { sessionName: string }
 
 /** Oldest session first ("M-D-YYYY -- Title"). */
-const sessionKey = (name: string) => {
-  const m = name.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/)
+const sessionKey = (name?: string) => {
+  const m = (name ?? '').match(/^(\d{1,2})-(\d{1,2})-(\d{4})/)
   return m ? Number(m[3]) * 10000 + Number(m[1]) * 100 + Number(m[2]) : 99999999
 }
 
@@ -254,12 +301,12 @@ export function ContinuityCheckAll({ slug }: { slug: string }) {
     load()
   }
   const setStatus = async (it: CampaignItem, status: ContinuityItem['status']) => {
-    const r = await fetch(`/campaigns/${slug}/sessions/${encodeURIComponent(it.sessionName)}/continuity/${it.id}`, {
+    const r = await fetch(statusUrl(slug, it), {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
     })
     if (!r.ok) { toast('Could not update it', 'error'); return }
-    // Dealt with: it leaves the list (it's still on its session, under "dealt with").
-    if (status !== 'open') setItems(prev => prev.filter(x => !(x.sessionName === it.sessionName && x.id === it.id)))
+    // Handled: it leaves the list (it's still on its session or report, under the handled ones).
+    if (status !== 'open') setItems(prev => prev.filter(x => itemKey(x) !== itemKey(it)))
   }
   if (!state) return null
 
@@ -274,7 +321,7 @@ export function ContinuityCheckAll({ slug }: { slug: string }) {
     <div className="continuity-all-wrap">
       <div className="continuity-all">
         <span>
-          Continuity: {items.length ? `${items.length} finding${items.length !== 1 ? 's' : ''} to check` : 'nothing open'}
+          Suggested fixes: {items.length ? `${items.length} to review` : 'nothing to review'}
           {state.queued ? `, ${state.queued} session${state.queued !== 1 ? 's' : ''} still queued` : ''}
         </span>
         {state.queued > 0 && (
@@ -282,7 +329,7 @@ export function ContinuityCheckAll({ slug }: { slug: string }) {
         )}
         {items.length > 0 && (
           <button type="button" className="btn-ghost" aria-expanded={reviewing} onClick={() => { setReviewing(v => !v); if (!reviewing) load() }}>
-            {reviewing ? 'Hide findings' : `Review ${items.length} finding${items.length !== 1 ? 's' : ''}`}
+            {reviewing ? 'Hide them' : `Review ${items.length}`}
           </button>
         )}
         {!state.queued && state.unchecked > 0 && <button type="button" className="btn-ghost" onClick={runAll}
@@ -292,8 +339,10 @@ export function ContinuityCheckAll({ slug }: { slug: string }) {
       {reviewing && (
         <section className="continuity continuity-review" aria-label="Continuity findings">
           <p className="continuity-note">
-            Grouped by page. Apply fix replaces the struck-through wording on the page; Dismiss if it isn't a real
-            problem. Dealt-with findings leave this list{state.queued ? '; new ones appear as the queued sessions are checked' : ''}.
+            From continuity checks of the sessions and from reports people wrote on the wiki, grouped by page. <strong>Apply fix</strong> puts the suggested wording on the page in place of the struck-through
+            line; <strong>Edit line</strong> lets you write that replacement yourself. <strong>Dismiss</strong> if it isn't a
+            real problem (the page stays as it is); <strong>Skip</strong> to set it aside for now. Each leaves this list and can
+            be reopened from its session or report{state.queued ? '; new findings appear as the queued sessions are checked' : ''}.
           </p>
           {pages.map(([page, list]) => {
             const title = page.split('/').pop()?.replace(/\.md$/, '')
@@ -306,7 +355,7 @@ export function ContinuityCheckAll({ slug }: { slug: string }) {
                 </h3>
                 <ul className="continuity-list">
                   {list.map(it => (
-                    <ItemRow key={`${it.sessionName}|${it.id}`} it={it} slug={slug} canEdit sessionLink onStatus={st => setStatus(it, st)} />
+                    <ItemRow key={itemKey(it)} it={it} slug={slug} canEdit sessionLink onStatus={st => setStatus(it, st)} />
                   ))}
                 </ul>
               </div>
