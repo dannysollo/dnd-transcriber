@@ -39,7 +39,9 @@ const colorOf = (kind: string) => {
   const k = KINDS.find(x => x.key === kind)
   return k ? `var(--wg-${k.slot})` : 'var(--wg-other)'
 }
-const LABEL_ZOOM = 1.8
+// Names fill in as you zoom in from the whole-graph view, best-connected first:
+// all of them by NAMES_ALL times that view's zoom.
+const NAMES_ALL = 2.5
 
 interface Settings {
   spacing: number      // how hard pages push apart (many-body charge, negated)
@@ -216,6 +218,8 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
 
     let k = 1
     let named = new Set<string>()
+    const byDegree = [...nodes].sort((a, b) => b.degree - a.degree)
+    let kAll = 1   // the zoom that fits the whole graph; names fill in relative to it
     const place = () => {
       line.attr('x1', d => (d.source as Node).x!).attr('y1', d => (d.source as Node).y!)
         .attr('x2', d => (d.target as Node).x!).attr('y2', d => (d.target as Node).y!)
@@ -262,11 +266,14 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
       const s = settingsRef.current
       // fewer standing names on a narrow screen, where they'd pile up in the middle
       const standing = width < 600 ? Math.min(s.names, 5) : s.names
-      named = new Set([...nodes].sort((a, b) => b.degree - a.degree).slice(0, standing).map(n => n.id))
+      kAll = fitTransform(nodes, WHOLE).k   // the layout may have spread or shrunk since the last fit
+      const t = Math.min(1, Math.max(0, (k / kAll - 1) / (NAMES_ALL - 1)))
+      const count = Math.round(standing + (nodes.length - standing) * t ** 1.5)
+      named = new Set(byDegree.slice(0, count).map(n => n.id))
       dot.attr('r', radius)
       groupLabel.attr('font-size', (width < 600 ? 12 : 17) / k).attr('stroke-width', 4 / k)
       label.attr('font-size', s.textSize / k).attr('stroke-width', 3 / k).attr('dy', d => -radius(d) - 4 / k)
-        .classed('on', d => named.has(d.id) || k >= LABEL_ZOOM)
+        .classed('on', d => named.has(d.id))
     }
     place()
 
@@ -289,8 +296,7 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     svg.call(zoomer).on('dblclick.zoom', null)
 
     const duration = reducedMotion() ? 0 : 450
-    const fit = (subset: Node[], maxScale: number, animate = true) => {
-      if (!subset.length) return
+    const fitTransform = (subset: Node[], maxScale: number) => {
       const xs = subset.map(n => n.x!), ys = subset.map(n => n.y!)
       let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
       const pad = 40   // on screen
@@ -308,7 +314,12 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
           s = scaleFor()
         }
       }
-      const t = zoomIdentity.translate(width / 2 - s * (x0 + x1) / 2, height / 2 - s * (y0 + y1) / 2).scale(s)
+      return zoomIdentity.translate(width / 2 - s * (x0 + x1) / 2, height / 2 - s * (y0 + y1) / 2).scale(s)
+    }
+    const WHOLE = 1.4   // the most a whole-graph fit zooms in
+    const fit = (subset: Node[], maxScale: number, animate = true) => {
+      if (!subset.length) return
+      const t = fitTransform(subset, maxScale)
       if (animate && duration) svg.transition().duration(duration).call(zoomer.transform, t)
       else svg.call(zoomer.transform, t)
     }
@@ -348,10 +359,10 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
         sim.stop().alpha(0.6)
         for (let i = 0; i < 300; i++) sim.tick()
         place()
-        if (refit) fit(nodes, 1.4, false)
+        if (refit) fit(nodes, WHOLE, false)
       } else {
         // a change of shape (grouping on or off) re-frames the view once it settles
-        sim.on('end.fit', refit ? () => { sim.on('end.fit', null); fit(nodes, 1.4) } : null)
+        sim.on('end.fit', refit ? () => { sim.on('end.fit', null); fit(nodes, WHOLE) } : null)
         sim.alpha(refit ? 0.9 : 0.6).alphaDecay(0.03).restart()
       }
       restyle()
@@ -360,7 +371,7 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     apiRef.current = {
       relayout, restyle,
       zoomBy: m => duration ? svg.transition().duration(200).call(zoomer.scaleBy, m) : svg.call(zoomer.scaleBy, m),
-      fitAll: () => fit(nodes, 1.4),
+      fitAll: () => fit(nodes, WHOLE),
       select: choose,
     }
 
@@ -368,7 +379,7 @@ export default function WikiGraph({ slug, base, focus }: { slug: string; base: s
     // neighbours (from a page's "See it in the graph").
     highlight(pinned)
     if (pinned) fit(around(pinned), 2.2, false)
-    else fit(nodes, 1.4, false)
+    else fit(nodes, WHOLE, false)
     return () => { sim.stop(); svg.on('.zoom', null); svg.interrupt(); apiRef.current = null }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, hidden, settings.hideLonely])
