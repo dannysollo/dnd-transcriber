@@ -218,9 +218,9 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
           {index.has_wiki && index.pages.length > 0 && <>
             <Link to={`${base}/${GRAPH_PAGE}`} className="btn-ghost wiki-graph-link"><GraphIcon size={18} /> Relationship graph</Link>
             <span className="wiki-tools-links">
-              {index.is_member && <Link to={`${base}/${REPORTS_PAGE}`} className="index-link">
+              {index.is_member && <Link to={`${base}/${REPORTS_PAGE}`} className="btn-ghost btn-slim">
                 Reports{index.open_reports ? <span className="wr-count">{index.open_reports} waiting</span> : null}</Link>}
-              {hasIndexPage && <button type="button" className="index-link" aria-pressed={showAll} onClick={() => setShowAll(v => !v)}>
+              {hasIndexPage && <button type="button" className="btn-ghost btn-slim" aria-pressed={showAll} onClick={() => setShowAll(v => !v)}>
                 {showAll ? 'Hide all pages' : 'All pages'}</button>}
             </span>
           </>}
@@ -228,10 +228,10 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
         {(index.can_edit || index.can_manage) && (
           <div className="wiki-editing">
             <span className="sc">Editing</span>
-            {index.can_edit && <button type="button" className="index-link" aria-pressed={creating} onClick={() => setCreating(c => !c)}>New page</button>}
-            {index.can_manage && hasIndexPage && <Link to={`${base}/${INDEX_SLUG}`} className="index-link">Edit the front page</Link>}
+            {index.can_edit && <button type="button" className="btn-ghost btn-slim" aria-pressed={creating} onClick={() => setCreating(c => !c)}>New page</button>}
+            {index.can_manage && hasIndexPage && <Link to={`${base}/${INDEX_SLUG}`} className="btn-ghost btn-slim">Edit the front page</Link>}
             {index.can_manage && index.has_wiki && index.pages.length > 0 &&
-              <button type="button" className="index-link" aria-pressed={filling} onClick={() => setFilling(v => !v)}>Fill in missing pages</button>}
+              <button type="button" className="btn-ghost btn-slim" aria-pressed={filling} onClick={() => setFilling(v => !v)}>Fill in missing pages</button>}
           </div>
         )}
         {creating && <NewPageForm slug={slug} sections={sections.map(([s]) => s)}
