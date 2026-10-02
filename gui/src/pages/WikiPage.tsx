@@ -212,9 +212,9 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
           {index.can_manage && <> <button type="button" className="index-link" onClick={togglePublic}>
             {index.public ? 'Make it members only' : 'Make it public'}</button></>}
         </p>
+        <input className="written-line wiki-search" value={q} onChange={e => setQ(e.target.value)}
+          placeholder="Search the wiki" aria-label="Search the wiki" />
         <div className="wiki-tools">
-          <input className="written-line wiki-search" value={q} onChange={e => setQ(e.target.value)}
-            placeholder="Search the wiki" aria-label="Search the wiki" />
           {index.has_wiki && index.pages.length > 0 && <>
             <Link to={`${base}/${GRAPH_PAGE}`} className="btn-ghost wiki-graph-link"><GraphIcon size={18} /> Relationship graph</Link>
             <span className="wiki-tools-links">
