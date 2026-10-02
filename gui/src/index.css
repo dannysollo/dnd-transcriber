@@ -845,6 +845,8 @@ input.written-line:focus {
   box-shadow: inset 2px 0 0 var(--gilt); }
 .transcript-line.active .transcript-ts { color: var(--gilt-ink); }
 .transcript-line.flash { background: var(--highlighter); }
+/* The line chosen with j/k */
+.transcript-line.kbd-cursor, .edit-row.kbd-cursor { box-shadow: inset 2px 0 0 var(--gilt); }
 .read-text { margin: 0; font-size: 19px; line-height: 1.55; color: var(--ink); max-width: 70ch; overflow-wrap: anywhere; }
 .read-text .speaker-name { margin-right: 0.4em; }
 .read-text .speaker-player { margin-right: 0.5em; }
@@ -1190,6 +1192,8 @@ button.wiki-missing { cursor: pointer; }
 .wiki-gen-pick label { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: baseline; cursor: pointer; }
 .wiki-gen-note { grid-column: 2; font-size: 13px; color: var(--ink-soft); }
 .wiki-gen-actions { display: flex; gap: 12px; }
+.wiki-gen-maybe { color: var(--rubric); }
+.wiki-gen-maybe a { color: inherit; }
 
 /* ─── Wiki relationship graph (WikiGraph.tsx) ─────────────────────────────
    Colour slots per kind of page, validated (dataviz six checks) on both page

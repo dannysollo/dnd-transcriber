@@ -287,12 +287,14 @@ def build_prompt(job: dict, vault: Path, run_claude=None, config: dict | None = 
 
 def run_job(job: dict, config: dict, vault: Path, run_claude) -> list[dict]:
     """Check one session (a job from /worker/continuity-jobs) against the vault at
-    `vault`, in one tool-free call. main.py passes run_claude in. Returns the items."""
+    `vault`, in one tool-free call. main.py passes run_claude in. Returns the items
+    (and leaves the pages it read in job["checked_pages"])."""
     if not job.get("pages") and not vault.is_dir():
         raise RuntimeError(f"vault not found at {vault}: set vault_path in worker.yaml")
     if not (job.get("summary") or "").strip():
         return []  # nothing to check against: the session hasn't been analysed
     system, message, pages = build_prompt(job, vault, run_claude, config)
+    job["checked_pages"] = pages   # sent back with the result: the server re-checks when these change
     print(f"[continuity]   {len(pages)} pages, ~{(len(system) + len(message)) // 4:,} tokens: "
           + ", ".join(Path(r).stem for r in pages))
     # Sonnet: good enough for a list of findings the DM reviews anyway, and cheaper.

@@ -18,14 +18,6 @@ is being asked to use headphones or echo cancellation. If it recurs, an
 echo filter (a line matching one said just before on another track, and much
 quieter on its own) is the fix.
 
-Still open:
-- **Hallucinated lines.** Mostly handled: ~100 removed across the Craig
-  sessions (stock captions, recited name lists, echoes; backups kept as
-  transcript.before-hallucination-sweep.md), and the worker now drops those
-  patterns itself. One-offs remain; Delete line in the unsure-word review
-  removes them.
-- **Names -> transcript jump is laggy on phones.** Possibly a slow train
-  connection; recorded for now.
 
 ## Speaker attribution
 
@@ -57,13 +49,13 @@ Still open:
   run had failed that way. The page pick varies run to run (Haiku), so a page a
   session only describes ("the smith") can be missed. The check itself runs on
   Sonnet since 2026-09-30 (the catch-up run over every session was done on the
-  default model). Still open:
-  - Re-check only what changed: remember the pages' hashes per session.
+  default model). Re-checks (2026-10-02): each check records hashes of the
+  session's summary and the pages it read; "Check N sessions" also takes the
+  ones where any of those changed since. A page created after a session was
+  checked doesn't count as a change for it.
 
 ## Review
 
-- Keyboard shortcuts in the transcript: j/k between lines, space to
-  play/pause, e to edit, / to search.
 - Names tab bulk actions: add all suggested rules in one step.
 
 ## Notifications and operations

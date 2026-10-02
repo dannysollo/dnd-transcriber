@@ -404,6 +404,9 @@ export default function SessionView() {
   const [editMode, setEditMode] = useState(false)
   const sessionContentRef = useRef<HTMLDivElement | null>(null)
   const anchorLineRef = useRef<{ idx: number; offset: number } | null>(null)
+  // A line to open in the editor as edit mode starts (the "e" shortcut on a line).
+  const editOpenLineRef = useRef<number | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [shareToken, setShareToken] = useState<string | null>(null)
   const [shareCreating, setShareCreating] = useState(false)
@@ -1442,9 +1445,11 @@ export default function SessionView() {
             {!editMode && (
               <>
                 <input
+                  ref={searchInputRef}
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Escape') { setSearch(''); e.currentTarget.blur() } }}
                   placeholder="Find a word, name, or phrase"
                   aria-label="Search this transcript"
                   className="written-line"
@@ -1570,6 +1575,7 @@ export default function SessionView() {
                     }
                     anchorLineRef.current = best
                   }
+                  editOpenLineRef.current = null
                   setEditMode(m => !m)
                 }}
                 className={editMode ? 'btn-primary' : 'btn-ghost'}
@@ -1698,6 +1704,18 @@ export default function SessionView() {
               <TranscriptView
                 content={transcript}
                 initialEditLine={anchorLineRef.current?.idx ?? null}
+                openOnEdit={editOpenLineRef.current}
+                onEditLine={canEditTranscript ? (idx, offset) => {
+                  anchorLineRef.current = { idx, offset }
+                  editOpenLineRef.current = idx
+                  setEditMode(true)
+                } : undefined}
+                onTogglePlay={audioFiles.length > 0 ? () => {
+                  const el = audioRef.current
+                  if (!el) return
+                  if (el.paused) el.play(); else el.pause()
+                } : undefined}
+                onFocusSearch={() => searchInputRef.current?.focus()}
                 search={search}
                 currentTime={audioFiles.length > 0 ? currentTime : undefined}
                 onSeek={audioFiles.length > 0 ? seekAndSwitch : undefined}
@@ -1917,6 +1935,10 @@ function TranscriptView({
   onTranscriptChange,
   onEditsSaved,
   initialEditLine = null,
+  openOnEdit = null,
+  onEditLine,
+  onTogglePlay,
+  onFocusSearch,
   confidence,
   showConfidence,
   onReviewWord,
@@ -1936,6 +1958,12 @@ function TranscriptView({
   onEditsSaved?: (text: string) => void
   /** The line to show first when edit mode opens (its block renders immediately). */
   initialEditLine?: number | null
+  /** A line to open in the editor as edit mode starts. */
+  openOnEdit?: number | null
+  /** Keyboard shortcuts: "e" on a line in the read view (with its place on screen). */
+  onEditLine?: (lineIdx: number, offset: number) => void
+  onTogglePlay?: () => void
+  onFocusSearch?: () => void
   confidence?: ConfidenceMap | null
   showConfidence?: boolean
   /** Clicking an underlined word opens the unsure-word review there (editors only). */
@@ -2188,7 +2216,12 @@ function TranscriptView({
         setEditedLines(lines)
       } else {
         setEditedLines(lines)
-        setEditingLineIdx(null)
+        if (entering && openOnEdit != null && openOnEdit < lines.length) {
+          editingValueRef.current = lines[openOnEdit]
+          setEditingLineIdx(openOnEdit)
+        } else {
+          setEditingLineIdx(null)
+        }
       }
     }
     if (!editMode) {
@@ -2366,6 +2399,95 @@ function TranscriptView({
     isNew: i => rowActionsRef.current.isNew(i),
     newLineContext: i => rowActionsRef.current.newLineContext(i),
   }), [])
+  // Keyboard shortcuts: j/k move between lines, Enter plays from the line,
+  // space plays/pauses, e edits the line, / finds, ? lists them. The chosen
+  // line is marked with a class on its row (rows are memoised, so no state).
+  const cursorRef = useRef<number | null>(null)
+  const editRootRef = useRef<HTMLDivElement | null>(null)
+  const shortcutsRef = useRef<(e: KeyboardEvent) => void>(() => {})
+  shortcutsRef.current = (e: KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return
+    const t = e.target as HTMLElement | null
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+    if (editingLineIdx !== null || document.querySelector('[aria-modal="true"]')) return
+    const root = editMode ? editRootRef.current : pageRef.current
+    const scroller = root?.closest('.session-content') as HTMLElement | null
+    if (!root || !scroller) return
+    const rows = () => Array.from(root.querySelectorAll<HTMLElement>(editMode ? '.edit-row[data-line-idx]' : '.transcript-line[data-line-idx]'))
+    const current = () => cursorRef.current == null ? null
+      : root.querySelector<HTMLElement>(`${editMode ? '.edit-row' : '.transcript-line'}[data-line-idx="${cursorRef.current}"]`)
+    const mark = (el: HTMLElement | null) => {
+      root.querySelectorAll('.kbd-cursor').forEach(x => x.classList.remove('kbd-cursor'))
+      if (!el) { cursorRef.current = null; return }
+      el.classList.add('kbd-cursor')
+      cursorRef.current = parseInt(el.dataset.lineIdx ?? '-1', 10)
+      el.scrollIntoView({ block: 'nearest' })
+    }
+    const key = e.key
+    if (key === 'j' || key === 'k') {
+      const list = rows()
+      if (!list.length) return
+      const cur = current()
+      let i = cur ? list.indexOf(cur) : -1
+      if (i < 0) {
+        // Start from the first line on screen.
+        const top = scroller.getBoundingClientRect().top
+        i = list.findIndex(el => el.getBoundingClientRect().bottom > top + 8)
+        if (i < 0) i = 0
+      } else {
+        i = Math.max(0, Math.min(list.length - 1, i + (key === 'j' ? 1 : -1)))
+      }
+      e.preventDefault()
+      mark(list[i])
+    } else if (key === 'Enter' && !editMode) {
+      const cur = current()
+      const ts = cur?.querySelector<HTMLButtonElement>('button.transcript-ts')
+      if (!ts) return
+      e.preventDefault()
+      ts.click()
+    } else if (key === ' ') {
+      if (!onTogglePlay) return
+      e.preventDefault()
+      onTogglePlay()
+    } else if (key === 'e') {
+      const cur = current()
+      if (!cur || cursorRef.current == null) return
+      e.preventDefault()
+      if (editMode) {
+        const i = cursorRef.current
+        rowActionsRef.current.startEdit(i, editedLinesRef.current[i] ?? '')
+      } else if (onEditLine) {
+        onEditLine(cursorRef.current, cur.getBoundingClientRect().top - scroller.getBoundingClientRect().top)
+      }
+    } else if (key === '/' && !editMode && onFocusSearch) {
+      e.preventDefault()
+      onFocusSearch()
+    } else if (key === '?') {
+      e.preventDefault()
+      toast('Keys: j / k next and previous line · Enter play from it · Space play or pause · e edit it · / find', 'info')
+    }
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => shortcutsRef.current(e)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  // Rows re-render with their own className (editing a line, the playing
+  // line), which drops the mark: put it back. Also keeps it across views.
+  useEffect(() => {
+    const root = editMode ? editRootRef.current : pageRef.current
+    if (!root) return
+    const sel = editMode ? '.edit-row' : '.transcript-line'
+    const restore = () => {
+      if (cursorRef.current == null) return
+      const el = root.querySelector(`${sel}[data-line-idx="${cursorRef.current}"]`)
+      if (el && !el.classList.contains('kbd-cursor')) el.classList.add('kbd-cursor')
+    }
+    restore()
+    const obs = new MutationObserver(restore)
+    obs.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] })
+    return () => obs.disconnect()
+  }, [editMode, content === null])
   const editDisplayLines = useMemo(
     () => (editMode ? (editedLines.length > 0 ? editedLines : (content ?? '').split('\n')) : []),
     [editMode, editedLines, content])
@@ -2456,7 +2578,7 @@ function TranscriptView({
           />
         )}
 
-        <div className="edit-lines">
+        <div className="edit-lines" ref={editRootRef}>
           {editChunks.map((lines, c) => {
             const start = c * EDIT_CHUNK
             const inChunk = editingLineIdx !== null && editingLineIdx >= start && editingLineIdx < start + lines.length

@@ -98,9 +98,10 @@ class WorkerClient:
         r.raise_for_status()
         return r.json().get("job")
 
-    def push_continuity_result(self, session_name: str, items: list[dict], error: str | None = None) -> None:
+    def push_continuity_result(self, session_name: str, items: list[dict], error: str | None = None,
+                               pages: list[str] | None = None) -> None:
         r = requests.post(self._url(f"/worker/sessions/{session_name}/continuity-result"),
-                          headers=self.headers, json={"items": items, "error": error}, timeout=60)
+                          headers=self.headers, json={"items": items, "error": error, "pages": pages}, timeout=60)
         r.raise_for_status()
 
     def get_wiki_fix_job(self) -> dict | None:

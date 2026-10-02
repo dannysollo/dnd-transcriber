@@ -77,10 +77,13 @@ events the table refers back to, named items, and world mechanics. Skip one-off 
 At most %d items. Player characters are already covered: don't include them."""
 
 
-def find_entities(sessions: list[dict], players: dict, scratch: str | None) -> list[dict]:
+def find_entities(sessions: list[dict], players: dict, scratch: str | None, existing: list[str] | None = None) -> list[dict]:
     corpus = "\n\n".join(f"## {s['name']} ({s['date']})\n{s['summary']}" for s in sessions if s["summary"])
     pcs = _pc_entities(players)
     msg = ("Player characters (already have pages): " + ", ".join(p["title"] for p in pcs) +
+           ("\n\nPages the wiki already has (don't list these, or anything they cover under a shorter, longer "
+            "or different name, e.g. a first name or title for a character listed with a full name): "
+            + ", ".join(existing) if existing else "") +
            "\n\nSession summaries, oldest first:\n\n" + corpus)
     raw = ask_claude(ENTITY_SYSTEM % (", ".join(FOLDERS), MAX_PAGES), msg, scratch)
     m = re.search(r"\[.*\]", raw, re.S)
@@ -149,6 +152,30 @@ def write_page(entity: dict, sessions: list[dict], titles: list[str], fmt: str, 
     return {"title": entity["title"], "section": entity["folder"], "markdown": md}
 
 
+_SMALL = {"the", "of", "a", "an", "and", "de", "von", "van", "la", "le"}
+
+
+def name_words(name: str) -> set[str]:
+    """The words of a name that identify it: "The Butterfly Woman" -> {butterfly, woman}."""
+    n = re.sub(r"\s*\(.*?\)", "", name.lower())
+    words = {re.sub(r"(?:'s|s')$", "", w) for w in re.findall(r"[a-z0-9][a-z0-9'!]*", n)}
+    return {w for w in words if w and w not in _SMALL}
+
+
+def maybe_same(name: str, existing: list[dict]) -> list[str]:
+    """Existing pages this name might already be: one's words all appear in the
+    other's ("Marc" / "Marc Kalita", "The Saints" / "Saints of Ophir")."""
+    words = name_words(name)
+    out = []
+    for page in existing:
+        for other in [page["title"], *(page.get("aliases") or [])]:
+            ow = name_words(other)
+            if words and ow and (words <= ow or ow <= words):
+                out.append(page["title"])
+                break
+    return out
+
+
 def name_keys(name: str) -> set[str]:
     """Loose forms of a page name, so "The Tehom", "Tehom", "Conduit"/"Conduits",
     "Magic 8-Ball"/"The Magic 8 Ball" and "Faerun" (of "Faerun & Bethesda") match."""
@@ -168,7 +195,9 @@ def generate(job: dict, client, config: dict) -> None:
         entities = job.get("entities")
         if entities is None:
             client.wiki_status("running", 0, 0, "Finding who and what deserves a page")
-            entities = find_entities(sessions, job.get("players") or {}, scratch)
+            fill = job.get("mode") == "fill"
+            entities = find_entities(sessions, job.get("players") or {}, scratch,
+                                     job.get("existing") if fill else None)
             if job.get("mode") == "fill":
                 # Skip anything an existing page already covers, under any of its names.
                 have = {k for n in job.get("existing_names") or job.get("existing", []) for k in name_keys(n)}
@@ -180,6 +209,14 @@ def generate(job: dict, client, config: dict) -> None:
                 if not keys & seen:
                     unique.append(e)
                 seen |= keys
+            # Part of a name matches an existing page's ("Marc" and "Marc Kalita"):
+            # proposed, but flagged and unticked, since it's most likely the same.
+            if fill:
+                pages = job.get("existing_pages") or [{"title": t} for t in job.get("existing", [])]
+                for e in unique:
+                    hits = sorted({t for n in [e["title"], *e["aliases"]] for t in maybe_same(n, pages)})
+                    if hits:
+                        e["maybe"] = hits[:3]
             # The DM picks which of these to write; the job comes back with them.
             print(f"[wiki] {len(unique)} pages proposed, waiting for the DM", flush=True)
             client.wiki_status("review", 0, len(unique), f"{len(unique)} page{'' if len(unique) == 1 else 's'} to look over", proposed=unique)

@@ -4599,6 +4599,7 @@ def worker_get_wiki_job(slug: str, db: Session = Depends(get_db), request: Reque
     job.update(state="running", message="Reading the sessions")
     _write_wiki_job(slug, job)
     return {"job": {"mode": job["mode"], "entities": job.get("approved"), "sessions": sessions, "existing": existing, "existing_names": existing_names,
+                    "existing_pages": [{"title": p.title, "aliases": list(p.aliases or [])} for p in pages],
                     "players": load_config(slug).get("players") or {},
                     "format": fmt.read_text(encoding="utf-8") if fmt.exists() else ""}}
 
@@ -4647,7 +4648,7 @@ def worker_wiki_status(slug: str, body: WikiGenStatus, db: Session = Depends(get
     job = _read_wiki_job(slug)
     job.update(state=body.state, done=body.done, total=body.total, message=body.message)
     if body.state == "review":
-        job["proposed"] = [{k: e.get(k) for k in ("title", "folder", "aliases", "note")}
+        job["proposed"] = [{k: e.get(k) for k in ("title", "folder", "aliases", "note", "maybe")}
                            for e in body.proposed or [] if e.get("title")]
     if body.state == "done":
         vault = _wiki_vault(slug, db) or (BASE_DIR / "vaults" / slug)
@@ -5236,6 +5237,11 @@ def cancel_analysis_pending(slug: str, name: str, _member=Depends(require_campai
 
 CONTINUITY_FLAG = "continuity_pending"
 CONTINUITY_FILE = "continuity.json"
+CONTINUITY_SERVED = "continuity_served.json"   # hashes of the summary and pages the running check was sent
+
+
+def _text_hash(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
 
 
 def _read_continuity(session_dir: Path) -> dict:
@@ -5294,12 +5300,18 @@ def worker_get_continuity_job(slug: str, db: Session = Depends(get_db), request:
             pages = [{"path": p.path, "text": p.text} for p in _wiki_index(slug, vault).pages.values()]
     except Exception:
         pass
+    # What this check is being run against, so a later "check every session"
+    # can tell whether any of it has changed since (_continuity_stale).
+    (d / CONTINUITY_SERVED).write_text(json.dumps({
+        "summary": _text_hash(summary), "pages": {pg["path"]: _text_hash(pg["text"]) for pg in pages},
+    }), encoding="utf-8")
     return {"job": {"session_name": d.name, "summary": summary, "transcript": transcript, "wiki": wiki, "pages": pages}}
 
 
 class ContinuityResultBody(BaseModel):
     items: list[dict] = []
     error: Optional[str] = None
+    pages: Optional[list[str]] = None   # the vault pages the check read (older workers don't send them)
 
 
 @app.post("/campaigns/{slug}/worker/sessions/{name}/continuity-result")
@@ -5318,9 +5330,16 @@ def worker_push_continuity_result(slug: str, name: str, body: ContinuityResultBo
             continue
         keep = {k: it.get(k) for k in ("title", "page", "kind", "wiki", "session", "ts", "fix")}
         items.append({"id": i, **keep, "status": before.get((it.get("page"), it.get("wiki"))) or "open"})
-    (session_dir / CONTINUITY_FILE).write_text(json.dumps({
-        "generated": datetime.utcnow().isoformat(timespec="seconds"), "error": body.error, "items": items,
-    }), encoding="utf-8")
+    result = {"generated": datetime.utcnow().isoformat(timespec="seconds"), "error": body.error, "items": items}
+    # What it was checked against: the summary, and the pages it read as they were sent.
+    try:
+        served = json.loads((session_dir / CONTINUITY_SERVED).read_text(encoding="utf-8"))
+        result["checked"] = {"summary": served.get("summary"),
+                             "pages": {rel: served["pages"][rel] for rel in body.pages or [] if rel in served.get("pages", {})}}
+    except Exception:
+        pass
+    (session_dir / CONTINUITY_FILE).write_text(json.dumps(result), encoding="utf-8")
+    (session_dir / CONTINUITY_SERVED).unlink(missing_ok=True)
     (session_dir / CONTINUITY_FLAG).unlink(missing_ok=True)
     log_queue.put(f"[continuity] {name}: {len(items)} to check" + (f" (error: {body.error})" if body.error else ""))
     return {"ok": True, "items": len(items)}
@@ -5371,17 +5390,39 @@ def _continuity_checked(session_dir: Path) -> bool:
     return bool(data.get("generated")) and not data.get("error")
 
 
+def _current_page_hashes(slug: str, db: Session) -> dict[str, str]:
+    try:
+        vault = _wiki_vault(slug, db)
+        return {p.path: _text_hash(p.text) for p in _wiki_index(slug, vault).pages.values()} if vault else {}
+    except Exception:
+        return {}
+
+
+def _continuity_stale(session_dir: Path, page_hashes: dict[str, str]) -> bool:
+    """Checked before, but its summary or one of the pages it was checked against
+    has changed since (or the page is gone). Checks from before this was recorded
+    count as current: there's no telling what they read."""
+    checked = _read_continuity(session_dir).get("checked")
+    if not checked:
+        return False
+    summary = session_dir / "summary.md"
+    if summary.exists() and checked.get("summary") and _text_hash(summary.read_text(encoding="utf-8")) != checked["summary"]:
+        return True
+    return any(page_hashes.get(rel) != h for rel, h in (checked.get("pages") or {}).items())
+
+
 @app.post("/campaigns/{slug}/continuity/run-all")
-def campaign_run_continuity_all(slug: str, _member=Depends(require_campaign_member("dm"))):
+def campaign_run_continuity_all(slug: str, _member=Depends(require_campaign_member("dm")), db: Session = Depends(get_db)):
     """Queue a check of every session with a summary that hasn't been checked
-    successfully yet, oldest first. Meant to be run rarely: once to catch up a
-    wiki, then every dozen sessions or so for edge cases."""
+    successfully yet, or whose summary or checked pages changed since its last
+    check, oldest first. Meant to be run now and then, not after every edit."""
     sessions_dir = get_sessions_dir(slug)
+    page_hashes = _current_page_hashes(slug, db)
     def date_key(d: Path):
         m = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{4})", d.name)
         return (int(m[3]), int(m[1]), int(m[2])) if m else (9999, 0, 0)
     dirs = sorted((d for d in sessions_dir.iterdir() if d.is_dir() and (d / "summary.md").exists()
-                   and not _continuity_checked(d)), key=date_key)
+                   and (not _continuity_checked(d) or _continuity_stale(d, page_hashes))), key=date_key)
     now = time.time()
     for i, d in enumerate(dirs):
         flag = d / CONTINUITY_FLAG
@@ -5409,18 +5450,23 @@ def campaign_continuity(slug: str, page: Optional[str] = None,
     """Open items across sessions (optionally for one vault page), and how many sessions are still queued."""
     sessions_dir = get_sessions_dir(slug)
     slugs = _continuity_page_slugs(slug, db)
-    items, queued, unchecked = [], 0, 0
+    page_hashes = _current_page_hashes(slug, db) if page is None else {}
+    items, queued, unchecked, changed = [], 0, 0, 0
     for d in (sessions_dir.iterdir() if sessions_dir.exists() else []):
         if not d.is_dir():
             continue
         queued += (d / CONTINUITY_FLAG).exists()
-        unchecked += (d / "summary.md").exists() and not _continuity_checked(d) and not (d / CONTINUITY_FLAG).exists()
+        waiting = (d / "summary.md").exists() and not (d / CONTINUITY_FLAG).exists()
+        if waiting and not _continuity_checked(d):
+            unchecked += 1
+        elif waiting and page is None and _continuity_stale(d, page_hashes):
+            changed += 1
         for it in _read_continuity(d).get("items", []):
             if it.get("status") == "open" and (page is None or it.get("page") == page):
                 items.append({**it, "session": d.name, "claim": it.get("session"), "page_slug": slugs.get(it.get("page", ""))})
     # suggested fixes from wiki reports go in the same review list
     items += _report_findings(slug, _read_wiki_reports(slug), page, slugs)
-    return {"items": items, "queued": queued, "unchecked": unchecked}
+    return {"items": items, "queued": queued, "unchecked": unchecked, "changed": changed}
 
 
 # ─── Roll20 dice (roll20.py) ─────────────────────────────────────────────────

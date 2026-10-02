@@ -238,7 +238,7 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
           onCreated={s => { onChanged(); navigate(`${base}/${s}`) }} onCancel={() => setCreating(false)} />}
       </header>
 
-      {index.can_manage && <WikiGenerate slug={slug} empty={!index.has_wiki || index.pages.length === 0} onDone={onChanged}
+      {index.can_manage && <WikiGenerate slug={slug} base={base} pages={index.pages} empty={!index.has_wiki || index.pages.length === 0} onDone={onChanged}
         asked={filling} onClose={() => setFilling(false)} />}
       {index.can_manage && index.has_wiki && index.pages.length > 0 && <ContinuityCheckAll slug={slug} />}
 
@@ -287,13 +287,14 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
 
 // ─── Generating the wiki from the sessions (worker/wiki_gen.py) ──────────────
 
-interface Proposed { title: string; folder: string; aliases?: string[]; note?: string }
+interface Proposed { title: string; folder: string; aliases?: string[]; note?: string; maybe?: string[] }
 interface GenJob { state: 'none' | 'queued' | 'running' | 'review' | 'done' | 'error'; mode?: string; done?: number; total?: number; message?: string; warning?: string | null; finished?: string; proposed?: Proposed[] }
 
 /** Writing pages from the sessions. The worker first proposes a page list; the
  * DM ticks which to write ("review"), then the worker writes those. `asked` is
  * the toolbar's "Fill in missing pages" button. */
-function WikiGenerate({ slug, empty, onDone, asked, onClose }: { slug: string; empty: boolean; onDone: () => void; asked: boolean; onClose: () => void }) {
+function WikiGenerate({ slug, base, pages, empty, onDone, asked, onClose }: { slug: string; base: string; pages: PageSummary[]; empty: boolean; onDone: () => void; asked: boolean; onClose: () => void }) {
+  const slugOf = (title: string) => pages.find(p => p.title === title)?.slug ?? ''
   const { toast } = useToast()
   const [job, setJob] = useState<GenJob | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -311,7 +312,8 @@ function WikiGenerate({ slug, empty, onDone, asked, onClose }: { slug: string; e
   const prev = useRef(job?.state)
   useEffect(() => {
     if (prev.current && prev.current !== 'done' && job?.state === 'done') onDone()
-    if (job?.state === 'review' && prev.current !== 'review') setPicked(new Set(job.proposed?.map(p => p.title)))
+    // Ones that might already have a page start unticked.
+    if (job?.state === 'review' && prev.current !== 'review') setPicked(new Set(job.proposed?.filter(p => !p.maybe?.length).map(p => p.title)))
     prev.current = job?.state
   }, [job?.state])
 
@@ -354,7 +356,7 @@ function WikiGenerate({ slug, empty, onDone, asked, onClose }: { slug: string; e
       <div className="wiki-gen wiki-gen-review">
         <p className="wiki-gen-title">{list.length ? `Write these ${list.length} pages?` : 'Nothing is missing'}</p>
         {list.length ? <>
-          <p className="wiki-note">Untick any you don't want. Nothing is written until you say so.{' '}
+          <p className="wiki-note">Untick any you don't want. Names that might already have a page start unticked. Nothing is written until you say so.{' '}
             <button type="button" className="index-link" onClick={() => setPicked(new Set(list.map(p => p.title)))}>All</button>{' '}
             <button type="button" className="index-link" onClick={() => setPicked(new Set())}>None</button></p>
           <div className="wiki-gen-pick">
@@ -365,6 +367,7 @@ function WikiGenerate({ slug, empty, onDone, asked, onClose }: { slug: string; e
                   <label key={p.title} title={p.aliases?.length ? `Also: ${p.aliases.join(', ')}` : undefined}>
                     <input type="checkbox" checked={picked.has(p.title)} onChange={() => toggle(p.title)} />
                     <span>{p.title}</span>{p.note && <span className="wiki-gen-note">{p.note}</span>}
+                    {p.maybe?.length ? <span className="wiki-gen-note wiki-gen-maybe">Might already be {p.maybe.map((t, i) => <span key={t}>{i ? ', ' : ''}<Link to={`${base}/${slugOf(t)}`} target="_blank">{t}</Link></span>)}</span> : null}
                   </label>
                 ))}
               </fieldset>

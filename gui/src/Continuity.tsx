@@ -267,15 +267,22 @@ const sessionKey = (name?: string) => {
   return m ? Number(m[3]) * 10000 + Number(m[1]) * 100 + Number(m[2]) : 99999999
 }
 
+/** "3 unchecked sessions", "2 changed sessions", "3 unchecked and 2 changed sessions". */
+function checkLabel(unchecked: number, changed: number): string {
+  const n = unchecked + changed
+  const what = [unchecked && `${unchecked} unchecked`, changed && `${changed} changed`].filter(Boolean).join(' and ')
+  return `${what} session${n !== 1 ? 's' : ''}`
+}
+
 export function ContinuityCheckAll({ slug }: { slug: string }) {
   const { toast } = useToast()
-  const [state, setState] = useState<{ queued: number; unchecked: number } | null>(null)
+  const [state, setState] = useState<{ queued: number; unchecked: number; changed: number } | null>(null)
   const [items, setItems] = useState<CampaignItem[]>([])
   const [reviewing, setReviewing] = useState(false)
   const load = () => fetch(`/campaigns/${slug}/continuity`).then(r => (r.ok ? r.json() : null))
     .then(d => {
       if (!d) return
-      setState({ queued: d.queued, unchecked: d.unchecked ?? 0 })
+      setState({ queued: d.queued, unchecked: d.unchecked ?? 0, changed: d.changed ?? 0 })
       // The campaign endpoint names the session "session" and the finding's text "claim".
       setItems(d.items.map((it: ContinuityItem & { session: string; claim: string }) => ({ ...it, sessionName: it.session, session: it.claim })))
     }).catch(() => {})
@@ -332,9 +339,9 @@ export function ContinuityCheckAll({ slug }: { slug: string }) {
             {reviewing ? 'Hide them' : `Review ${items.length}`}
           </button>
         )}
-        {!state.queued && state.unchecked > 0 && <button type="button" className="btn-ghost" onClick={runAll}
-          title="Check the wiki against each session that hasn't been checked, oldest first (one at a time on the worker). Worth doing once, then every dozen sessions or so.">
-          Check {state.unchecked} unchecked session{state.unchecked !== 1 ? 's' : ''}</button>}
+        {!state.queued && state.unchecked + state.changed > 0 && <button type="button" className="btn-ghost" onClick={runAll}
+          title="Check the wiki against each session that hasn't been checked, or whose summary or checked pages changed since its last check, oldest first (one at a time on the worker).">
+          Check {checkLabel(state.unchecked, state.changed)}</button>}
       </div>
       {reviewing && (
         <section className="continuity continuity-review" aria-label="Continuity findings">

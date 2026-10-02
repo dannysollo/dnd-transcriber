@@ -620,7 +620,7 @@ def analysis_poll_loop(config: dict, stop_event: threading.Event):
                 print(f"\n[continuity] [JOB] {name}")
                 try:
                     items = continuity.run_job(job, config, _resolve_campaign_vault(config), run_claude)
-                    client.push_continuity_result(name, items)
+                    client.push_continuity_result(name, items, pages=job.get("checked_pages"))
                     print(f"[continuity]   [DONE] {name}: {len(items)} to check")
                 except UsageLimitError as e:
                     print(f"[continuity]   Claude usage limit ({e}); {name} stays queued. Trying again in 30 min.")
