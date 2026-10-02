@@ -139,7 +139,9 @@ export default function App() {
     }
     fetchCount()
     const interval = setInterval(fetchCount, 30000)
-    return () => clearInterval(interval)
+    // A report's suggested fix handled (Continuity.tsx): update the badge now, not at the next poll
+    window.addEventListener('codm:reports-changed', fetchCount)
+    return () => { clearInterval(interval); window.removeEventListener('codm:reports-changed', fetchCount) }
   }, [activeCampaign?.slug, activeCampaign?.role])
 
   const logout = async () => {

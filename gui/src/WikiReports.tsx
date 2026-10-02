@@ -95,6 +95,7 @@ function ReportRow({ it, slug, base, canManage, showPage, onChanged }: {
       { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
     const d = await r.json().catch(() => ({}))
     if (!r.ok) { toast(d.detail || 'Could not do that', 'error'); return }
+    window.dispatchEvent(new Event('codm:reports-changed'))
     onChanged(d)
   }
   const own = myId != null && it.by_id === myId

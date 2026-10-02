@@ -241,6 +241,7 @@ export function PageContinuity({ slug, path, onChanged }: { slug: string; path: 
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
     })
     if (!r.ok) { toast('Could not update it', 'error'); return }
+    if (it.source === 'report') window.dispatchEvent(new Event('codm:reports-changed'))
     if (status === 'fixed') onChanged()
     load()
   }
@@ -312,6 +313,7 @@ export function ContinuityCheckAll({ slug }: { slug: string }) {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
     })
     if (!r.ok) { toast('Could not update it', 'error'); return }
+    if (it.source === 'report') window.dispatchEvent(new Event('codm:reports-changed'))
     // Handled: it leaves the list (it's still on its session or report, under the handled ones).
     if (status !== 'open') setItems(prev => prev.filter(x => itemKey(x) !== itemKey(it)))
   }

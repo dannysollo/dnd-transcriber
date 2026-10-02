@@ -4362,8 +4362,7 @@ def campaign_wiki_index(slug: str, user: Optional[User] = Depends(get_current_us
     can_manage = _wiki_is_dm(user, member)
     # reports (wiki corrections): players and DMs write them; members read them
     can_report = can_manage or bool(member and member.role == "player")
-    open_reports = sum(it.get("status") in ("open", "working", "suggested") for it in _read_wiki_reports(slug).get("items", [])) \
-        if (member or can_manage) else 0
+    open_reports = _waiting_reports(_read_wiki_reports(slug)) if (member or can_manage) else 0
     perms = {"can_edit": can_edit, "can_manage": can_manage, "can_report": can_report,
              "is_member": bool(member) or can_manage, "open_reports": open_reports}
     vault = _wiki_vault(slug, db)
@@ -4725,6 +4724,23 @@ def _wiki_fix_stale(data: dict) -> bool:
     return not served or (datetime.utcnow() - datetime.fromisoformat(served)).total_seconds() > WIKI_FIX_STALE
 
 
+def _report_status(it: dict, sugg: list[dict]) -> str:
+    """A report's status, "reviewed" once every suggested fix for it is dealt with in the review list."""
+    status = it.get("status")
+    if status == "suggested" and sugg and all(f.get("status") != "open" for f in sugg):
+        return "reviewed"
+    return status
+
+
+def _waiting_reports(data: dict) -> int:
+    """Reports not dealt with yet: the nav badge and the wiki index's "N waiting"."""
+    by_report: dict[int, list] = {}
+    for f in data.get("findings", []):
+        by_report.setdefault(f["report_id"], []).append(f)
+    return sum(_report_status(it, by_report.get(it["id"], [])) in ("open", "working", "suggested")
+               for it in data.get("items", []))
+
+
 def _wiki_reports_view(slug: str, data: dict, can_manage: bool, page: Optional[str] = None) -> dict:
     items = [it for it in data.get("items", []) if page is None or it.get("page_slug") == page]
     items = sorted(items, key=lambda it: it.get("created", ""), reverse=True)
@@ -4735,11 +4751,7 @@ def _wiki_reports_view(slug: str, data: dict, can_manage: bool, page: Optional[s
     out = []
     for it in items:
         sugg = by_report.get(it["id"], [])
-        status = it.get("status")
-        # every suggested fix dealt with in the review list: the report is done
-        if status == "suggested" and sugg and all(f["status"] != "open" for f in sugg):
-            status = "reviewed"
-        out.append({**it, "status": status, "suggestions": sugg})
+        out.append({**it, "status": _report_status(it, sugg), "suggestions": sugg})
     return {"items": out, **_wiki_fix_state(data), "can_manage": can_manage}
 
 
@@ -4791,8 +4803,7 @@ def campaign_wiki_reports(slug: str, page: Optional[str] = None, count: bool = F
                           user: Optional[User] = Depends(get_current_user),
                           _member=Depends(require_campaign_member("spectator")), db: Session = Depends(get_db)):
     if count:   # the nav badge: reports not dealt with yet (same as the wiki index's open_reports)
-        return {"count": sum(it.get("status") in ("open", "working", "suggested")
-                             for it in _read_wiki_reports(slug).get("items", []))}
+        return {"count": _waiting_reports(_read_wiki_reports(slug))}
     _, _, is_dm = _wiki_member(slug, user, db)
     return _wiki_reports_view(slug, _read_wiki_reports(slug), is_dm, page)
 
