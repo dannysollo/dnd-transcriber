@@ -4786,8 +4786,12 @@ def _wiki_member(slug: str, user: Optional[User], db: Session):
 
 
 @app.get("/campaigns/{slug}/wiki/reports")
-def campaign_wiki_reports(slug: str, page: Optional[str] = None, user: Optional[User] = Depends(get_current_user),
+def campaign_wiki_reports(slug: str, page: Optional[str] = None, count: bool = False,
+                          user: Optional[User] = Depends(get_current_user),
                           _member=Depends(require_campaign_member("spectator")), db: Session = Depends(get_db)):
+    if count:   # the nav badge: reports not dealt with yet (same as the wiki index's open_reports)
+        return {"count": sum(it.get("status") in ("open", "working", "suggested")
+                             for it in _read_wiki_reports(slug).get("items", []))}
     _, _, is_dm = _wiki_member(slug, user, db)
     return _wiki_reports_view(slug, _read_wiki_reports(slug), is_dm, page)
 

@@ -196,6 +196,14 @@
   }
 }
 
+/* A count on a nav link: edits or wiki reports waiting on the DM. */
+.nav-badge {
+  font-size: 14px; font-variant-numeric: lining-nums; line-height: 1.4;
+  background: var(--gilt); color: var(--cover);
+  border-radius: 3px; padding: 0 7px; min-width: 20px; text-align: center; box-sizing: border-box;
+}
+.nav-badge-corner { display: none; }
+
 /* Bottom bar on phones: Sessions, Quotes, Search, and More (the rest). */
 .nav-more { display: none; }
 @media (max-width: 768px) {
@@ -203,6 +211,10 @@
   .sidebar-nav .nav-more { display: flex !important; background: none; border: none; color: var(--cover-ink-soft); font: inherit; cursor: pointer; }
   .sidebar-nav a, .sidebar-nav-item { min-height: 56px; }
   .sidebar-nav a span:last-child, .sidebar-nav-item span:last-child { font-size: 12px !important; }
+  /* On the More tab the count sits on the icon's corner. */
+  .sidebar-nav .nav-more { position: relative; }
+  .nav-badge-corner { display: block; position: absolute; top: 2px; left: calc(50% + 9px);
+    font-size: 11px; line-height: 16px; min-width: 16px; padding: 0 4px; border-radius: 3px; }
 }
 
 /* Worker controls, shown only inside the desktop app (DesktopWorker.tsx). */

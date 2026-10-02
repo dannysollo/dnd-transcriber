@@ -96,6 +96,7 @@ export default function App() {
   const [campaignDropdownOpen, setCampaignDropdownOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [pendingEditCount, setPendingEditCount] = useState(0)
+  const [openReportCount, setOpenReportCount] = useState(0)
   const [workerLastSeen, setWorkerLastSeen] = useState<string | null>(null)
   const navigate = useNavigate()
   const location = useLocation()
@@ -122,12 +123,18 @@ export default function App() {
   useEffect(() => {
     if (!activeCampaign || activeCampaign.role !== 'dm') {
       setPendingEditCount(0)
+      setOpenReportCount(0)
       return
     }
     const fetchCount = () => {
       fetch(`/campaigns/${activeCampaign.slug}/edits?count=true`)
         .then(r => r.ok ? r.json() : { count: 0 })
         .then(data => setPendingEditCount(data.count ?? 0))
+        .catch(() => {})
+      // Wiki reports waiting on the DM (the Wiki link's badge)
+      fetch(`/campaigns/${activeCampaign.slug}/wiki/reports?count=true`)
+        .then(r => r.ok ? r.json() : { count: 0 })
+        .then(data => setOpenReportCount(data.count ?? 0))
         .catch(() => {})
     }
     fetchCount()
@@ -219,7 +226,8 @@ export default function App() {
         )}
         <SheetSection title="Tools">
           {activeCampaign && (
-            <SheetItem onClick={() => { setMoreOpen(false); navigate(`/campaigns/${activeCampaign.slug}/wiki`) }}>Wiki</SheetItem>
+            <SheetItem onClick={() => { setMoreOpen(false); navigate(`/campaigns/${activeCampaign.slug}/wiki`) }}
+              aside={openReportCount > 0 ? <span className="sheet-count">{openReportCount} {openReportCount === 1 ? 'report' : 'reports'}</span> : undefined}>Wiki</SheetItem>
           )}
           <SheetItem onClick={() => { setMoreOpen(false); navigate('/quotes') }}>Quotes</SheetItem>
           {activeCampaign?.role === 'dm' && (
@@ -364,6 +372,9 @@ export default function App() {
               {to === '/search' && (
                 <kbd className="nav-shortcut-hint">Ctrl K</kbd>
               )}
+              {to === '/wiki' && openReportCount > 0 && (
+                <span className="nav-badge" aria-label={`${openReportCount} wiki ${openReportCount === 1 ? 'report' : 'reports'} waiting`}>{openReportCount}</span>
+              )}
             </NavLink>
           ))}
           {activeCampaign?.role === 'dm' && (
@@ -371,13 +382,7 @@ export default function App() {
               <EditQueueIcon />
               <span style={{ flex: 1 }}>Edit Queue</span>
               {pendingEditCount > 0 && (
-                <span aria-label={`${pendingEditCount} pending`} style={{
-                  fontSize: '14px', fontVariantNumeric: 'lining-nums',
-                  background: 'var(--gilt)', color: 'var(--cover)',
-                  borderRadius: '3px', padding: '0 7px', minWidth: '20px', textAlign: 'center',
-                }}>
-                  {pendingEditCount}
-                </span>
+                <span className="nav-badge" aria-label={`${pendingEditCount} pending`}>{pendingEditCount}</span>
               )}
             </NavLink>
           )}
@@ -389,7 +394,10 @@ export default function App() {
           <button type="button" className="cover-link sidebar-nav-item nav-more" onClick={() => setMoreOpen(true)}
             aria-haspopup="dialog" aria-expanded={moreOpen}>
             <MoreIcon size={18} />
-            <span style={{ flex: 1 }}>More{activeCampaign?.role === 'dm' && pendingEditCount > 0 ? ` (${pendingEditCount})` : ''}</span>
+            {pendingEditCount + openReportCount > 0 && (
+              <span className="nav-badge nav-badge-corner" aria-label={`${pendingEditCount + openReportCount} waiting`}>{pendingEditCount + openReportCount}</span>
+            )}
+            <span style={{ flex: 1 }}>More</span>
           </button>
         </div>
 
