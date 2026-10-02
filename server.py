@@ -4547,6 +4547,29 @@ def campaign_wiki_generate(slug: str, body: WikiGenerateBody,
     return _read_wiki_job(slug)
 
 
+class WikiApproveBody(BaseModel):
+    titles: list[str]   # the proposed pages to write; none cancels
+
+
+@app.post("/campaigns/{slug}/wiki/generate/approve")
+def campaign_wiki_generate_approve(slug: str, body: WikiApproveBody,
+                                   _member=Depends(require_campaign_member("dm"))):
+    """The DM's pick from the worker's proposed page list: those get written."""
+    job = _read_wiki_job(slug)
+    if job.get("state") != "review":
+        raise HTTPException(409, "There's no page list waiting")
+    keep = set(body.titles)
+    chosen = [e for e in job.get("proposed") or [] if e.get("title") in keep]
+    if not chosen:
+        _write_wiki_job(slug, {"state": "none"})
+        return {"state": "none"}
+    job.update(state="queued", approved=chosen, done=0, total=len(chosen), written=[],
+               message="Waiting for the worker")
+    job.pop("proposed", None)
+    _write_wiki_job(slug, job)
+    return job
+
+
 @app.get("/campaigns/{slug}/wiki/generate")
 def campaign_wiki_generate_status(slug: str, _member=Depends(require_campaign_member("spectator"))):
     return _read_wiki_job(slug) or {"state": "none"}
@@ -4575,7 +4598,7 @@ def worker_get_wiki_job(slug: str, db: Session = Depends(get_db), request: Reque
     fmt = (Path(__file__).parent / "WIKI_FORMAT.md")
     job.update(state="running", message="Reading the sessions")
     _write_wiki_job(slug, job)
-    return {"job": {"mode": job["mode"], "sessions": sessions, "existing": existing, "existing_names": existing_names,
+    return {"job": {"mode": job["mode"], "entities": job.get("approved"), "sessions": sessions, "existing": existing, "existing_names": existing_names,
                     "players": load_config(slug).get("players") or {},
                     "format": fmt.read_text(encoding="utf-8") if fmt.exists() else ""}}
 
@@ -4610,10 +4633,11 @@ def worker_push_wiki_pages(slug: str, body: WikiGenPages, db: Session = Depends(
 
 
 class WikiGenStatus(BaseModel):
-    state: str          # running | done | error
+    state: str          # running | review | done | error
     done: int = 0
     total: int = 0
     message: str = ""
+    proposed: list[dict] | None = None   # with "review": the pages the worker would write
 
 
 @app.post("/campaigns/{slug}/worker/wiki-status")
@@ -4622,6 +4646,9 @@ def worker_wiki_status(slug: str, body: WikiGenStatus, db: Session = Depends(get
     require_worker_key(slug)(request, db)
     job = _read_wiki_job(slug)
     job.update(state=body.state, done=body.done, total=body.total, message=body.message)
+    if body.state == "review":
+        job["proposed"] = [{k: e.get(k) for k in ("title", "folder", "aliases", "note")}
+                           for e in body.proposed or [] if e.get("title")]
     if body.state == "done":
         vault = _wiki_vault(slug, db) or (BASE_DIR / "vaults" / slug)
         with _wiki_lock:

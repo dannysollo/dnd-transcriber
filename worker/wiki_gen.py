@@ -13,8 +13,10 @@ Two passes with Claude (the same `claude -p` the summaries use):
      (WIKI_FORMAT.md): an abstract, key facts, a timeline of turning points,
      relationships, appearances.
 
-Pages go back to the server in small batches, with progress, so the site can
-show it filling in. "fill" mode skips anything the wiki already has.
+The page list goes back to the site first and the DM picks which to write
+(state "review"); the job then comes back with "entities" set and only those
+pages are written. Pages go back to the server in small batches, with progress,
+so the site can show it filling in. "fill" mode skips anything the wiki already has.
 """
 from __future__ import annotations
 
@@ -163,20 +165,25 @@ def generate(job: dict, client, config: dict) -> None:
     scratch = config.get("audio_dir") or None
     sessions = sorted(job["sessions"], key=lambda s: s["date"] or s["name"])
     try:
-        client.wiki_status("running", 0, 0, "Finding who and what deserves a page")
-        entities = find_entities(sessions, job.get("players") or {}, scratch)
-        if job.get("mode") == "fill":
-            # Skip anything an existing page already covers, under any of its names.
-            have = {k for n in job.get("existing_names") or job.get("existing", []) for k in name_keys(n)}
-            entities = [e for e in entities if not any(k in have for n in [e["title"], *e["aliases"]] for k in name_keys(n))]
-        # And no two new pages for the same thing.
-        seen, unique = set(), []
-        for e in entities:
-            keys = {k for n in [e["title"], *e["aliases"]] for k in name_keys(n)}
-            if not keys & seen:
-                unique.append(e)
-            seen |= keys
-        entities = unique
+        entities = job.get("entities")
+        if entities is None:
+            client.wiki_status("running", 0, 0, "Finding who and what deserves a page")
+            entities = find_entities(sessions, job.get("players") or {}, scratch)
+            if job.get("mode") == "fill":
+                # Skip anything an existing page already covers, under any of its names.
+                have = {k for n in job.get("existing_names") or job.get("existing", []) for k in name_keys(n)}
+                entities = [e for e in entities if not any(k in have for n in [e["title"], *e["aliases"]] for k in name_keys(n))]
+            # And no two new pages for the same thing.
+            seen, unique = set(), []
+            for e in entities:
+                keys = {k for n in [e["title"], *e["aliases"]] for k in name_keys(n)}
+                if not keys & seen:
+                    unique.append(e)
+                seen |= keys
+            # The DM picks which of these to write; the job comes back with them.
+            print(f"[wiki] {len(unique)} pages proposed, waiting for the DM", flush=True)
+            client.wiki_status("review", 0, len(unique), f"{len(unique)} page{'' if len(unique) == 1 else 's'} to look over", proposed=unique)
+            return
         titles = sorted({*job.get("existing", []), *(e["title"] for e in entities)})
         total = len(entities)
         print(f"[wiki] {total} pages to write", flush=True)
@@ -198,7 +205,7 @@ def generate(job: dict, client, config: dict) -> None:
                         client.push_wiki_pages(batch)
                         batch = []
                     client.wiki_status("running", done, total, f"Written {done} of {total}")
-        client.wiki_status("done", done, total, f"Wrote {total} pages")
+        client.wiki_status("done", done, total, f"Wrote {total} page{'' if total == 1 else 's'}")
         print("[wiki] done", flush=True)
     except Exception as e:
         print(f"[wiki] failed: {e}", flush=True)

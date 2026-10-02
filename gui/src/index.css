@@ -1167,6 +1167,14 @@ button.wiki-missing { cursor: pointer; }
 .wiki-gen { max-width: 680px; margin: 0 0 26px; padding: 16px 18px; border: 1px solid var(--rule-strong); border-left: 3px solid var(--gilt); border-radius: 3px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .wiki-gen.quiet { padding: 0; border: none; margin-bottom: 18px; }
 .wiki-gen-title { margin: 0; font-size: 19px; color: var(--ink); }
+.wiki-gen-review { max-width: 900px; }
+.wiki-gen-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px 24px; width: 100%; max-height: 60vh; overflow-y: auto; }
+.wiki-gen-pick fieldset { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wiki-gen-pick legend { padding: 0 0 4px; color: var(--ink-soft); }
+.wiki-gen-pick input { accent-color: var(--rubric); }
+.wiki-gen-pick label { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: baseline; cursor: pointer; }
+.wiki-gen-note { grid-column: 2; font-size: 13px; color: var(--ink-soft); }
+.wiki-gen-actions { display: flex; gap: 12px; }
 
 /* ─── Wiki relationship graph (WikiGraph.tsx) ─────────────────────────────
    Colour slots per kind of page, validated (dataviz six checks) on both page

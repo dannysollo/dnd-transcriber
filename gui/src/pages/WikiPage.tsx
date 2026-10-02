@@ -151,6 +151,7 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
   const [q, setQ] = useState('')
   const [results, setResults] = useState<{ title: string; slug: string; section: string; snippet: string }[] | null>(null)
   const [creating, setCreating] = useState(false)
+  const [filling, setFilling] = useState(false)
   const hasIndexPage = index.pages.some(p => p.slug === INDEX_SLUG)
   const [showAll, setShowAll] = useState(false)
   const [front, setFront] = useState<string | null>(null)
@@ -221,13 +222,16 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
               {showAll ? 'Hide all pages' : 'All pages'}</button>}
           </>}
           {index.can_edit && <button type="button" className="btn-ghost" onClick={() => setCreating(c => !c)}>New page</button>}
-          {index.can_manage && hasIndexPage && <Link to={`${base}/${INDEX_SLUG}`} className="index-link">Edit the front page</Link>}
+          {index.can_manage && hasIndexPage && <Link to={`${base}/${INDEX_SLUG}`} className="btn-ghost">Edit the front page</Link>}
+          {index.can_manage && index.has_wiki && index.pages.length > 0 &&
+            <button type="button" className="btn-ghost" aria-expanded={filling} onClick={() => setFilling(v => !v)}>Fill in missing pages</button>}
         </div>
         {creating && <NewPageForm slug={slug} sections={sections.map(([s]) => s)}
           onCreated={s => { onChanged(); navigate(`${base}/${s}`) }} onCancel={() => setCreating(false)} />}
       </header>
 
-      {index.can_manage && <WikiGenerate slug={slug} empty={!index.has_wiki || index.pages.length === 0} onDone={onChanged} />}
+      {index.can_manage && <WikiGenerate slug={slug} empty={!index.has_wiki || index.pages.length === 0} onDone={onChanged}
+        asked={filling} onClose={() => setFilling(false)} />}
       {index.can_manage && index.has_wiki && index.pages.length > 0 && <ContinuityCheckAll slug={slug} />}
 
       {!index.has_wiki || index.pages.length === 0 ? (
@@ -275,33 +279,49 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
 
 // ─── Generating the wiki from the sessions (worker/wiki_gen.py) ──────────────
 
-interface GenJob { state: 'none' | 'queued' | 'running' | 'done' | 'error'; mode?: string; done?: number; total?: number; message?: string; warning?: string | null; finished?: string }
+interface Proposed { title: string; folder: string; aliases?: string[]; note?: string }
+interface GenJob { state: 'none' | 'queued' | 'running' | 'review' | 'done' | 'error'; mode?: string; done?: number; total?: number; message?: string; warning?: string | null; finished?: string; proposed?: Proposed[] }
 
-function WikiGenerate({ slug, empty, onDone }: { slug: string; empty: boolean; onDone: () => void }) {
+/** Writing pages from the sessions. The worker first proposes a page list; the
+ * DM ticks which to write ("review"), then the worker writes those. `asked` is
+ * the toolbar's "Fill in missing pages" button. */
+function WikiGenerate({ slug, empty, onDone, asked, onClose }: { slug: string; empty: boolean; onDone: () => void; asked: boolean; onClose: () => void }) {
   const { toast } = useToast()
   const [job, setJob] = useState<GenJob | null>(null)
-  const [confirm, setConfirm] = useState(false)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  // A finished run's "Wrote N pages" shows only if it finished while this page was open.
+  const [watched, setWatched] = useState(false)
   const load = () => fetch(`/campaigns/${slug}/wiki/generate`).then(r => (r.ok ? r.json() : null)).then(d => d && setJob(d)).catch(() => {})
   useEffect(() => { load() }, [slug])
   const active = job?.state === 'queued' || job?.state === 'running'
   useEffect(() => {
     if (!active) return
+    setWatched(true)
     const id = window.setInterval(() => { load() }, 8000)
     return () => window.clearInterval(id)
   }, [active])
   const prev = useRef(job?.state)
   useEffect(() => {
     if (prev.current && prev.current !== 'done' && job?.state === 'done') onDone()
+    if (job?.state === 'review' && prev.current !== 'review') setPicked(new Set(job.proposed?.map(p => p.title)))
     prev.current = job?.state
   }, [job?.state])
 
   const start = async (mode: 'new' | 'fill') => {
-    setConfirm(false)
+    onClose()
     const r = await fetch(`/campaigns/${slug}/wiki/generate`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }),
     })
     const d = await r.json().catch(() => ({}))
     if (!r.ok) { toast(d.detail ?? 'Could not start', 'error'); return }
+    setJob(d)
+  }
+  const approve = async (titles: string[]) => {
+    const r = await fetch(`/campaigns/${slug}/wiki/generate/approve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ titles }),
+    })
+    const d = await r.json().catch(() => ({}))
+    if (!r.ok) { toast(d.detail ?? 'Could not do that', 'error'); return }
     setJob(d)
   }
 
@@ -311,34 +331,73 @@ function WikiGenerate({ slug, empty, onDone }: { slug: string; empty: boolean; o
     return (
       <div className="wiki-gen" role="status">
         <WorkerOffline waiting what="the wiki" />
-        <p className="wiki-gen-title">{job.state === 'queued' ? 'Waiting for the worker to start the wiki…' : job.message}</p>
+        <p className="wiki-gen-title">{job.state === 'queued' ? (job.total ? `Waiting for the worker to write ${job.total} pages…` : 'Waiting for the worker to look through the sessions…') : job.message}</p>
         {job.total ? <div className="upload-progress"><div style={{ width: `${pct}%` }} /><span>{job.done} of {job.total} pages</span></div> : <span className="throbber" aria-hidden="true" />}
-        <p className="wiki-note">Pages appear as they're written; you can leave this page.</p>
+        <p className="wiki-note">{job.total ? "Pages appear as they're written; you can leave this page." : "You'll get the list of pages to approve before anything is written; you can leave this page."}</p>
       </div>
     )
   }
-  return (
-    <div className={empty ? 'wiki-gen' : 'wiki-gen quiet'}>
-      {job.state === 'done' && <p className="wiki-note">{job.message}{job.warning ? `. ${job.warning}` : '.'}</p>}
+  if (job.state === 'review') {
+    const list = job.proposed ?? []
+    const groups = new Map<string, Proposed[]>()
+    for (const p of list) groups.set(p.folder, [...(groups.get(p.folder) ?? []), p])
+    const toggle = (t: string) => setPicked(prev => { const n = new Set(prev); n.has(t) ? n.delete(t) : n.add(t); return n })
+    return (
+      <div className="wiki-gen wiki-gen-review">
+        <p className="wiki-gen-title">{list.length ? `Write these ${list.length} pages?` : 'Nothing is missing'}</p>
+        {list.length ? <>
+          <p className="wiki-note">Untick any you don't want. Nothing is written until you say so.{' '}
+            <button type="button" className="index-link" onClick={() => setPicked(new Set(list.map(p => p.title)))}>All</button>{' '}
+            <button type="button" className="index-link" onClick={() => setPicked(new Set())}>None</button></p>
+          <div className="wiki-gen-pick">
+            {[...groups].map(([folder, pages]) => (
+              <fieldset key={folder}>
+                <legend className="sc">{folder.split('/').join(' · ')}</legend>
+                {pages.map(p => (
+                  <label key={p.title} title={p.aliases?.length ? `Also: ${p.aliases.join(', ')}` : undefined}>
+                    <input type="checkbox" checked={picked.has(p.title)} onChange={() => toggle(p.title)} />
+                    <span>{p.title}</span>{p.note && <span className="wiki-gen-note">{p.note}</span>}
+                  </label>
+                ))}
+              </fieldset>
+            ))}
+          </div>
+          <div className="wiki-gen-actions">
+            <button type="button" className="btn-primary" disabled={!picked.size} onClick={() => approve([...picked])}>
+              Write {picked.size} {picked.size === 1 ? 'page' : 'pages'}</button>
+            <button type="button" className="btn-ghost" onClick={() => approve([])}>Cancel</button>
+          </div>
+        </> : <p className="wiki-note">Every page the sessions call for already exists.{' '}
+          <button type="button" className="index-link" onClick={() => approve([])}>OK</button></p>}
+      </div>
+    )
+  }
+  const finished = job.state === 'done' && watched
+  if (empty) return (
+    <div className="wiki-gen">
       {job.state === 'error' && <p className="wiki-note">The last generation stopped: {job.message}</p>}
-      {empty ? (
-        <>
-          <p className="wiki-gen-title">Write this campaign's wiki from its sessions</p>
-          <p className="wiki-note">
-            Claude reads every session's summary and wiki notes, picks out the characters, places, factions,
-            events and items that matter, and writes a short page for each in the standard format: an abstract,
-            key facts, a timeline and relationships. It runs on the worker and takes a while.
-          </p>
-          <button type="button" className="btn-primary" onClick={() => start('new')}>Generate the wiki</button>
-        </>
-      ) : confirm ? (
+      <p className="wiki-gen-title">Write this campaign's wiki from its sessions</p>
+      <p className="wiki-note">
+        Claude reads every session's summary and wiki notes, picks out the characters, places, factions,
+        events and items that matter, and writes a short page for each in the standard format: an abstract,
+        key facts, a timeline and relationships. You approve the page list first. It runs on the worker and takes a while.
+      </p>
+      <button type="button" className="btn-primary" onClick={() => start('new')}>Generate the wiki</button>
+    </div>
+  )
+  // A failure shows when it happened in front of you, or when you go to start another.
+  const failed = job.state === 'error' && (watched || asked)
+  if (!asked && !finished && !failed) return null
+  return (
+    <div className="wiki-gen quiet">
+      {finished && <p className="wiki-note">{job.message}{job.warning ? `. ${job.warning}` : '.'}</p>}
+      {failed && <p className="wiki-note">The last generation stopped: {job.message}</p>}
+      {asked && (
         <p className="wiki-note">
-          Write pages for anything in the sessions that doesn't have one yet? Existing pages aren't touched.{' '}
-          <button type="button" className="index-link" onClick={() => start('fill')}>Yes, fill them in</button>{' '}
-          <button type="button" className="index-link" onClick={() => setConfirm(false)}>Cancel</button>
+          Look through the sessions for anything that doesn't have a page yet? You'll see the list before anything is written.{' '}
+          <button type="button" className="index-link" onClick={() => start('fill')}>Find missing pages</button>{' '}
+          <button type="button" className="index-link" onClick={onClose}>Cancel</button>
         </p>
-      ) : (
-        <button type="button" className="index-link" onClick={() => setConfirm(true)}>Fill in missing pages from the sessions</button>
       )}
     </div>
   )

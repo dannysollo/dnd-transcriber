@@ -146,9 +146,11 @@ class WorkerClient:
         r = requests.post(self._url("/worker/wiki-pages"), headers=self.headers, json={"pages": pages}, timeout=60)
         r.raise_for_status()
 
-    def wiki_status(self, state: str, done: int, total: int, message: str) -> None:
-        r = requests.post(self._url("/worker/wiki-status"), headers=self.headers,
-                          json={"state": state, "done": done, "total": total, "message": message}, timeout=60)
+    def wiki_status(self, state: str, done: int, total: int, message: str, proposed: list[dict] | None = None) -> None:
+        body = {"state": state, "done": done, "total": total, "message": message}
+        if proposed is not None:
+            body["proposed"] = proposed
+        r = requests.post(self._url("/worker/wiki-status"), headers=self.headers, json=body, timeout=60)
         r.raise_for_status()
 
     def get_voice_library(self) -> dict:
