@@ -7,6 +7,7 @@ import WorkerOffline from '../WorkerOffline'
 import WikiGraph from '../WikiGraph'
 import { PageReports, ReportsPage } from '../WikiReports'
 import { ContinuityCheckAll, PageContinuity } from '../Continuity'
+import { GraphIcon } from '../Icons'
 
 // The campaign wiki: its vault's pages (server: /campaigns/{slug}/wiki, wiki.py),
 // read here instead of on the old Netlify site. [[Wikilinks]] resolve to pages
@@ -215,17 +216,24 @@ function WikiHome({ slug, index, base, onChanged }: { slug: string; index: WikiI
           <input className="written-line wiki-search" value={q} onChange={e => setQ(e.target.value)}
             placeholder="Search the wiki" aria-label="Search the wiki" />
           {index.has_wiki && index.pages.length > 0 && <>
-            <Link to={`${base}/${GRAPH_PAGE}`} className="btn-ghost">Relationship graph</Link>
-            {index.is_member && <Link to={`${base}/${REPORTS_PAGE}`} className="btn-ghost">
-              Reports{index.open_reports ? <span className="wr-count">{index.open_reports} waiting</span> : null}</Link>}
-            {hasIndexPage && <button type="button" className="btn-ghost" aria-expanded={showAll} onClick={() => setShowAll(v => !v)}>
-              {showAll ? 'Hide all pages' : 'All pages'}</button>}
+            <Link to={`${base}/${GRAPH_PAGE}`} className="btn-ghost wiki-graph-link"><GraphIcon size={18} /> Relationship graph</Link>
+            <span className="wiki-tools-links">
+              {index.is_member && <Link to={`${base}/${REPORTS_PAGE}`} className="index-link">
+                Reports{index.open_reports ? <span className="wr-count">{index.open_reports} waiting</span> : null}</Link>}
+              {hasIndexPage && <button type="button" className="index-link" aria-pressed={showAll} onClick={() => setShowAll(v => !v)}>
+                {showAll ? 'Hide all pages' : 'All pages'}</button>}
+            </span>
           </>}
-          {index.can_edit && <button type="button" className="btn-ghost" onClick={() => setCreating(c => !c)}>New page</button>}
-          {index.can_manage && hasIndexPage && <Link to={`${base}/${INDEX_SLUG}`} className="btn-ghost">Edit the front page</Link>}
-          {index.can_manage && index.has_wiki && index.pages.length > 0 &&
-            <button type="button" className="btn-ghost" aria-expanded={filling} onClick={() => setFilling(v => !v)}>Fill in missing pages</button>}
         </div>
+        {(index.can_edit || index.can_manage) && (
+          <div className="wiki-editing">
+            <span className="sc">Editing</span>
+            {index.can_edit && <button type="button" className="index-link" aria-pressed={creating} onClick={() => setCreating(c => !c)}>New page</button>}
+            {index.can_manage && hasIndexPage && <Link to={`${base}/${INDEX_SLUG}`} className="index-link">Edit the front page</Link>}
+            {index.can_manage && index.has_wiki && index.pages.length > 0 &&
+              <button type="button" className="index-link" aria-pressed={filling} onClick={() => setFilling(v => !v)}>Fill in missing pages</button>}
+          </div>
+        )}
         {creating && <NewPageForm slug={slug} sections={sections.map(([s]) => s)}
           onCreated={s => { onChanged(); navigate(`${base}/${s}`) }} onCancel={() => setCreating(false)} />}
       </header>

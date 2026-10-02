@@ -51,6 +51,10 @@ export const DownloadIcon = (p: IconProps) => <Svg {...p}><path d="M12 4v11M7 10
 export const MoreIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="5" cy="12" r="1.4" fill="currentColor" /><circle cx="12" cy="12" r="1.4" fill="currentColor" /><circle cx="19" cy="12" r="1.4" fill="currentColor" /></Svg>
 )
+/** Three linked nodes: the wiki's relationship graph. */
+export const GraphIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="9" r="2.5" /><circle cx="9" cy="18" r="2.5" /><path d="M8.3 7 15.7 8.2M7.2 8.3l1.2 7.3M16.6 11l-5.8 5.4" /></Svg>
+)
 export const PlusIcon = (p: IconProps) => <Svg {...p}><path d="M12 5v14M5 12h14" /></Svg>
 export const MinusIcon = (p: IconProps) => <Svg {...p}><path d="M5 12h14" /></Svg>
 /** Fit to view: four corners. */
