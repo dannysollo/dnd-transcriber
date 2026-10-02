@@ -34,14 +34,28 @@ export default function Sheet({ open, onClose, title, children }: {
   )
 }
 
-/** One row in a sheet: an action with an optional note under it. */
-export function SheetItem({ onClick, children, note, active, disabled }: {
-  onClick: () => void; children: ReactNode; note?: ReactNode; active?: boolean; disabled?: boolean
+/** A titled group of sheet rows. */
+export function SheetSection({ title, children }: { title: ReactNode; children: ReactNode }) {
+  return (
+    <div className="sheet-group">
+      <div className="sheet-section">{title}</div>
+      {children}
+    </div>
+  )
+}
+
+/** One row in a sheet: an action with an optional note under it, or a short
+ * detail on the right (`aside`: a role, a count). */
+export function SheetItem({ onClick, children, note, aside, active, disabled }: {
+  onClick: () => void; children: ReactNode; note?: ReactNode; aside?: ReactNode; active?: boolean; disabled?: boolean
 }) {
   return (
     <button type="button" className={'sheet-item' + (active ? ' active' : '')} onClick={onClick} disabled={disabled}>
-      <span>{children}</span>
-      {note && <span className="sheet-item-note">{note}</span>}
+      <span className="sheet-item-main">
+        <span>{children}</span>
+        {note && <span className="sheet-item-note">{note}</span>}
+      </span>
+      {aside != null && <span className="sheet-item-aside">{aside}</span>}
     </button>
   )
 }

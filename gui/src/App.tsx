@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { CoverWordmark } from './Brand'
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
-import Sheet, { SheetItem } from './Sheet'
+import Sheet, { SheetItem, SheetSection } from './Sheet'
 import { MoreIcon } from './Icons'
 import DesktopWorker from './DesktopWorker'
 import './App.css'
@@ -201,41 +201,39 @@ export default function App() {
     <div className="app-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
       <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="More">
         {campaigns.length > 0 && (
-          <>
-            <div className="sheet-section">Campaign</div>
+          <SheetSection title="Campaign">
             {campaigns.map(c => (
               <SheetItem key={c.slug} active={activeCampaign?.slug === c.slug}
                 onClick={() => { setActiveCampaign(c); setMoreOpen(false); navigate('/') }}
-                note={activeCampaign?.slug === c.slug ? `current, ${c.role}` : c.role}>
+                aside={c.role === 'dm' ? 'DM' : c.role.charAt(0).toUpperCase() + c.role.slice(1)}>
                 {c.name}
               </SheetItem>
             ))}
             {activeCampaign && (
-              <SheetItem onClick={() => { setMoreOpen(false); navigate(`/campaigns/${activeCampaign.slug}/settings`) }}
-                note="Settings, people, stats">
+              <SheetItem onClick={() => { setMoreOpen(false); navigate(`/campaigns/${activeCampaign.slug}/settings`) }}>
                 Campaign settings
               </SheetItem>
             )}
-            <SheetItem onClick={() => { setMoreOpen(false); navigate('/campaigns') }}>All campaigns, or start one</SheetItem>
-          </>
+            <SheetItem onClick={() => { setMoreOpen(false); navigate('/campaigns') }}>All campaigns</SheetItem>
+          </SheetSection>
         )}
-        <div className="sheet-section">Tools</div>
-        {activeCampaign && (
-          <SheetItem onClick={() => { setMoreOpen(false); navigate(`/campaigns/${activeCampaign.slug}/wiki`) }} note="Characters, places, lore">Wiki</SheetItem>
-        )}
-        <SheetItem onClick={() => { setMoreOpen(false); navigate('/quotes') }} note="Saved lines from every session">Quotes</SheetItem>
-        {activeCampaign?.role === 'dm' && (
-          <SheetItem onClick={() => { setMoreOpen(false); navigate('/edit-queue') }}
-            note={pendingEditCount > 0 ? `${pendingEditCount} waiting for review` : 'Nothing waiting'}>
-            Edit Queue
-          </SheetItem>
-        )}
-        <SheetItem onClick={() => { setMoreOpen(false); navigate('/settings') }} note="Reading light and more">Preferences</SheetItem>
+        <SheetSection title="Tools">
+          {activeCampaign && (
+            <SheetItem onClick={() => { setMoreOpen(false); navigate(`/campaigns/${activeCampaign.slug}/wiki`) }}>Wiki</SheetItem>
+          )}
+          <SheetItem onClick={() => { setMoreOpen(false); navigate('/quotes') }}>Quotes</SheetItem>
+          {activeCampaign?.role === 'dm' && (
+            <SheetItem onClick={() => { setMoreOpen(false); navigate('/edit-queue') }}
+              aside={pendingEditCount > 0 ? <span className="sheet-count">{pendingEditCount} waiting</span> : undefined}>
+              Edit Queue
+            </SheetItem>
+          )}
+          <SheetItem onClick={() => { setMoreOpen(false); navigate('/settings') }}>Preferences</SheetItem>
+        </SheetSection>
         {isLoggedIn && user && (
-          <>
-            <div className="sheet-section">Signed in as {user.username}</div>
-            <SheetItem onClick={() => { setMoreOpen(false); logout() }}>Log out</SheetItem>
-          </>
+          <SheetSection title="Account">
+            <SheetItem onClick={() => { setMoreOpen(false); logout() }} aside={user.username}>Log out</SheetItem>
+          </SheetSection>
         )}
       </Sheet>
 

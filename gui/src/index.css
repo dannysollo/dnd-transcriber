@@ -878,10 +878,16 @@ input.written-line:focus {
 .sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 0 6px; border-bottom: 1px solid var(--rule);
   font-size: 17px; color: var(--rubric); }
 .sheet-body { display: flex; flex-direction: column; }
-.sheet-section { padding: 6px 0 2px; font-size: 14px; color: var(--ink-faint); font-variant: small-caps; letter-spacing: 0.05em; }
-.sheet-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-height: 48px; padding: 10px 2px;
+.sheet-group + .sheet-group, .sheet-body > .sheet-section:not(:first-child) { margin-top: 10px; }
+.sheet-section { padding: 16px 0 6px; font-size: 15px; font-weight: 600; color: var(--ink-soft); font-variant: small-caps; letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--rule-strong); }
+.sheet-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 48px; padding: 10px 2px;
   background: none; border: none; border-bottom: 1px solid var(--rule); text-align: left; font: inherit; font-size: 18px;
   color: var(--ink); cursor: pointer; }
+.sheet-group > .sheet-item:last-child { border-bottom: none; }
+.sheet-item-main { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.sheet-item-aside { flex-shrink: 0; font-size: 15px; color: var(--ink-faint); }
+.sheet-count { color: var(--rubric); }
 .sheet-item:active { background: color-mix(in srgb, var(--ink) 5%, transparent); }
 .sheet-item.active { color: var(--rubric); }
 .sheet-item:disabled { color: var(--ink-faint); cursor: default; }
